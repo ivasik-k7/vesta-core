@@ -18,10 +18,18 @@ Traditional loyalty programs are siloed, restrictive, and static. VESTA turns po
 | [`programs/vesta-core`](programs/vesta-core) | Merchants, campaigns, earn/redeem, customer profiles, alliances, badges |
 | [`programs/argus`](programs/argus) | SPL transfer hook: validates every point transfer (phase 2) |
 
-Program IDs (devnet):
+## Devnet
 
-- `vesta_core`: `Am2X4B1SCnJKXL8Yir2j6yGpHAKrmwcf2E5aKnA9BZV`
-- `argus`: `CrzLCMSQ1pWTuLXBomoLn6eAB1c1gLsw5x9sBeuyBNKt`
+Deployed programs:
+
+- [`vesta_core`: `Am2X4B1SCnJKXL8Yir2j6yGpHAKrmwcf2E5aKnA9BZV`](https://explorer.solana.com/address/Am2X4B1SCnJKXL8Yir2j6yGpHAKrmwcf2E5aKnA9BZV?cluster=devnet) (IDL published on-chain)
+- [`argus`: `CrzLCMSQ1pWTuLXBomoLn6eAB1c1gLsw5x9sBeuyBNKt`](https://explorer.solana.com/address/CrzLCMSQ1pWTuLXBomoLn6eAB1c1gLsw5x9sBeuyBNKt?cluster=devnet)
+
+Live transactions:
+
+- [`init_config`](https://explorer.solana.com/tx/2AafQDwvTa7UDVMo3DTPFH4f8yqyzevBAZP6wpjLdyttZmugQccoBRxheXsYXjyRxt2AwFUi9cmV8JNKULWoEp61?cluster=devnet) — protocol Config PDA (`6rP9Q1QLGFZBhGr4AJUqmbc3SnmVHyc8x2rqVw2jTexu`)
+- Token-2022 extension spike, points mint `EsRwnbKnSWHb1D7BuMkTG1mvWwEFVZanfJ6uyuS6uDT2` (metadata + interest-bearing decay + transfer hook + permanent delegate): [create](https://explorer.solana.com/tx/axZqjspne6a5k2f8qeyA944B12cAcos8ZRJR58DDwc5uLPzAAstpgBLynDte7rMkcCtCKRid3qMcn9jaskLsLeR?cluster=devnet) · [mint](https://explorer.solana.com/tx/5WMsALjt6bTxPMY1w5EnbGftBGR1p31ihcjumY1SspQP1zfwnNUiZFCtKNvDUx25GGAXPobxwT8JXbeBzsj1qznB?cluster=devnet)
+- Soulbound badge spike, mint `CK56tapA35nEKQCFvjPWaQfxqYMC5ZX7hf3SKMQX44t3` (non-transferable, supply frozen): [create](https://explorer.solana.com/tx/3eRUnC2nc57Rvq6fj5J1ecKo97WXr9VMF86M9Dh4pP78zimi2VyUQN6AFdi5iXFwe3eeYv5qdozw3CEg9t86pPEx?cluster=devnet)
 
 ## Development
 
