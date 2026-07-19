@@ -65,3 +65,39 @@ pub struct Receipt {
     pub redeemed_at: i64,
     pub bump: u8,
 }
+
+/// Earn multiplier campaign (phase 3). `merchant` first for memcmp catalogs.
+#[account]
+#[derive(InitSpace)]
+pub struct Campaign {
+    pub merchant: Pubkey,
+    pub id: u64,
+    pub multiplier_bps: u16,
+    pub starts_at: i64,
+    pub ends_at: i64,
+    pub active: bool,
+    pub bump: u8,
+}
+
+/// Kleos badge definition (phase 3). `merchant` first for memcmp catalogs.
+#[account]
+#[derive(InitSpace)]
+pub struct Achievement {
+    pub merchant: Pubkey,
+    pub id: u64,
+    #[max_len(32)]
+    pub name: String,
+    #[max_len(128)]
+    pub uri: String,
+    pub threshold_lifetime: u64,
+    pub badge_count: u32,
+    pub bump: u8,
+}
+
+/// Double-grant guard that survives a holder-side badge burn.
+#[account]
+#[derive(InitSpace)]
+pub struct KleosReceipt {
+    pub granted_at: i64,
+    pub bump: u8,
+}

@@ -58,6 +58,40 @@ pub mod vesta_core {
         instructions::earn_points::handle_earn_points(ctx, amount_base, visit_day)
     }
 
+    pub fn create_campaign(
+        ctx: Context<CreateCampaign>,
+        id: u64,
+        multiplier_bps: u16,
+        starts_at: i64,
+        ends_at: i64,
+    ) -> Result<()> {
+        instructions::campaigns::handle_create_campaign(ctx, id, multiplier_bps, starts_at, ends_at)
+    }
+
+    pub fn close_campaign(ctx: Context<CloseCampaign>) -> Result<()> {
+        instructions::campaigns::handle_close_campaign(ctx)
+    }
+
+    pub fn create_achievement(
+        ctx: Context<CreateAchievement>,
+        id: u64,
+        name: String,
+        uri: String,
+        threshold_lifetime: u64,
+    ) -> Result<()> {
+        instructions::achievements::handle_create_achievement(
+            ctx,
+            id,
+            name,
+            uri,
+            threshold_lifetime,
+        )
+    }
+
+    pub fn grant_achievement(ctx: Context<GrantAchievement>) -> Result<()> {
+        instructions::achievements::handle_grant_achievement(ctx)
+    }
+
     pub fn create_offer(
         ctx: Context<CreateOffer>,
         id: u64,

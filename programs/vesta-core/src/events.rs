@@ -84,3 +84,32 @@ pub struct TransferGuardFinalized {
     pub mint: Pubkey,
     pub merchant: Pubkey,
 }
+
+#[event]
+pub struct CampaignCreated {
+    pub merchant: Pubkey,
+    pub id: u64,
+    pub multiplier_bps: u16,
+    pub starts_at: i64,
+    pub ends_at: i64,
+}
+
+#[event]
+pub struct CampaignClosed {
+    pub merchant: Pubkey,
+    pub id: u64,
+}
+
+#[event]
+pub struct AchievementCreated {
+    pub merchant: Pubkey,
+    pub id: u64,
+    pub threshold: u64,
+}
+
+#[event]
+pub struct AchievementGranted {
+    pub achievement: Pubkey,
+    pub customer: Pubkey,
+    pub badge_mint: Pubkey,
+}

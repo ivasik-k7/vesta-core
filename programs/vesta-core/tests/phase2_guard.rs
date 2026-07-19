@@ -100,6 +100,7 @@ impl World {
                 point_mint: self.mint,
                 customer_ata: ata,
                 config: self.config,
+                campaign: None,
                 token_program: TOKEN_2022_ID,
                 associated_token_program: ATA_PROGRAM_ID,
                 system_program: system_program::ID,

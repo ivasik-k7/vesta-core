@@ -1,4 +1,6 @@
+pub mod achievements;
 pub mod admin;
+pub mod campaigns;
 pub mod earn_points;
 pub mod finalize_transfer_guard;
 pub mod init_config;
@@ -6,7 +8,9 @@ pub mod migrate_config;
 pub mod offers;
 pub mod register_merchant;
 
+pub use achievements::*;
 pub use admin::*;
+pub use campaigns::*;
 pub use earn_points::*;
 pub use finalize_transfer_guard::*;
 pub use init_config::*;

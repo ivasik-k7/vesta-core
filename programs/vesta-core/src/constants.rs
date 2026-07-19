@@ -12,6 +12,14 @@ pub const CUSTOMER_SEED: &[u8] = b"customer";
 pub const OFFER_SEED: &[u8] = b"offer";
 #[constant]
 pub const RECEIPT_SEED: &[u8] = b"receipt";
+#[constant]
+pub const CAMPAIGN_SEED: &[u8] = b"campaign";
+#[constant]
+pub const ACHIEVE_SEED: &[u8] = b"achieve";
+#[constant]
+pub const KLEOS_SEED: &[u8] = b"kleos";
+#[constant]
+pub const BADGE_SEED: &[u8] = b"badge";
 
 /// UI points carry two implied decimals; all mints.
 #[constant]
@@ -26,6 +34,10 @@ pub const MAX_EARN_PER_TX: u64 = 1_000_000;
 pub const STREAK_BPS_PER_DAY: u16 = 200;
 #[constant]
 pub const STREAK_DAYS_CAP: u16 = 30;
+
+/// Per-campaign multiplier bound (2.0×).
+#[constant]
+pub const CAMPAIGN_MAX_BPS: u16 = 20_000;
 
 /// Joint cap over streak + campaign composition (2.4×).
 #[constant]

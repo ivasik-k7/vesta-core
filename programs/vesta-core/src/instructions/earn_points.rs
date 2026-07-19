@@ -12,7 +12,7 @@ use crate::{
     },
     error::VestaError,
     events::PointsEarned,
-    state::{Config, CustomerProfile, Merchant},
+    state::{Campaign, Config, CustomerProfile, Merchant},
 };
 
 #[derive(Accounts)]
@@ -60,6 +60,10 @@ pub struct EarnPoints<'info> {
     #[account(seeds = [CONFIG_SEED], bump = config.bump)]
     pub config: Account<'info, Config>,
 
+    /// Optional earn-multiplier campaign; the program applies *the supplied*
+    /// campaign — it cannot claim "best" on-chain. Validated in the handler.
+    pub campaign: Option<Account<'info, Campaign>>,
+
     pub token_program: Program<'info, Token2022>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
@@ -105,8 +109,26 @@ pub fn handle_earn_points(
     let streak_bps = u64::from(profile.streak_days.min(STREAK_DAYS_CAP))
         .checked_mul(u64::from(STREAK_BPS_PER_DAY))
         .ok_or(VestaError::MultiplierOverflow)?;
+    let campaign_bps = match ctx.accounts.campaign.as_ref() {
+        Some(campaign) => {
+            require_keys_eq!(
+                campaign.merchant,
+                merchant.key(),
+                VestaError::MerchantMismatch
+            );
+            require!(campaign.active, VestaError::CampaignInactive);
+            let now = clock.unix_timestamp;
+            require!(
+                campaign.starts_at <= now && now < campaign.ends_at,
+                VestaError::CampaignInactive
+            );
+            u64::from(campaign.multiplier_bps)
+        }
+        None => 0,
+    };
     let total_bps = 10_000u64
         .checked_add(streak_bps)
+        .and_then(|v| v.checked_add(campaign_bps))
         .ok_or(VestaError::MultiplierOverflow)?
         .min(MAX_TOTAL_MULTIPLIER_BPS);
 
