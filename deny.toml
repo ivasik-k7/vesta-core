@@ -34,6 +34,7 @@ confidence-threshold = 0.9
 [bans]
 multiple-versions = "allow" # solana crate graph is inherently multi-versioned
 wildcards = "deny"
+allow-wildcard-paths = true # workspace-internal path deps (argus in vesta-core dev-deps)
 deny = [
     # legacy program crate conflicts with anchor-spl's interface crates (spec §10)
     { crate = "spl-token-2022", reason = "use spl-token-2022-interface; the program crate invites duplicate-type conflicts" },

@@ -695,13 +695,23 @@ anchor-spl = "1.1.2"   # token_2022_extensions is a default feature; do NOT add 
 [features]
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]  # required or `anchor build` IDL gen fails
 
-# argus
+# argus (pins resolved via cargo tree, phase 2)
 [dependencies]
 anchor-lang = "1.1.2"
-spl-discriminator = "<pin>"            # SplDiscriminate trait for the execute discriminator
-spl-transfer-hook-interface = "<pin>"  # ExecuteInstruction, instruction types
-spl-tlv-account-resolution = "<pin>"   # ExtraAccountMeta, Seed::AccountData, PubkeyData
+spl-discriminator = "0.5.2"            # SplDiscriminate trait for the execute discriminator
+spl-transfer-hook-interface = "2.1.0"  # ExecuteInstruction, instruction types
+spl-tlv-account-resolution = "0.11.1"  # ExtraAccountMeta, Seed::AccountData, PubkeyData
+spl-token-2022-interface = "2.1.0"     # mint TLV reads (PermanentDelegate) in execute
 ```
+
+**Crate-coupling rule (learned the hard way in phase 2):** argus must NOT depend on the
+`vesta-core` crate. A dependency would need `no-entrypoint`, and cargo feature
+unification then compiles the single shared `vesta-core` build of the workspace with
+that feature — silently stripping the entrypoint from the deployed `vesta_core.so`
+(every instruction fails with `InvalidAccountData`). argus instead verifies the Merchant
+account manually (owner program + hardcoded Anchor discriminator + PDA re-derivation +
+field offsets), and an integration test asserts the hardcoded `VESTA_CORE_ID` and
+`MERCHANT_DISCRIMINATOR` stay equal to the real ones.
 
 **Phase-1 gate (before the first line of instruction code):** run `cargo add anchor-spl`
 + `cargo tree` in this workspace and replace every `<pin>` above with the resolved

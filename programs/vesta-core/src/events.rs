@@ -78,3 +78,9 @@ pub struct ReceiptClosed {
     pub receipt: Pubkey,
     pub customer: Pubkey,
 }
+
+#[event]
+pub struct TransferGuardFinalized {
+    pub mint: Pubkey,
+    pub merchant: Pubkey,
+}

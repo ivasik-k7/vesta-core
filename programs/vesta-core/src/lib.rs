@@ -50,6 +50,10 @@ pub mod vesta_core {
         instructions::register_merchant::handle_update_merchant(ctx, base_earn_rate)
     }
 
+    pub fn finalize_transfer_guard(ctx: Context<FinalizeTransferGuard>) -> Result<()> {
+        instructions::finalize_transfer_guard::handle_finalize_transfer_guard(ctx)
+    }
+
     pub fn earn_points(ctx: Context<EarnPoints>, amount_base: u64, visit_day: u32) -> Result<()> {
         instructions::earn_points::handle_earn_points(ctx, amount_base, visit_day)
     }
