@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::{constants::CONFIG_SEED, state::Config};
+use crate::{constants::CONFIG_SEED, events::ConfigInitialized, state::Config};
 
 #[derive(Accounts)]
 pub struct InitConfig<'info> {
@@ -22,7 +22,12 @@ pub struct InitConfig<'info> {
 pub fn handle_init_config(ctx: Context<InitConfig>) -> Result<()> {
     let config = &mut ctx.accounts.config;
     config.admin = ctx.accounts.admin.key();
+    config.pending_admin = None;
     config.paused = false;
     config.bump = ctx.bumps.config;
+
+    emit!(ConfigInitialized {
+        admin: config.admin
+    });
     Ok(())
 }

@@ -7,6 +7,23 @@ resolver = "2"
 [workspace.package]
 edition = "2021"
 rust-version = "1.89.0"
+license = "MIT"
+repository = "https://github.com/ivasik-k7/vesta-core"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
+
+[workspace.lints.clippy]
+# On-chain code: every arithmetic op must be checked_* / saturating_* — enforced, not reviewed.
+arithmetic_side_effects = "deny"
+unwrap_used = "warn"
+expect_used = "warn"
+# curated pedantic subset (full pedantic is too noisy against Anchor macro expansion)
+cast_lossless = "warn"
+cast_possible_truncation = "warn"
+redundant_clone = "warn"
+uninlined_format_args = "warn"
 
 [profile.release]
 overflow-checks = true
@@ -16,3 +33,6 @@ codegen-units = 1
 opt-level = 3
 incremental = false
 codegen-units = 1
+
+[profile.dev]
+overflow-checks = true

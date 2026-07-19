@@ -1,0 +1,44 @@
+[graph]
+all-features = false
+
+[advisories]
+version = 2
+yanked = "deny"
+ignore = [
+    # "unmaintained" advisories pulled in transitively by the Solana/Anchor graph;
+    # nothing we depend on directly and nothing we can upgrade past today.
+    { id = "RUSTSEC-2021-0139", reason = "ansi_term via solana tooling graph" },
+    { id = "RUSTSEC-2024-0388", reason = "derivative via solana zk deps" },
+    { id = "RUSTSEC-2024-0436", reason = "paste via solana program graph" },
+    { id = "RUSTSEC-2025-0141", reason = "bincode 1.x pinned across the solana graph" },
+    { id = "RUSTSEC-2025-0161", reason = "libsecp256k1 via solana precompiles" },
+]
+
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "MPL-2.0",
+    "Zlib",
+    "CC0-1.0",
+    "Unlicense",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "allow" # solana crate graph is inherently multi-versioned
+wildcards = "deny"
+deny = [
+    # legacy program crate conflicts with anchor-spl's interface crates (spec §10)
+    { crate = "spl-token-2022", reason = "use spl-token-2022-interface; the program crate invites duplicate-type conflicts" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

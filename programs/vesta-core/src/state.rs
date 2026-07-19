@@ -1,10 +1,67 @@
 use anchor_lang::prelude::*;
 
-/// Global protocol config. Singleton PDA, created once at deployment.
+/// Global protocol config. Singleton PDA.
 #[account]
 #[derive(InitSpace)]
 pub struct Config {
     pub admin: Pubkey,
+    pub pending_admin: Option<Pubkey>,
     pub paused: bool,
+    pub bump: u8,
+}
+
+/// One per merchant; authority is baked into the seeds (no key rotation in-scope).
+#[account]
+#[derive(InitSpace)]
+pub struct Merchant {
+    pub authority: Pubkey,
+    pub point_mint: Pubkey,
+    pub treasury: Pubkey,
+    #[max_len(32)]
+    pub name: String,
+    pub decay_rate_bps: i16,
+    pub base_earn_rate: u64,
+    pub lifetime_points_issued: u128,
+    pub customer_count: u64,
+    pub joined_alliance: Option<Pubkey>,
+    pub bump: u8,
+    pub mint_bump: u8,
+}
+
+/// Per merchant-customer pair.
+#[account]
+#[derive(InitSpace)]
+pub struct CustomerProfile {
+    pub wallet: Pubkey,
+    pub merchant: Pubkey,
+    pub streak_days: u16,
+    pub last_visit_day: u32,
+    pub lifetime_earned: u64,
+    pub lifetime_redemptions: u32,
+    pub tier: u8,
+    pub bump: u8,
+}
+
+/// Redemption catalog entry. `merchant` is deliberately the first field so
+/// getProgramAccounts can memcmp on it at offset 8.
+#[account]
+#[derive(InitSpace)]
+pub struct Offer {
+    pub merchant: Pubkey,
+    pub id: u64,
+    /// Denominated in UI points ×10² (post-decay purchasing power).
+    pub price_points: u64,
+    pub supply_remaining: u32,
+    pub active: bool,
+    pub bump: u8,
+}
+
+/// Voucher for a redemption; indexed by the profile's on-chain counter.
+#[account]
+#[derive(InitSpace)]
+pub struct Receipt {
+    pub offer: Pubkey,
+    pub customer: Pubkey,
+    pub redeemed_at: i64,
     pub bump: u8,
 }
