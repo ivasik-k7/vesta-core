@@ -2,10 +2,11 @@
 
 > Engineering spec for `vesta_core` and `argus`. Single source of truth for phases 1–4.
 > Every load-bearing claim was adversarially fact-checked by a six-dimension verification
-> pass against spl-token-2022 / transfer-hook / anchor 1.1.2 / litesvm sources; see the
-> verification log in §12. Claims marked `[R2]` are queued for the second verification round.
+> pass against spl-token-2022 / transfer-hook / anchor 1.1.2 / litesvm sources, followed
+> by a primary-source resolution of the remaining open claims; see the verification log
+> in §13.
 
-- Status: **v2 — fact-check round 1 applied (43 findings), round 2 pending**
+- Status: **v3 — round 1 applied (43 findings); all four `[R2]` claims resolved against primary sources (§12)**
 - Deployed (devnet): `vesta_core` `Am2X4B1SCnJKXL8Yir2j6yGpHAKrmwcf2E5aKnA9BZV` · `argus` `CrzLCMSQ1pWTuLXBomoLn6eAB1c1gLsw5x9sBeuyBNKt`
 - Upgrade authority: `JC2b9dnqMge1pGAoM1VGg416vmvy6xiLfep6oNJFAWsQ` (owner wallet)
 - Toolchain: Rust 1.89 (pinned) · Solana CLI 4.1.1 (Agave) · Anchor 1.1.2 · LiteSVM 0.10
@@ -22,9 +23,9 @@ version or in-place upgrade; devnet, so a clean redeploy is acceptable).
 | Phase | Deliverable |
 |---|---|
 | 1 | `set_admin`/`accept_admin`, `set_paused`, `register_merchant`, `earn_points` (flat rate), `create_offer`/`close_offer`, `redeem_offer` + `Receipt` |
-| 2 | `argus`: `initialize_transfer_guard` (ExtraAccountMetaList) + `execute` policy; peer gifting happens via plain hooked `transfer_checked` — no dedicated vesta_core instruction |
+| 2 | `argus`: `initialize_transfer_guard` (ExtraAccountMetaList), `open_gift_ledger`, `execute` policy; peer gifting happens via plain hooked `transfer_checked` — no dedicated vesta_core instruction |
 | 3 | earn extensions: streaks, tiers, campaign multiplier; `create_campaign`/`close_campaign`, `create_achievement`, `grant_achievement` (kleos + receipt) |
-| 4 | `create_alliance`, `join_alliance`, `set_swap_rate`, `swap_points` (budget-capped), `clawback` |
+| 4 | `create_alliance`, `join_alliance`, `set_swap_rate`, `set_swap_budget`, `swap_points` (budget-capped), `clawback` |
 
 Non-goals (stretch, tracked separately): cNFT tessera vouchers via Bubblegum, gasless
 relayer, per-POS nonce registry.
@@ -76,10 +77,10 @@ All PDAs use canonical bumps stored on the account. Sizes are `8 + InitSpace`.
 |---|---|---|---|
 | `Config` | `["config"]` | admin `Pubkey`, pending_admin `Option<Pubkey>`, paused `bool`, bump `u8` | protocol admin, pause |
 | `Merchant` | `["merchant", authority]` | authority `Pubkey`, point_mint `Pubkey`, treasury `Pubkey`, name `String(32)`, decay_rate_bps `i16`, base_earn_rate `u64`, lifetime_points_issued `u128`, customer_count `u64`, joined_alliance `Option<Pubkey>`, bump `u8`, mint_bump `u8` | one per merchant |
-| `CustomerProfile` | `["customer", merchant, wallet]` | wallet `Pubkey`, merchant `Pubkey`, streak_days `u16`, last_visit_day `u32`, lifetime_earned `u64`, tier `u8`, bump `u8` | per merchant-customer pair |
+| `CustomerProfile` | `["customer", merchant, wallet]` | wallet `Pubkey`, merchant `Pubkey`, streak_days `u16`, last_visit_day `u32`, lifetime_earned `u64`, lifetime_redemptions `u32`, tier `u8`, bump `u8` | per merchant-customer pair |
 | `Campaign` | `["campaign", merchant, id_le]` | id `u64`, multiplier_bps `u16`, starts_at `i64`, ends_at `i64`, active `bool`, bump `u8` | earn multipliers (phase 3) |
 | `Offer` | `["offer", merchant, id_le]` | id `u64`, price_points `u64` (UI points ×10²), supply_remaining `u32`, active `bool`, bump `u8` | redemption catalog |
-| `Receipt` | `["receipt", offer, customer, redemption_index_le]` | offer `Pubkey`, customer `Pubkey`, redeemed_at `i64`, bump `u8` | phase-1 voucher; rent paid by customer, closable by customer after fulfillment (lamports back to customer) |
+| `Receipt` | `["receipt", offer, customer, profile.lifetime_redemptions_le]` | offer `Pubkey`, customer `Pubkey`, redeemed_at `i64`, bump `u8` | phase-1 voucher; index comes from the profile counter (incremented each redeem — collision-free, no client-supplied index); rent paid by customer, closable by customer after fulfillment via `close_receipt` (lamports back to customer) |
 | `Alliance` | `["alliance", id_le]` | id `u64`, authority `Pubkey`, name `String(32)`, member_count `u16`, bump `u8` | koinon root |
 | `AllianceMember` | `["member", alliance, merchant]` | alliance `Pubkey`, merchant `Pubkey`, rate_bps_to_alliance `u32`, swap_in_budget_raw `u64`, swapped_in_today `u64`, budget_day `u32`, active `bool`, bump `u8` | membership, normalized rate, inbound-swap risk budget |
 | `Achievement` | `["achieve", merchant, id_le]` | id `u64`, name `String(32)`, uri `String(128)`, threshold_lifetime `u64`, badge_count `u32`, bump `u8` | kleos definition |
@@ -147,11 +148,13 @@ Steps (single transaction; CU measured in tests, budget requested client-side):
 Freeze authority is deliberately `None`: the protocol cannot freeze customer accounts
 wholesale; clawback is scoped to the audited permanent-delegate transfer path.
 
-Transfer-hook authority hardening `[R2]`: after `initialize_transfer_guard` (phase 2)
-succeeds for the mint, vesta_core sets the mint's transfer-hook authority to `None` so no
-future actor — including the merchant — can repoint the hook to a no-op program. The
-interest-bearing rate authority remains the merchant PDA; if a rate-update instruction
-ever ships, it must re-validate the registration range (−10_000..=0).
+Transfer-hook authority hardening: after `initialize_transfer_guard` (phase 2) succeeds
+for the mint, vesta_core CPIs `set_authority(AuthorityType::TransferHookProgramId → None)`
+(verified: variant 10 of the Token-2022 `AuthorityType` enum) so no future actor —
+including the merchant — can repoint the hook to a no-op program. The interest-bearing
+rate authority (`AuthorityType::InterestRate`, variant 7) remains the merchant PDA; if a
+rate-update instruction ever ships, it must re-validate the registration range
+(−10_000..=0).
 
 Failure modes to test: re-registration; pre-funded mint address (griefing); oversized
 strings; positive decay rate; classic-token program substitution.
@@ -195,18 +198,27 @@ customer sees in a wallet).
 `close_offer(id)` — merchant-only; requires `!active || supply_remaining == 0` is NOT
 required — merchant may close anytime; rent returns to merchant. Emits `OfferClosed`.
 
-`redeem_offer(id, redemption_index: u64, max_raw_amount: u64)`:
+`redeem_offer(id, max_raw_amount: u64)`:
 1. Offer active, `supply_remaining > 0`; constraints: burned mint == `merchant.point_mint`,
    `offer.merchant == merchant` (seed-bound), receipt PDA derived from
-   `(offer, customer, redemption_index)` where the index equals the customer's prior
-   redemption count for the offer (prevents receipt collisions).
+   `(offer, customer, customer_profile.lifetime_redemptions)` — the on-chain counter, not
+   a client-supplied index (collision-free by construction).
 2. Convert the UI price to the raw burn amount **on-chain**: format `price_points` as a
    decimal string (integer math, two decimals), CPI Token-2022
-   `ui_amount_to_amount(mint, price_str)` and read the `u64` from return data. Require
+   `UiAmountToAmount(mint, price_str)` and read the **little-endian u64** from return
+   data (verified: the instruction takes `&str`, returns u64 LE via
+   `sol_get_return_data`, and applies interest-bearing math). Require
    `raw_needed <= max_raw_amount` (customer's slippage bound — decay ticks between quote
-   and execution). `[R2]`
+   and execution). Token-2022 documents that these conversions use floating-point math
+   and are **not round-trip reversible** — vesta_core therefore only ever converts in
+   this one direction (ui → raw) on-chain; the slippage bound absorbs any residual
+   wobble.
 3. CPI `burn(raw_needed)` from customer ATA — customer signs.
-4. `supply_remaining -= 1`; init `Receipt`; emit `OfferRedeemed`.
+4. `supply_remaining -= 1`; `lifetime_redemptions += 1`; init `Receipt`; emit
+   `OfferRedeemed`.
+
+`close_receipt()` — customer-signed after fulfillment; rent back to customer; emits
+`ReceiptClosed`.
 
 ### 3.5 Gamification (phase 3)
 
@@ -307,9 +319,14 @@ context; a per-epoch clawback cap or dispute-flag timelock is documented future 
      source token account's owner field — used for the ledger seeds. Deriving from the
      **authority** account (index 3) instead would let a customer mint fresh ledgers by
      approving delegates; the source-owner field is delegation-proof.
-   - `ExtraAccountMeta::new_with_pubkey_data(PubkeyData::AccountData { account_index: 2 (destination), data_index: 32 })`
+   - `ExtraAccountMeta::new_with_pubkey_data(&[PubkeyData::AccountData { account_index: 2 (destination), data_index: 32 }], false, false)`
      — dereferences the destination owner **wallet** so the hook can inspect which program
-     owns it. `[R2]`
+     owns it (verified: constructor and `PubkeyData::AccountData { account_index, data_index }`
+     exist exactly as written). Note on compatibility: meta *validation* runs inside argus
+     with the crate version **we** vendor, and meta *resolution* runs in our SDK/clients —
+     neither depends on the token-2022 build deployed on devnet. Wallet-initiated gifts
+     require an spl-token client version that resolves pubkey-data metas; the SDK
+     documents the minimum version.
 5. Reentrant token CPIs on the transferring accounts are not allowed during execute.
 
 ### 4.3 Policy v2
@@ -323,7 +340,7 @@ argus account table:
 
 | Account | Seeds | Fields | Notes |
 |---|---|---|---|
-| `GiftLedger` | `["ledger", mint, source_owner]` | day `u32`, gifted_today `u64`, bump `u8` | created lazily on first peer transfer; rent paid by transfer fee payer `[R2 — creation inside a hook needs a writable+funded path; if infeasible, pre-create in a one-time `open_gift_ledger` ix]` |
+| `GiftLedger` | `["ledger", mint, source_owner]` | day `u32`, gifted_today `u64`, bump `u8` | **pre-created via `open_gift_ledger(mint)`** — a one-time, customer-signed argus instruction. In-hook lazy creation is infeasible: privilege de-escalation strips every signer from the hook CPI, so no account inside `execute` can pay rent. The hook rejects peer transfers with no ledger (`GuardError::LedgerNotOpened`, fail-closed); the SDK bundles `open_gift_ledger` + `transfer_checked` into one transaction for first-time gifters |
 | `ExtraAccountMetaList` | `["extra-account-metas", mint]` | interface-defined | init-once, guarded |
 
 Rules, in order:
@@ -333,7 +350,7 @@ Rules, in order:
 2. `destination == treasury` (literal meta) → **allow** (customer→merchant payment flows).
 3. Otherwise — peer transfer:
    a. `destination_owner_wallet.owner != system_program` → **reject**
-      `GuardError::ProgramOwnedDestination` (blocks DEX/pool deposits). `[R2]`
+      `GuardError::ProgramOwnedDestination` (blocks DEX/pool deposits).
    b. Daily cap: roll ledger by unix_day; require
       `gifted_today + amount <= DAILY_GIFT_CAP_RAW`; update ledger → **allow**, emit
       `PointsGifted`.
@@ -488,6 +505,8 @@ Transaction-size assertions under the 1232-byte packet limit.
 | `PointsEarned` | merchant, customer, base, minted, multiplier_bps, streak_days |
 | `OfferCreated` / `OfferClosed` | merchant, offer_id, price_points, supply |
 | `OfferRedeemed` | offer, customer, raw_burned, receipt |
+| `ReceiptClosed` | receipt, customer |
+| `GiftLedgerOpened` (argus) | mint, owner |
 | `PointsGifted` (argus) | mint, source_owner, destination, amount, gifted_today |
 | `ClawbackObserved` (argus) | mint, source_owner, amount |
 | `Clawback` | merchant, customer, amount_raw, reason_code |
@@ -550,7 +569,44 @@ spl-tlv-account-resolution = "*"   # ExtraAccountMeta, Seed::AccountData, Pubkey
 
 ---
 
-## 12. Verification log — round 1 (43 findings applied)
+## 12. Integration contract (Python SDK · TS client · third parties)
+
+The composability surface. Everything below is derivable from the on-chain IDL; this
+section pins the flows so `vesta-sdk` (Python) and the `vesta-ui` TS client implement the
+same contract, and third-party dApps can integrate without reading program source.
+
+### 12.1 Who signs what
+
+| Flow | Instruction(s) | Signers | Typical caller |
+|---|---|---|---|
+| Merchant onboarding | `register_merchant` → `initialize_transfer_guard` | merchant authority | dashboard / SDK |
+| POS earn | `earn_points` | merchant authority | POS via SDK |
+| Redeem | `redeem_offer` / `close_receipt` | customer | customer app |
+| Gift (first time) | `open_gift_ledger` + hooked `transfer_checked` (one tx) | customer | wallet / TS client |
+| Gift (subsequent) | hooked `transfer_checked` | customer | wallet / TS client |
+| Swap | `swap_points` | customer | customer app |
+| Grant badge | `grant_achievement` | merchant authority | SDK |
+| Clawback | `clawback` | merchant authority | SDK |
+
+### 12.2 Read patterns
+
+- **Balances**: standard Token-2022 accounts; live UI value client-side from the mint's
+  `InterestBearingConfig` state (rate + timestamps) — same math wallets use.
+- **Catalog**: `getProgramAccounts` with discriminator + memcmp on the merchant key at
+  offset 8 (`Offer`, `Campaign`, `Achievement`). Exact offsets ship with the IDL.
+- **Events**: log subscription parsing Anchor events; discriminators exported by both SDKs.
+- **Badge gating (third parties)**: `KleosReceipt` PDA existence = "earned it" (survives a
+  holder-side burn); badge ATA balance = "still holds it". Gate on whichever semantic the
+  integrating dApp needs — this distinction is deliberate API surface.
+
+### 12.3 Stability
+
+Error codes and event schemas freeze before the SDKs tag v1.0; the IDL is published
+on-chain and is the canonical interface artifact. Transfers of point mints from generic
+wallets require an spl-token client recent enough to resolve pubkey-data extra metas
+(documented minimum in the SDK README).
+
+## 13. Verification log — round 1 (43 findings applied)
 
 Six adversarial verifier agents (dimensions: token-2022 lifecycle, anchor-spl 1.1.2,
 transfer-hook interface, LiteSVM, security, internal consistency) checked the v1 draft
@@ -584,6 +640,17 @@ crates. All 43 non-`correct` findings were applied in v2:
 | 23 | grant_achievement | merchant-signed (was permissionless griefing vector) — §3.5 |
 | 24–43 | consistency | mint-authority contradiction; gift_points row reworded; treasury defined (field + literal meta); events completed with fields; Receipt/KleosReceipt/GiftLedger added to account model; phase re-scoping (P3 annotations, set_paused in phase 1); Campaign in earn accounts; account-count claims aligned (6); close_offer/close_campaign specified; clawback reason_code sourced; §6.1 wording fixed; draft artifact removed; status line updated |
 
-Round 2 (`[R2]` markers) re-verifies: pubkey-data extra metas availability in the pinned
-spl-tlv-account-resolution; hook-authority-set-to-None flow; ui_amount_to_amount return
-data parsing; GiftLedger lazy creation inside a hook (writable+funding constraints).
+### Round 2 — open-claim resolution (primary sources)
+
+The agent fleet for round 2 hit a capacity window, so the four open `[R2]` claims were
+resolved directly against docs.rs with quoted APIs:
+
+| Claim | Resolution |
+|---|---|
+| pubkey-data extra metas | **Confirmed.** `ExtraAccountMeta::new_with_pubkey_data(&[PubkeyData], is_signer, is_writable)`; `PubkeyData::AccountData { account_index: u8, data_index: u8 }` — exactly as used in §4.2/§4.3. Validation runs in argus's own vendored crate; resolution in our SDK — no dependency on the devnet token-2022 build |
+| hook authority → None | **Confirmed.** `AuthorityType::TransferHookProgramId` (variant 10) via `set_authority`; `InterestRate` is variant 7 — §3.2 hardening implementable as written |
+| ui→raw conversion | **Confirmed.** `UiAmountToAmount` takes `&str`, returns little-endian `u64` via return data, applies interest-bearing math. Float conversions are documented as non-round-trippable → spec converts one direction only, slippage bound absorbs wobble (§3.4) |
+| GiftLedger creation in-hook | **Refuted (as suspected).** Privilege de-escalation leaves no signer to pay rent inside `execute` → lazy in-hook creation impossible. Resolved: `open_gift_ledger` one-time customer instruction, hook fails closed on missing ledger, SDK bundles open+transfer for first gifts (§4.3) |
+
+A follow-up agent pass (consistency + completeness critic over v3) is queued for when
+subagent capacity resets; its findings will append here.
