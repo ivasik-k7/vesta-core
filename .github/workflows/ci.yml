@@ -7,33 +7,31 @@ on:
 
 env:
   SOLANA_VERSION: 4.1.1
-  ANCHOR_VERSION: 1.1.2
 
 jobs:
-  lint:
+  fmt:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+          components: rustfmt
       - run: cargo fmt --all --check
-      - run: cargo clippy --all-targets -- -D warnings
 
   build-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
         with:
-          cache-directories: ~/.cache/solana
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
       - name: Install Solana CLI
         run: |
           sh -c "$(curl -sSfL https://release.anza.xyz/v${SOLANA_VERSION}/install)"
           echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
-      - name: Install Anchor CLI
-        run: cargo install anchor-cli@${ANCHOR_VERSION} --locked
-      - run: anchor build
+      # anchor-cli is not needed in CI: cargo build-sbf produces target/deploy/*.so,
+      # which is all clippy (include_bytes in tests) and cargo test require
+      - run: cargo build-sbf
+      - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
