@@ -6,7 +6,7 @@
 > by a primary-source resolution of the remaining open claims; see the verification log
 > in §13.
 
-- Status: **v3 — round 1 applied (43 findings); all four `[R2]` claims resolved against primary sources (§12)**
+- Status: **v3 — round 1 applied (43 findings); all four open claims resolved against primary sources (§13)**
 - Deployed (devnet): `vesta_core` `Am2X4B1SCnJKXL8Yir2j6yGpHAKrmwcf2E5aKnA9BZV` · `argus` `CrzLCMSQ1pWTuLXBomoLn6eAB1c1gLsw5x9sBeuyBNKt`
 - Upgrade authority: `JC2b9dnqMge1pGAoM1VGg416vmvy6xiLfep6oNJFAWsQ` (owner wallet)
 - Toolchain: Rust 1.89 (pinned) · Solana CLI 4.1.1 (Agave) · Anchor 1.1.2 · LiteSVM 0.10
@@ -403,7 +403,7 @@ resolved extras explicitly.
 | Mint account creation | mint PDA seeds `["mint", merchant]` | creation signature only |
 | Rate authority | merchant PDA | range re-validated on any update path |
 | Permanent delegate | merchant PDA | clawback transfers only; burn capability never exercised (code-review invariant) |
-| Transfer-hook authority | merchant PDA → **None** after guard init `[R2]` | prevents hook repointing |
+| Transfer-hook authority | merchant PDA → **None** after guard init | prevents hook repointing |
 | Badge mint authority | none (revoked after metadata init) | supply can never increase |
 
 ### 6.2 Threats and mitigations
@@ -471,7 +471,7 @@ Per instruction: happy path + every failure mode from §3–§4. Adversarial sui
   (assert raw_needed grows as UI value decays); receipt index reuse.
 - hook/gift: cap boundary (exact cap passes, +1 fails); ledger day rollover; delegated
   transfer uses source-owner ledger (delegate cannot mint a fresh ledger); omitted extra
-  accounts abort the transfer (fail-closed); program-owned destination rejected `[R2]`;
+  accounts abort the transfer (fail-closed); program-owned destination rejected;
   permanent-delegate transfer allowed + observed.
 - swap: non-members; cross-alliance substitution; mismatched member/mint; stale
   `min_out_b`; **swap_in budget exact boundary and day rollover**; u128 edges.
