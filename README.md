@@ -50,7 +50,7 @@ RPC_URL=http://127.0.0.1:8899 npm run spike   # or omit RPC_URL for devnet
 
 ## Ecosystem
 
-`vesta-program` (this repo, on-chain) · `vesta-sdk` (Python client for merchant backends/integrators) · `vesta-ui` (React web client for customers and merchants).
+`vesta-core` (this repo, on-chain) · [`vesta-sdk`](https://github.com/ivasik-k7/vesta-sdk) (Python client for merchant backends/integrators) · [`vesta-ui`](https://github.com/ivasik-k7/vesta-ui) (React web client for customers and merchants).
 
 ## Status
 
