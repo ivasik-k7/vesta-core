@@ -1,0 +1,24 @@
+skip_local_validator = true
+
+[toolchain]
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.devnet]
+argus = "CrzLCMSQ1pWTuLXBomoLn6eAB1c1gLsw5x9sBeuyBNKt"
+vesta_core = "Am2X4B1SCnJKXL8Yir2j6yGpHAKrmwcf2E5aKnA9BZV"
+
+[programs.localnet]
+argus = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
+vesta_core = "7MHkoV2erawpqwmXQ9MQF6o5xa2YDfLoRBxPPJMZda8Y"
+
+[provider]
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "cargo test"
+
+[hooks]
