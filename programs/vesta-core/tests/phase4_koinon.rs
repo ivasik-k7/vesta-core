@@ -2,7 +2,8 @@
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::arithmetic_side_effects,
-    clippy::cast_possible_truncation
+    clippy::cast_possible_truncation,
+    clippy::too_many_arguments
 )]
 
 use {
