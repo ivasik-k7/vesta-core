@@ -111,6 +111,11 @@
                 "kind": "account",
                 "path": "merchant.authority",
                 "account": "Merchant"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           }
@@ -268,6 +273,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           },
@@ -323,6 +333,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           },
@@ -333,6 +348,91 @@
         {
           "name": "campaign",
           "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "close_merchant",
+      "docs": [
+        "Delete a merchant (only when its point supply is zero)."
+      ],
+      "discriminator": [
+        138,
+        96,
+        102,
+        11,
+        220,
+        136,
+        154,
+        11
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "point_mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              }
+            ]
+          },
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "token_program",
+          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
         }
       ],
       "args": []
@@ -378,6 +478,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           },
@@ -461,6 +566,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           }
@@ -657,6 +767,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           }
@@ -769,6 +884,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           }
@@ -876,6 +996,11 @@
               {
                 "kind": "account",
                 "path": "merchant.authority",
+                "account": "Merchant"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
                 "account": "Merchant"
               }
             ]
@@ -1078,6 +1203,11 @@
               {
                 "kind": "account",
                 "path": "merchant.authority",
+                "account": "Merchant"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
                 "account": "Merchant"
               }
             ]
@@ -1315,6 +1445,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           }
@@ -1413,6 +1548,11 @@
               {
                 "kind": "account",
                 "path": "merchant_authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           },
@@ -1641,6 +1781,11 @@
               {
                 "kind": "account",
                 "path": "merchant_authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           }
@@ -1749,6 +1894,11 @@
               {
                 "kind": "account",
                 "path": "merchant_authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           }
@@ -1873,6 +2023,11 @@
               {
                 "kind": "account",
                 "path": "merchant.authority",
+                "account": "Merchant"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
                 "account": "Merchant"
               }
             ]
@@ -2105,6 +2260,10 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "arg",
+                "path": "id"
               }
             ]
           }
@@ -2172,6 +2331,10 @@
         }
       ],
       "args": [
+        {
+          "name": "id",
+          "type": "u64"
+        },
         {
           "name": "args",
           "type": {
@@ -2345,6 +2508,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           }
@@ -2460,6 +2628,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           }
@@ -2517,6 +2690,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           }
@@ -2613,6 +2791,11 @@
               {
                 "kind": "account",
                 "path": "merchant_authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           }
@@ -2697,6 +2880,11 @@
               {
                 "kind": "account",
                 "path": "merchant_authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           }
@@ -2784,6 +2972,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           }
@@ -3224,6 +3417,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           },
@@ -3292,6 +3490,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           }
@@ -3377,6 +3580,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           }
@@ -3450,6 +3658,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           }
@@ -3511,6 +3724,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
               }
             ]
           }
@@ -4043,6 +4261,19 @@
       ]
     },
     {
+      "name": "MerchantClosed",
+      "discriminator": [
+        78,
+        240,
+        184,
+        6,
+        54,
+        79,
+        53,
+        89
+      ]
+    },
+    {
       "name": "MerchantOperatorSet",
       "discriminator": [
         92,
@@ -4395,91 +4626,96 @@
     },
     {
       "code": 6023,
+      "name": "MerchantNotEmpty",
+      "msg": "Merchant cannot be closed while points are in circulation"
+    },
+    {
+      "code": 6024,
       "name": "OfferInactive",
       "msg": "Offer is not active"
     },
     {
-      "code": 6024,
+      "code": 6025,
       "name": "OfferSoldOut",
       "msg": "Offer supply is exhausted"
     },
     {
-      "code": 6025,
+      "code": 6026,
       "name": "SlippageExceeded",
       "msg": "Slippage bound exceeded"
     },
     {
-      "code": 6026,
+      "code": 6027,
       "name": "MintMismatch",
       "msg": "Mint does not match the merchant point mint"
     },
     {
-      "code": 6027,
+      "code": 6028,
       "name": "MerchantMismatch",
       "msg": "Merchant account mismatch"
     },
     {
-      "code": 6028,
+      "code": 6029,
       "name": "TreasuryMismatch",
       "msg": "Treasury account mismatch"
     },
     {
-      "code": 6029,
+      "code": 6030,
       "name": "AllianceMismatch",
       "msg": "Alliance mismatch"
     },
     {
-      "code": 6030,
+      "code": 6031,
       "name": "MemberInactive",
       "msg": "Alliance member is not active"
     },
     {
-      "code": 6031,
+      "code": 6032,
       "name": "AlreadyInAlliance",
       "msg": "Merchant already belongs to an alliance"
     },
     {
-      "code": 6032,
+      "code": 6033,
       "name": "SwapBudgetExceeded",
       "msg": "Daily swap-in budget exceeded"
     },
     {
-      "code": 6033,
+      "code": 6034,
       "name": "InvalidSwapRate",
       "msg": "Invalid swap rate"
     },
     {
-      "code": 6034,
+      "code": 6035,
       "name": "GuardNotInitialized",
       "msg": "Transfer guard is not initialized"
     },
     {
-      "code": 6035,
+      "code": 6036,
       "name": "GuardAlreadyFinalized",
       "msg": "Transfer guard already finalized"
     },
     {
-      "code": 6036,
+      "code": 6037,
       "name": "ThresholdNotReached",
       "msg": "Achievement threshold not reached"
     },
     {
-      "code": 6037,
+      "code": 6038,
       "name": "AlreadyGranted",
       "msg": "Achievement already granted"
     },
     {
-      "code": 6038,
+      "code": 6039,
       "name": "InvalidAmount",
       "msg": "Amount must be greater than zero"
     },
     {
-      "code": 6039,
+      "code": 6040,
       "name": "Overflow",
       "msg": "Arithmetic overflow"
     },
     {
-      "code": 6040,
+      "code": 6041,
       "name": "ConversionFailed",
       "msg": "Conversion return data missing or malformed"
     }
@@ -5460,17 +5696,23 @@
     {
       "name": "Merchant",
       "docs": [
-        "One per merchant; authority is baked into the seeds (no key rotation in-scope).",
+        "One record per (authority, id) — a wallet owns MANY merchants (multi-brand /",
+        "multi-location). `id` + `authority` are the PDA seeds. Field order is an ABI:",
+        "argus reads `id`/`authority`/`point_mint`/`treasury` by fixed offset, so the",
+        "fixed-size prefix below must not be reordered.",
         "",
-        "Enterprise surface: a cold `authority` (owner, in the seeds) plus up to",
-        "`MAX_OPERATORS` hot delegate keys that may run day-to-day operations",
-        "(earn, campaigns, achievements) without the owner key; a merchant-level",
-        "pause; an admin-set `verified` trust flag; a display category + metadata",
-        "URI; and lifetime operational stats."
+        "Enterprise surface: a cold `authority` (owner) plus up to `MAX_OPERATORS`",
+        "hot delegate keys that may run day-to-day operations (earn, campaigns,",
+        "achievements) without the owner key; a merchant-level pause; an admin-set",
+        "`verified` trust flag; a display category + metadata URI; lifetime stats."
       ],
       "type": {
         "kind": "struct",
         "fields": [
+          {
+            "name": "id",
+            "type": "u64"
+          },
           {
             "name": "authority",
             "type": "pubkey"
@@ -5595,6 +5837,26 @@
           {
             "name": "mint_bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MerchantClosed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "id",
+            "type": "u64"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
           }
         ]
       }

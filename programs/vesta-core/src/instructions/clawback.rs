@@ -31,7 +31,7 @@ pub struct ClawbackPoints<'info> {
 
     #[account(
         mut,
-        seeds = [MERCHANT_SEED, merchant.authority.as_ref()],
+        seeds = [MERCHANT_SEED, merchant.authority.as_ref(), &merchant.id.to_le_bytes()],
         bump = merchant.bump,
         has_one = treasury @ VestaError::TreasuryMismatch,
         has_one = point_mint @ VestaError::MintMismatch,
@@ -152,9 +152,11 @@ pub fn handle_clawback<'info>(
     infos.extend(ctx.remaining_accounts.iter().cloned());
 
     let authority_key = ctx.accounts.merchant.authority;
+    let id_bytes = ctx.accounts.merchant.id.to_le_bytes();
     let merchant_seeds: &[&[u8]] = &[
         MERCHANT_SEED,
         authority_key.as_ref(),
+        &id_bytes,
         &[ctx.accounts.merchant.bump],
     ];
     invoke_signed(&ix, &infos, &[merchant_seeds])?;

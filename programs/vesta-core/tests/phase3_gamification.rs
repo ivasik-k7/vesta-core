@@ -297,7 +297,7 @@ fn setup() -> World {
     svm.airdrop(&merchant_authority.pubkey(), 50_000_000_000)
         .unwrap();
     let merchant = Pubkey::find_program_address(
-        &[MERCHANT_SEED, merchant_authority.pubkey().as_ref()],
+        &[MERCHANT_SEED, merchant_authority.pubkey().as_ref(), &0u64.to_le_bytes()],
         &vesta_core::id(),
     )
     .0;
@@ -347,7 +347,7 @@ fn setup() -> World {
                 system_program: system_program::ID,
             }
             .to_account_metas(None),
-            data: vesta_core::instruction::RegisterMerchant {
+            data: vesta_core::instruction::RegisterMerchant { id: 0,
                 args: RegisterMerchantArgs {
                     name: "Kavarna".into(),
                     symbol: "PTS".into(),
@@ -445,7 +445,7 @@ fn campaign_rejects_wrong_merchant_expired_and_closed() {
         .airdrop(&other_authority.pubkey(), 50_000_000_000)
         .unwrap();
     let other_merchant = Pubkey::find_program_address(
-        &[MERCHANT_SEED, other_authority.pubkey().as_ref()],
+        &[MERCHANT_SEED, other_authority.pubkey().as_ref(), &0u64.to_le_bytes()],
         &vesta_core::id(),
     )
     .0;
@@ -470,7 +470,7 @@ fn campaign_rejects_wrong_merchant_expired_and_closed() {
                 system_program: system_program::ID,
             }
             .to_account_metas(None),
-            data: vesta_core::instruction::RegisterMerchant {
+            data: vesta_core::instruction::RegisterMerchant { id: 0,
                 args: RegisterMerchantArgs {
                     name: "Litera".into(),
                     symbol: "BKS".into(),

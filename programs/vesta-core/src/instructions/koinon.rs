@@ -216,7 +216,7 @@ pub struct JoinAlliance<'info> {
 
     #[account(
         mut,
-        seeds = [MERCHANT_SEED, merchant_authority.key().as_ref()],
+        seeds = [MERCHANT_SEED, merchant_authority.key().as_ref(), &merchant.id.to_le_bytes()],
         bump = merchant.bump,
     )]
     pub merchant: Account<'info, Merchant>,
@@ -291,7 +291,7 @@ pub struct LeaveAlliance<'info> {
 
     #[account(
         mut,
-        seeds = [MERCHANT_SEED, merchant_authority.key().as_ref()],
+        seeds = [MERCHANT_SEED, merchant_authority.key().as_ref(), &merchant.id.to_le_bytes()],
         bump = merchant.bump,
     )]
     pub merchant: Account<'info, Merchant>,
@@ -328,7 +328,7 @@ pub struct SetSwapRate<'info> {
     pub alliance_authority: Signer<'info>,
 
     #[account(
-        seeds = [MERCHANT_SEED, merchant_authority.key().as_ref()],
+        seeds = [MERCHANT_SEED, merchant_authority.key().as_ref(), &merchant.id.to_le_bytes()],
         bump = merchant.bump,
     )]
     pub merchant: Account<'info, Merchant>,
@@ -364,7 +364,7 @@ pub struct SetSwapBudget<'info> {
     pub merchant_authority: Signer<'info>,
 
     #[account(
-        seeds = [MERCHANT_SEED, merchant_authority.key().as_ref()],
+        seeds = [MERCHANT_SEED, merchant_authority.key().as_ref(), &merchant.id.to_le_bytes()],
         bump = merchant.bump,
     )]
     pub merchant: Account<'info, Merchant>,
@@ -531,9 +531,11 @@ pub fn handle_swap_points(
         raw_in,
     )?;
     let authority_b = ctx.accounts.merchant_b.authority;
+    let id_b_bytes = ctx.accounts.merchant_b.id.to_le_bytes();
     let merchant_b_seeds: &[&[u8]] = &[
         MERCHANT_SEED,
         authority_b.as_ref(),
+        &id_b_bytes,
         &[ctx.accounts.merchant_b.bump],
     ];
     mint_to(

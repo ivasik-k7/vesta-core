@@ -92,7 +92,7 @@ pub struct EarnPoints<'info> {
 
     #[account(
         mut,
-        seeds = [MERCHANT_SEED, merchant.authority.as_ref()],
+        seeds = [MERCHANT_SEED, merchant.authority.as_ref(), &merchant.id.to_le_bytes()],
         bump = merchant.bump,
         has_one = point_mint @ VestaError::MintMismatch,
     )]
@@ -186,7 +186,7 @@ pub struct EarnPointsCampaign<'info> {
 
     #[account(
         mut,
-        seeds = [MERCHANT_SEED, merchant.authority.as_ref()],
+        seeds = [MERCHANT_SEED, merchant.authority.as_ref(), &merchant.id.to_le_bytes()],
         bump = merchant.bump,
         has_one = point_mint @ VestaError::MintMismatch,
     )]
@@ -434,7 +434,13 @@ fn mint_points<'info>(
     amount: u64,
 ) -> Result<()> {
     let authority_key = merchant.authority;
-    let merchant_seeds: &[&[u8]] = &[MERCHANT_SEED, authority_key.as_ref(), &[merchant.bump]];
+    let id_bytes = merchant.id.to_le_bytes();
+    let merchant_seeds: &[&[u8]] = &[
+        MERCHANT_SEED,
+        authority_key.as_ref(),
+        &id_bytes,
+        &[merchant.bump],
+    ];
     mint_to(
         CpiContext::new_with_signer(
             token_program.key(),

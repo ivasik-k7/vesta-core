@@ -66,7 +66,7 @@ pub struct CreateCampaign<'info> {
     pub authority: Signer<'info>,
 
     #[account(
-        seeds = [MERCHANT_SEED, authority.key().as_ref()],
+        seeds = [MERCHANT_SEED, authority.key().as_ref(), &merchant.id.to_le_bytes()],
         bump = merchant.bump,
         has_one = authority @ VestaError::Unauthorized,
     )]
@@ -144,7 +144,7 @@ pub struct UpdateCampaign<'info> {
     pub authority: Signer<'info>,
 
     #[account(
-        seeds = [MERCHANT_SEED, authority.key().as_ref()],
+        seeds = [MERCHANT_SEED, authority.key().as_ref(), &merchant.id.to_le_bytes()],
         bump = merchant.bump,
         has_one = authority @ VestaError::Unauthorized,
     )]
@@ -191,7 +191,7 @@ pub struct CloseCampaign<'info> {
     pub authority: Signer<'info>,
 
     #[account(
-        seeds = [MERCHANT_SEED, authority.key().as_ref()],
+        seeds = [MERCHANT_SEED, authority.key().as_ref(), &merchant.id.to_le_bytes()],
         bump = merchant.bump,
         has_one = authority @ VestaError::Unauthorized,
     )]

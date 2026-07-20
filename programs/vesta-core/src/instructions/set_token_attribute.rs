@@ -39,7 +39,7 @@ pub struct SetTokenAttribute<'info> {
 
     #[account(
         mut,
-        seeds = [MERCHANT_SEED, authority.key().as_ref()],
+        seeds = [MERCHANT_SEED, authority.key().as_ref(), &merchant.id.to_le_bytes()],
         bump = merchant.bump,
         has_one = authority @ VestaError::Unauthorized,
     )]
@@ -94,8 +94,9 @@ pub fn handle_set_token_attribute(
 
     let merchant_key = ctx.accounts.merchant.key();
     let authority_key = ctx.accounts.authority.key();
+    let id_bytes = ctx.accounts.merchant.id.to_le_bytes();
     let merchant_seeds: &[&[u8]] =
-        &[MERCHANT_SEED, authority_key.as_ref(), &[ctx.accounts.merchant.bump]];
+        &[MERCHANT_SEED, authority_key.as_ref(), &id_bytes, &[ctx.accounts.merchant.bump]];
 
     token_metadata_update_field(
         CpiContext::new_with_signer(
@@ -154,8 +155,9 @@ pub fn handle_update_token_metadata(
     }
 
     let authority_key = ctx.accounts.authority.key();
+    let id_bytes = ctx.accounts.merchant.id.to_le_bytes();
     let merchant_seeds: &[&[u8]] =
-        &[MERCHANT_SEED, authority_key.as_ref(), &[ctx.accounts.merchant.bump]];
+        &[MERCHANT_SEED, authority_key.as_ref(), &id_bytes, &[ctx.accounts.merchant.bump]];
     token_metadata_update_field(
         CpiContext::new_with_signer(
             ctx.accounts.token_program.key(),
@@ -186,8 +188,9 @@ pub fn handle_update_decay_rate(ctx: Context<SetTokenAttribute>, new_rate_bps: i
         VestaError::InvalidDecayRate
     );
     let authority_key = ctx.accounts.authority.key();
+    let id_bytes = ctx.accounts.merchant.id.to_le_bytes();
     let merchant_seeds: &[&[u8]] =
-        &[MERCHANT_SEED, authority_key.as_ref(), &[ctx.accounts.merchant.bump]];
+        &[MERCHANT_SEED, authority_key.as_ref(), &id_bytes, &[ctx.accounts.merchant.bump]];
     interest_bearing_mint_update_rate(
         CpiContext::new_with_signer(
             ctx.accounts.token_program.key(),

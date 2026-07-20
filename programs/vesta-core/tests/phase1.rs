@@ -48,7 +48,7 @@ struct Harness {
 }
 
 fn pdas(program_id: &Pubkey, authority: &Pubkey) -> (Pubkey, Pubkey, Pubkey) {
-    let merchant = Pubkey::find_program_address(&[MERCHANT_SEED, authority.as_ref()], program_id).0;
+    let merchant = Pubkey::find_program_address(&[MERCHANT_SEED, authority.as_ref(), &0u64.to_le_bytes()], program_id).0;
     let mint = Pubkey::find_program_address(&[MINT_SEED, merchant.as_ref()], program_id).0;
     let treasury = get_associated_token_address_with_program_id(authority, &mint, &TOKEN_2022_ID);
     (merchant, mint, treasury)
@@ -131,7 +131,7 @@ impl Harness {
                     system_program: system_program::ID,
                 }
                 .to_account_metas(None),
-                vesta_core::instruction::RegisterMerchant {
+                vesta_core::instruction::RegisterMerchant { id: 0,
                     args: RegisterMerchantArgs {
                         name: name.into(),
                         symbol: "PTS".into(),
@@ -362,7 +362,7 @@ fn register_merchant_rejects_bad_args() {
                     system_program: system_program::ID,
                 }
                 .to_account_metas(None),
-                vesta_core::instruction::RegisterMerchant { args }.data(),
+                vesta_core::instruction::RegisterMerchant { id: 0, args }.data(),
             )],
             &[&authority.insecure_clone()],
             &authority.pubkey(),
@@ -826,5 +826,86 @@ fn metadata_and_decay_are_mutable() {
     assert!(
         h.send(&[decay_ix(500)], &[&auth], &authority.pubkey()).is_err(),
         "positive decay rate accepted"
+    );
+}
+
+fn register_with_id(h: &mut Harness, authority: &Keypair, id: u64, name: &str) -> (Pubkey, Pubkey) {
+    let merchant = Pubkey::find_program_address(
+        &[MERCHANT_SEED, authority.pubkey().as_ref(), &id.to_le_bytes()],
+        &vesta_core::id(),
+    )
+    .0;
+    let mint = Pubkey::find_program_address(&[MINT_SEED, merchant.as_ref()], &vesta_core::id()).0;
+    let treasury = get_associated_token_address_with_program_id(&authority.pubkey(), &mint, &TOKEN_2022_ID);
+    let ix = Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::RegisterMerchant {
+            authority: authority.pubkey(),
+            merchant,
+            mint,
+            treasury,
+            config: h.config,
+            token_program: TOKEN_2022_ID,
+            associated_token_program: ATA_PROGRAM_ID,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::RegisterMerchant {
+            id,
+            args: RegisterMerchantArgs {
+                name: name.into(),
+                symbol: "PTS".into(),
+                uri: "https://vesta.example/points.json".into(),
+                decay_rate_bps: -2_000,
+                base_earn_rate: 100,
+                decimals: 2,
+            },
+        }
+        .data(),
+    };
+    h.send(&[ix], &[authority], &authority.pubkey()).unwrap();
+    (merchant, mint)
+}
+
+#[test]
+fn wallet_owns_multiple_merchants_with_delete() {
+    let mut h = Harness::new();
+    let authority = Keypair::new();
+    h.svm.airdrop(&authority.pubkey(), 30_000_000_000).unwrap();
+
+    // One wallet, two distinct merchants (multi-record).
+    let (m0, mint0) = register_with_id(&mut h, &authority, 0, "Cafe");
+    let (m1, mint1) = register_with_id(&mut h, &authority, 1, "Bookstore");
+    assert_ne!(m0, m1);
+    assert_ne!(mint0, mint1);
+    let a0: Merchant = h.account(&m0);
+    let a1: Merchant = h.account(&m1);
+    assert_eq!(a0.id, 0);
+    assert_eq!(a1.id, 1);
+    assert_eq!(a0.authority, authority.pubkey());
+    assert_eq!(a1.authority, authority.pubkey());
+
+    // Delete the empty second merchant → mint + merchant reclaimed.
+    let close = |merchant: Pubkey, mint: Pubkey| Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::CloseMerchant {
+            authority: authority.pubkey(),
+            merchant,
+            point_mint: mint,
+            token_program: TOKEN_2022_ID,
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::CloseMerchant {}.data(),
+    };
+    h.send(&[close(m1, mint1)], &[&authority], &authority.pubkey()).unwrap();
+    assert!(h.svm.get_account(&m1).is_none_or(|a| a.lamports == 0));
+    assert!(h.svm.get_account(&mint1).is_none_or(|a| a.lamports == 0));
+
+    // The first merchant issues points → it can no longer be closed.
+    let customer = Keypair::new().pubkey();
+    h.earn(&authority, m0, mint0, customer, 100).unwrap();
+    assert!(
+        h.send(&[close(m0, mint0)], &[&authority], &authority.pubkey()).is_err(),
+        "closed a merchant with circulating points"
     );
 }

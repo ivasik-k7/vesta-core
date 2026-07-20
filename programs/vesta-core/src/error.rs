@@ -48,6 +48,8 @@ pub enum VestaError {
     ClawbackExceedsBalance,
     #[msg("Merchant daily clawback cap exceeded")]
     ClawbackCapExceeded,
+    #[msg("Merchant cannot be closed while points are in circulation")]
+    MerchantNotEmpty,
     #[msg("Offer is not active")]
     OfferInactive,
     #[msg("Offer supply is exhausted")]

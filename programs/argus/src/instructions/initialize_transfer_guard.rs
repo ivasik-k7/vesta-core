@@ -65,17 +65,25 @@ pub fn handle_initialize_transfer_guard(
         crate::constants::VESTA_CORE_ID,
         GuardError::UnauthorizedGuardInit
     );
-    let (merchant_authority, merchant_point_mint, merchant_treasury) = {
+    // Merchant layout (fixed prefix): disc(8) · id(u64) · authority(32) ·
+    // point_mint(32) · treasury(32). One wallet owns many merchants, so the
+    // guard re-derives ["merchant", authority, id] with the stored id.
+    let (merchant_id, merchant_authority, merchant_point_mint, merchant_treasury) = {
         let data = merchant_info.try_borrow_data()?;
-        require!(data.len() >= 104, GuardError::UnauthorizedGuardInit);
+        require!(data.len() >= 112, GuardError::UnauthorizedGuardInit);
         require!(
             data[..8] == crate::constants::MERCHANT_DISCRIMINATOR,
             GuardError::UnauthorizedGuardInit
         );
+        let id = u64::from_le_bytes(
+            data[8..16]
+                .try_into()
+                .map_err(|_| GuardError::UnauthorizedGuardInit)?,
+        );
         let key = |range: core::ops::Range<usize>| {
             Pubkey::try_from(&data[range]).map_err(|_| GuardError::UnauthorizedGuardInit)
         };
-        (key(8..40)?, key(40..72)?, key(72..104)?)
+        (id, key(16..48)?, key(48..80)?, key(80..112)?)
     };
     require_keys_eq!(
         merchant_authority,
@@ -83,7 +91,11 @@ pub fn handle_initialize_transfer_guard(
         GuardError::UnauthorizedGuardInit
     );
     let expected_merchant = Pubkey::find_program_address(
-        &[b"merchant", merchant_authority.as_ref()],
+        &[
+            b"merchant",
+            merchant_authority.as_ref(),
+            &merchant_id.to_le_bytes(),
+        ],
         &crate::constants::VESTA_CORE_ID,
     )
     .0;

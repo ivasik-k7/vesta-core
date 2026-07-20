@@ -14,16 +14,19 @@ pub struct Config {
     pub bump: u8,
 }
 
-/// One per merchant; authority is baked into the seeds (no key rotation in-scope).
+/// One record per (authority, id) — a wallet owns MANY merchants (multi-brand /
+/// multi-location). `id` + `authority` are the PDA seeds. Field order is an ABI:
+/// argus reads `id`/`authority`/`point_mint`/`treasury` by fixed offset, so the
+/// fixed-size prefix below must not be reordered.
 ///
-/// Enterprise surface: a cold `authority` (owner, in the seeds) plus up to
-/// `MAX_OPERATORS` hot delegate keys that may run day-to-day operations
-/// (earn, campaigns, achievements) without the owner key; a merchant-level
-/// pause; an admin-set `verified` trust flag; a display category + metadata
-/// URI; and lifetime operational stats.
+/// Enterprise surface: a cold `authority` (owner) plus up to `MAX_OPERATORS`
+/// hot delegate keys that may run day-to-day operations (earn, campaigns,
+/// achievements) without the owner key; a merchant-level pause; an admin-set
+/// `verified` trust flag; a display category + metadata URI; lifetime stats.
 #[account]
 #[derive(InitSpace)]
 pub struct Merchant {
+    pub id: u64,
     pub authority: Pubkey,
     pub point_mint: Pubkey,
     pub treasury: Pubkey,

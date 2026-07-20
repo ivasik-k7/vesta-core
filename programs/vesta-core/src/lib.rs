@@ -51,9 +51,15 @@ pub mod vesta_core {
 
     pub fn register_merchant(
         ctx: Context<RegisterMerchant>,
+        id: u64,
         args: RegisterMerchantArgs,
     ) -> Result<()> {
-        instructions::register_merchant::handle_register_merchant(ctx, args)
+        instructions::register_merchant::handle_register_merchant(ctx, id, args)
+    }
+
+    /// Delete a merchant (only when its point supply is zero).
+    pub fn close_merchant(ctx: Context<CloseMerchant>) -> Result<()> {
+        instructions::register_merchant::handle_close_merchant(ctx)
     }
 
     pub fn update_merchant(

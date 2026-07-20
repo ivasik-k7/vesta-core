@@ -21,7 +21,7 @@ pub struct FinalizeTransferGuard<'info> {
     pub authority: Signer<'info>,
 
     #[account(
-        seeds = [MERCHANT_SEED, authority.key().as_ref()],
+        seeds = [MERCHANT_SEED, authority.key().as_ref(), &merchant.id.to_le_bytes()],
         bump = merchant.bump,
         has_one = authority @ VestaError::Unauthorized,
         has_one = point_mint @ VestaError::MintMismatch,
@@ -79,9 +79,11 @@ pub fn handle_finalize_transfer_guard(ctx: Context<FinalizeTransferGuard>) -> Re
     }
 
     let authority_key = ctx.accounts.merchant.authority;
+    let id_bytes = ctx.accounts.merchant.id.to_le_bytes();
     let merchant_seeds: &[&[u8]] = &[
         MERCHANT_SEED,
         authority_key.as_ref(),
+        &id_bytes,
         &[ctx.accounts.merchant.bump],
     ];
     set_authority(

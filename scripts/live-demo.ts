@@ -44,7 +44,7 @@ async function main() {
     Uint8Array.from(JSON.parse(readFileSync(join(homedir(), ".config/solana/id.json"), "utf8"))),
   );
   const config = pda([enc.encode("config")]);
-  const merchant = pda([enc.encode("merchant"), dev.publicKey.toBuffer()]);
+  const merchant = pda([enc.encode("merchant"), dev.publicKey.toBuffer(), u64(0n)]);
   const mint = pda([enc.encode("mint"), merchant.toBuffer()]);
   const treasury = getAssociatedTokenAddressSync(mint, dev.publicKey, false, T22);
   const budget = ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 });
@@ -80,6 +80,7 @@ async function main() {
         ],
         data: Buffer.concat([
           disc("register_merchant"),
+          u64(0n), // merchant id (multi-record)
           bstr("VESTA Demo"),
           bstr("VESTA"),
           bstr("https://dev-vesta.netlify.app/points.json"),

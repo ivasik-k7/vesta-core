@@ -34,7 +34,7 @@ pub struct CreateAchievement<'info> {
     pub authority: Signer<'info>,
 
     #[account(
-        seeds = [MERCHANT_SEED, authority.key().as_ref()],
+        seeds = [MERCHANT_SEED, authority.key().as_ref(), &merchant.id.to_le_bytes()],
         bump = merchant.bump,
         has_one = authority @ VestaError::Unauthorized,
     )]
@@ -92,7 +92,7 @@ pub struct CloseAchievement<'info> {
     pub authority: Signer<'info>,
 
     #[account(
-        seeds = [MERCHANT_SEED, authority.key().as_ref()],
+        seeds = [MERCHANT_SEED, authority.key().as_ref(), &merchant.id.to_le_bytes()],
         bump = merchant.bump,
         has_one = authority @ VestaError::Unauthorized,
     )]
@@ -122,7 +122,7 @@ pub struct GrantAchievement<'info> {
     // Seeds bind the PDA to the signer — the derivation IS the authorization.
     #[account(
         mut,
-        seeds = [MERCHANT_SEED, merchant_authority.key().as_ref()],
+        seeds = [MERCHANT_SEED, merchant_authority.key().as_ref(), &merchant.id.to_le_bytes()],
         bump = merchant.bump,
     )]
     pub merchant: Account<'info, Merchant>,
@@ -180,6 +180,7 @@ pub fn handle_grant_achievement(ctx: Context<GrantAchievement>) -> Result<()> {
     let customer_key = ctx.accounts.customer.key();
     let badge_key = ctx.accounts.badge_mint.key();
     let authority_key = ctx.accounts.merchant.authority;
+    let id_bytes = ctx.accounts.merchant.id.to_le_bytes();
 
     let badge_seeds: &[&[u8]] = &[
         BADGE_SEED,
@@ -190,6 +191,7 @@ pub fn handle_grant_achievement(ctx: Context<GrantAchievement>) -> Result<()> {
     let merchant_seeds: &[&[u8]] = &[
         MERCHANT_SEED,
         authority_key.as_ref(),
+        &id_bytes,
         &[ctx.accounts.merchant.bump],
     ];
 

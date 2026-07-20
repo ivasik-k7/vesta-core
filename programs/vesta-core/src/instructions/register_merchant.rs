@@ -6,12 +6,14 @@ use anchor_lang::{
 };
 use anchor_spl::{
     associated_token::{self, AssociatedToken, Create},
-    token_2022::{initialize_mint2, InitializeMint2, Token2022},
+    token_2022::{close_account, initialize_mint2, CloseAccount, InitializeMint2, Token2022},
+    token_interface::Mint,
     token_2022_extensions::{
         interest_bearing_mint_initialize, metadata_pointer_initialize,
-        permanent_delegate_initialize, token_metadata_initialize, transfer_hook_initialize,
-        InterestBearingMintInitialize, MetadataPointerInitialize, PermanentDelegateInitialize,
-        TokenMetadataInitialize, TransferHookInitialize,
+        mint_close_authority_initialize, permanent_delegate_initialize, token_metadata_initialize,
+        transfer_hook_initialize, InterestBearingMintInitialize, MetadataPointerInitialize,
+        MintCloseAuthorityInitialize, PermanentDelegateInitialize, TokenMetadataInitialize,
+        TransferHookInitialize,
     },
 };
 use spl_token_2022_interface::extension::ExtensionType;
@@ -23,7 +25,7 @@ use crate::{
         MERCHANT_SEED, MINT_SEED, MIN_BASE_EARN_RATE,
     },
     error::VestaError,
-    events::{MerchantRegistered, MerchantUpdated},
+    events::{MerchantClosed, MerchantRegistered, MerchantUpdated},
     state::{Config, Merchant},
 };
 
@@ -40,6 +42,7 @@ pub struct RegisterMerchantArgs {
 }
 
 #[derive(Accounts)]
+#[instruction(id: u64)]
 pub struct RegisterMerchant<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
@@ -48,7 +51,7 @@ pub struct RegisterMerchant<'info> {
         init,
         payer = authority,
         space = 8 + Merchant::INIT_SPACE,
-        seeds = [MERCHANT_SEED, authority.key().as_ref()],
+        seeds = [MERCHANT_SEED, authority.key().as_ref(), &id.to_le_bytes()],
         bump,
     )]
     pub merchant: Account<'info, Merchant>,
@@ -73,6 +76,7 @@ pub struct RegisterMerchant<'info> {
 
 pub fn handle_register_merchant(
     ctx: Context<RegisterMerchant>,
+    id: u64,
     args: RegisterMerchantArgs,
 ) -> Result<()> {
     require!(!ctx.accounts.config.paused, VestaError::ProtocolPaused);
@@ -96,8 +100,14 @@ pub fn handle_register_merchant(
     let authority_key = ctx.accounts.authority.key();
     let mint_key = ctx.accounts.mint.key();
 
+    let id_bytes = id.to_le_bytes();
     let mint_seeds: &[&[u8]] = &[MINT_SEED, merchant_key.as_ref(), &[ctx.bumps.mint]];
-    let merchant_seeds: &[&[u8]] = &[MERCHANT_SEED, authority_key.as_ref(), &[ctx.bumps.merchant]];
+    let merchant_seeds: &[&[u8]] = &[
+        MERCHANT_SEED,
+        authority_key.as_ref(),
+        &id_bytes,
+        &[ctx.bumps.merchant],
+    ];
 
     // Space for the four extensions; rent pre-funded for the metadata TLV realloc too.
     let space =
@@ -106,6 +116,7 @@ pub fn handle_register_merchant(
             ExtensionType::InterestBearingConfig,
             ExtensionType::TransferHook,
             ExtensionType::PermanentDelegate,
+            ExtensionType::MintCloseAuthority,
         ])
         .map_err(|_| VestaError::Overflow)?;
 
@@ -224,6 +235,18 @@ pub fn handle_register_merchant(
         ),
         &merchant_key,
     )?;
+    // Close authority = merchant PDA → the mint can be closed once its supply
+    // reaches zero, enabling a clean merchant delete (spec: full CRUD).
+    mint_close_authority_initialize(
+        CpiContext::new(
+            ctx.accounts.token_program.key(),
+            MintCloseAuthorityInitialize {
+                token_program_id: token_program.clone(),
+                mint: mint_info.clone(),
+            },
+        ),
+        Some(&merchant_key),
+    )?;
 
     initialize_mint2(
         CpiContext::new(
@@ -281,6 +304,7 @@ pub fn handle_register_merchant(
     ))?;
 
     let merchant = &mut ctx.accounts.merchant;
+    merchant.id = id;
     merchant.authority = authority_key;
     merchant.point_mint = mint_key;
     merchant.treasury = expected_treasury;
@@ -321,7 +345,7 @@ pub struct UpdateMerchant<'info> {
 
     #[account(
         mut,
-        seeds = [MERCHANT_SEED, authority.key().as_ref()],
+        seeds = [MERCHANT_SEED, authority.key().as_ref(), &merchant.id.to_le_bytes()],
         bump = merchant.bump,
         has_one = authority @ VestaError::Unauthorized,
     )]
@@ -349,6 +373,68 @@ pub fn handle_update_merchant(
     emit!(MerchantUpdated {
         merchant: merchant.key(),
         base_earn_rate: merchant.base_earn_rate,
+    });
+    Ok(())
+}
+
+/// Delete a merchant (full CRUD). Only when the point supply is zero — the mint
+/// is closed (its close authority is the merchant PDA) and the Merchant account
+/// is reclaimed. Guards against orphaning circulating points.
+#[derive(Accounts)]
+pub struct CloseMerchant<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(
+        mut,
+        close = authority,
+        seeds = [MERCHANT_SEED, authority.key().as_ref(), &merchant.id.to_le_bytes()],
+        bump = merchant.bump,
+        has_one = authority @ VestaError::Unauthorized,
+        has_one = point_mint @ VestaError::MintMismatch,
+    )]
+    pub merchant: Account<'info, Merchant>,
+
+    #[account(
+        mut,
+        seeds = [MINT_SEED, merchant.key().as_ref()],
+        bump = merchant.mint_bump,
+    )]
+    pub point_mint: InterfaceAccount<'info, Mint>,
+
+    pub token_program: Program<'info, Token2022>,
+}
+
+pub fn handle_close_merchant(ctx: Context<CloseMerchant>) -> Result<()> {
+    require!(
+        ctx.accounts.point_mint.supply == 0,
+        VestaError::MerchantNotEmpty
+    );
+
+    let authority_key = ctx.accounts.authority.key();
+    let id_bytes = ctx.accounts.merchant.id.to_le_bytes();
+    let merchant_seeds: &[&[u8]] = &[
+        MERCHANT_SEED,
+        authority_key.as_ref(),
+        &id_bytes,
+        &[ctx.accounts.merchant.bump],
+    ];
+    // Close the mint (supply is zero); rent → authority, merchant PDA signs as
+    // the mint's close authority.
+    close_account(CpiContext::new_with_signer(
+        ctx.accounts.token_program.key(),
+        CloseAccount {
+            account: ctx.accounts.point_mint.to_account_info(),
+            destination: ctx.accounts.authority.to_account_info(),
+            authority: ctx.accounts.merchant.to_account_info(),
+        },
+        &[merchant_seeds],
+    ))?;
+
+    emit!(MerchantClosed {
+        merchant: ctx.accounts.merchant.key(),
+        id: ctx.accounts.merchant.id,
+        authority: authority_key,
     });
     Ok(())
 }

@@ -140,7 +140,7 @@ impl World {
             .airdrop(&authority.pubkey(), 50_000_000_000)
             .unwrap();
         let merchant = Pubkey::find_program_address(
-            &[MERCHANT_SEED, authority.pubkey().as_ref()],
+            &[MERCHANT_SEED, authority.pubkey().as_ref(), &0u64.to_le_bytes()],
             &vesta_core::id(),
         )
         .0;
@@ -165,7 +165,7 @@ impl World {
                     system_program: system_program::ID,
                 }
                 .to_account_metas(None),
-                data: vesta_core::instruction::RegisterMerchant {
+                data: vesta_core::instruction::RegisterMerchant { id: 0,
                     args: RegisterMerchantArgs {
                         name: name.into(),
                         symbol: "PTS".into(),
