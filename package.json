@@ -5,7 +5,10 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "spike": "tsx scripts/spike-token2022.ts"
+    "spike": "tsx scripts/spike-token2022.ts",
+    "seed": "tsx scripts/seed-master.ts",
+    "aegis-demo": "tsx scripts/aegis-demo.ts",
+    "live-demo": "tsx scripts/live-demo.ts"
   },
   "keywords": [],
   "author": "",
