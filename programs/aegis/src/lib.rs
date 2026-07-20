@@ -21,6 +21,18 @@ pub use state::*;
 
 declare_id!("AcCdMQC1rj4KukjhFzf4S8metEAXpnt9gzvMThsu15e1");
 
+#[cfg(not(feature = "no-entrypoint"))]
+solana_security_txt::security_txt! {
+    name: "VESTA — aegis (attestation issuer)",
+    project_url: "https://github.com/ivasik-k7/vesta-core",
+    contacts: "email:kovtun.ivan@proton.meink:https://github.com/ivasik-k7/vesta-core/blob/main/SECURITY.md",
+    policy: "https://github.com/ivasik-k7/vesta-core/blob/main/SECURITY.md",
+    preferred_languages: "en",
+    source_code: "https://github.com/ivasik-k7/vesta-core",
+    source_revision: "main",
+    auditors: "None"
+}
+
 #[program]
 pub mod aegis {
     use super::*;
@@ -30,12 +42,17 @@ pub mod aegis {
         instructions::issuer::handle_init_issuer(ctx, name)
     }
 
-    /// Pause / resume issuance for this issuer.
+    /// Pause / resume issuance for this issuer (authority only).
     pub fn set_issuer_paused(ctx: Context<IssuerAuthorityOnly>, paused: bool) -> Result<()> {
         instructions::issuer::handle_set_issuer_paused(ctx, paused)
     }
 
-    /// Propose a new issuer authority (two-step).
+    /// Set or clear the hot operator key (authority only).
+    pub fn set_operator(ctx: Context<IssuerAuthorityOnly>, operator: Option<Pubkey>) -> Result<()> {
+        instructions::issuer::handle_set_operator(ctx, operator)
+    }
+
+    /// Propose a new issuer authority (two-step, authority only).
     pub fn transfer_issuer_authority(
         ctx: Context<IssuerAuthorityOnly>,
         new_authority: Pubkey,
@@ -48,7 +65,7 @@ pub mod aegis {
         instructions::issuer::handle_accept_issuer_authority(ctx)
     }
 
-    /// Issue a fresh attestation for a subject wallet.
+    /// Issue a fresh attestation for a subject wallet (authority or operator).
     pub fn issue_attestation(
         ctx: Context<IssueAttestation>,
         subject: Pubkey,
@@ -57,16 +74,21 @@ pub mod aegis {
         instructions::attestation::handle_issue_attestation(ctx, subject, data)
     }
 
-    /// Retune an existing attestation (also un-revokes).
+    /// Retune an existing attestation, also clearing revocation (authority or operator).
     pub fn update_attestation(
-        ctx: Context<UpdateAttestation>,
+        ctx: Context<ManageAttestation>,
         data: AttestationData,
     ) -> Result<()> {
         instructions::attestation::handle_update_attestation(ctx, data)
     }
 
     /// Revoke an attestation — downstream guards fail closed immediately.
-    pub fn revoke_attestation(ctx: Context<RevokeAttestation>) -> Result<()> {
-        instructions::attestation::handle_revoke_attestation(ctx)
+    pub fn revoke_attestation(ctx: Context<ManageAttestation>, reason_code: u16) -> Result<()> {
+        instructions::attestation::handle_revoke_attestation(ctx, reason_code)
+    }
+
+    /// Close an attestation and reclaim rent to the issuer authority.
+    pub fn close_attestation(ctx: Context<CloseAttestation>) -> Result<()> {
+        instructions::attestation::handle_close_attestation(ctx)
     }
 }

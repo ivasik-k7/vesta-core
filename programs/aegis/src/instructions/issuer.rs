@@ -4,7 +4,8 @@ use crate::{
     constants::{ISSUER_SEED, MAX_NAME_LEN},
     error::AegisError,
     events::{
-        IssuerAuthorityChanged, IssuerAuthorityProposed, IssuerInitialized, IssuerPausedSet,
+        IssuerAuthorityChanged, IssuerAuthorityProposed, IssuerInitialized, IssuerOperatorSet,
+        IssuerPausedSet,
     },
     state::Issuer,
 };
@@ -27,10 +28,14 @@ pub struct InitIssuer<'info> {
 }
 
 pub fn handle_init_issuer(ctx: Context<InitIssuer>, name: String) -> Result<()> {
-    require!(name.len() <= MAX_NAME_LEN, AegisError::NameTooLong);
+    require!(
+        !name.is_empty() && name.len() <= MAX_NAME_LEN,
+        AegisError::InvalidName
+    );
     let issuer = &mut ctx.accounts.issuer;
     issuer.authority = ctx.accounts.authority.key();
     issuer.pending_authority = None;
+    issuer.operator = None;
     issuer.name = name;
     issuer.issued = 0;
     issuer.paused = false;
@@ -43,13 +48,13 @@ pub fn handle_init_issuer(ctx: Context<InitIssuer>, name: String) -> Result<()> 
     Ok(())
 }
 
-/// Issuer-authority-gated context. The issuer is referenced by address (not
-/// re-derived), so authority rotation does not orphan it.
+/// Cold-admin-gated context: the signer MUST be the issuer authority (not the
+/// operator). Used for pause, operator management, and authority rotation.
 #[derive(Accounts)]
 pub struct IssuerAuthorityOnly<'info> {
     pub authority: Signer<'info>,
 
-    #[account(mut, has_one = authority @ AegisError::Unauthorized)]
+    #[account(mut, has_one = authority @ AegisError::AuthorityOnly)]
     pub issuer: Account<'info, Issuer>,
 }
 
@@ -59,6 +64,19 @@ pub fn handle_set_issuer_paused(ctx: Context<IssuerAuthorityOnly>, paused: bool)
     emit!(IssuerPausedSet {
         issuer: issuer.key(),
         paused,
+    });
+    Ok(())
+}
+
+pub fn handle_set_operator(
+    ctx: Context<IssuerAuthorityOnly>,
+    operator: Option<Pubkey>,
+) -> Result<()> {
+    let issuer = &mut ctx.accounts.issuer;
+    issuer.operator = operator;
+    emit!(IssuerOperatorSet {
+        issuer: issuer.key(),
+        operator,
     });
     Ok(())
 }
@@ -94,6 +112,9 @@ pub fn handle_accept_issuer_authority(ctx: Context<AcceptIssuerAuthority>) -> Re
     let old = issuer.authority;
     issuer.authority = ctx.accounts.pending_authority.key();
     issuer.pending_authority = None;
+    // A new authority starts with a clean operator slot — the old hot key,
+    // provisioned by the previous admin, must be re-granted explicitly.
+    issuer.operator = None;
     emit!(IssuerAuthorityChanged {
         issuer: issuer.key(),
         old,

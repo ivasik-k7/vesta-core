@@ -13,6 +13,18 @@ pub use state::*;
 
 declare_id!("gaMq6BpH1aqC8ZCYtAxwZBjTa9AnfdWvYwURG6L4LDz");
 
+#[cfg(not(feature = "no-entrypoint"))]
+solana_security_txt::security_txt! {
+    name: "VESTA — vesta_core (living loyalty protocol)",
+    project_url: "https://github.com/ivasik-k7/vesta-core",
+    contacts: "email:kovtun.ivan@proton.meink:https://github.com/ivasik-k7/vesta-core/blob/main/SECURITY.md",
+    policy: "https://github.com/ivasik-k7/vesta-core/blob/main/SECURITY.md",
+    preferred_languages: "en",
+    source_code: "https://github.com/ivasik-k7/vesta-core",
+    source_revision: "main",
+    auditors: "None"
+}
+
 #[program]
 pub mod vesta_core {
     use super::*;

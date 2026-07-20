@@ -48,15 +48,16 @@ pub const ATTESTATION_DISCRIMINATOR: [u8; 8] = [152, 125, 183, 86, 36, 146, 121,
 
 /// Byte offsets into an aegis Attestation account (verified in tests):
 /// disc(8) · issuer(32) · subject(32) · schema(u16) · value(u64) ·
-/// issued_at(i64) · expires_at(i64) · revoked(bool) · bump(u8).
+/// issued_at(i64) · valid_from(i64) · expires_at(i64) · revoked(bool) · bump(u8).
 pub mod attestation_offset {
     pub const ISSUER: core::ops::Range<usize> = 8..40;
     pub const SUBJECT: core::ops::Range<usize> = 40..72;
     pub const SCHEMA: core::ops::Range<usize> = 72..74;
     pub const VALUE: core::ops::Range<usize> = 74..82;
-    pub const EXPIRES_AT: core::ops::Range<usize> = 90..98;
-    pub const REVOKED: usize = 98;
-    pub const MIN_LEN: usize = 100;
+    pub const VALID_FROM: core::ops::Range<usize> = 90..98;
+    pub const EXPIRES_AT: core::ops::Range<usize> = 98..106;
+    pub const REVOKED: usize = 106;
+    pub const MIN_LEN: usize = 108;
 }
 
 /// Policy bitset stored in `GuardConfig.flags` (spec §2.1, §5).

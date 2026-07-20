@@ -305,16 +305,26 @@ fn attestation_ok(ctx: &Context<Execute>, destination_owner: Pubkey) -> Result<b
         return Ok(false);
     }
 
+    let revoked = data[attestation_offset::REVOKED] != 0;
+    if revoked {
+        return Ok(false);
+    }
+
+    let now = Clock::get()?.unix_timestamp;
+    let valid_from = i64::from_le_bytes(
+        data[attestation_offset::VALID_FROM]
+            .try_into()
+            .map_err(|_| GuardError::AttestationFailed)?,
+    );
+    if valid_from != 0 && now < valid_from {
+        return Ok(false);
+    }
     let expires_at = i64::from_le_bytes(
         data[attestation_offset::EXPIRES_AT]
             .try_into()
             .map_err(|_| GuardError::AttestationFailed)?,
     );
-    let revoked = data[attestation_offset::REVOKED] != 0;
-    if revoked {
-        return Ok(false);
-    }
-    if expires_at != 0 && Clock::get()?.unix_timestamp >= expires_at {
+    if expires_at != 0 && now >= expires_at {
         return Ok(false);
     }
 

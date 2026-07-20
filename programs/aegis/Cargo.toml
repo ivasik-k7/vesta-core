@@ -23,6 +23,7 @@ custom-panic = []
 
 [dependencies]
 anchor-lang = "1.1.2"
+solana-security-txt = "1.1.1"
 
 [lints]
 workspace = true

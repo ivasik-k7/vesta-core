@@ -1,0 +1,6 @@
+{
+  "name": "vesta_core",
+  "logo": "https://raw.githubusercontent.com/ivasik-k7/vesta-core/main/metadata/logos/vesta_core.svg",
+  "description": "VESTA living loyalty protocol: merchants, decaying points (Token-2022 interest-bearing), campaigns, koinon alliances, kleos badges, and permanent-delegate clawback.",
+  "project_url": "https://github.com/ivasik-k7/vesta-core"
+}

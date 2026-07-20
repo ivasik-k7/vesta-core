@@ -13,6 +13,12 @@ pub struct IssuerPausedSet {
 }
 
 #[event]
+pub struct IssuerOperatorSet {
+    pub issuer: Pubkey,
+    pub operator: Option<Pubkey>,
+}
+
+#[event]
 pub struct IssuerAuthorityProposed {
     pub issuer: Pubkey,
     pub old: Pubkey,
@@ -32,6 +38,7 @@ pub struct AttestationIssued {
     pub subject: Pubkey,
     pub schema: u16,
     pub value: u64,
+    pub valid_from: i64,
     pub expires_at: i64,
 }
 
@@ -41,11 +48,19 @@ pub struct AttestationUpdated {
     pub subject: Pubkey,
     pub schema: u16,
     pub value: u64,
+    pub valid_from: i64,
     pub expires_at: i64,
 }
 
 #[event]
 pub struct AttestationRevoked {
+    pub issuer: Pubkey,
+    pub subject: Pubkey,
+    pub reason_code: u16,
+}
+
+#[event]
+pub struct AttestationClosed {
     pub issuer: Pubkey,
     pub subject: Pubkey,
 }

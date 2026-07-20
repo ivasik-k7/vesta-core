@@ -87,12 +87,11 @@ impl World {
         let mut msg = Message::new(ixs, Some(payer));
         msg.recent_blockhash = self.svm.latest_blockhash();
         let tx = VersionedTransaction::try_new(VersionedMessage::Legacy(msg), signers).unwrap();
-        self.svm
-            .send_transaction(tx)
-            .map(|_| ())
-            .map_err(Box::new)?;
+        let result = self.svm.send_transaction(tx);
+        // Always advance the blockhash — even after a failed send — so an
+        // identical retry gets a fresh signature instead of AlreadyProcessed.
         self.svm.expire_blockhash();
-        Ok(())
+        result.map(|_| ()).map_err(Box::new)
     }
 
     fn warp_secs(&mut self, secs: i64) {
@@ -926,7 +925,7 @@ fn attestation_gating_composes_with_aegis() {
     let issue = |value: u64, expires_at: i64| Instruction {
         program_id: aegis::id(),
         accounts: aegis::accounts::IssueAttestation {
-            authority: issuer_authority.pubkey(),
+            signer: issuer_authority.pubkey(),
             issuer,
             attestation,
             system_program: system_program::ID,
@@ -937,6 +936,7 @@ fn attestation_gating_composes_with_aegis() {
             data: aegis::instructions::attestation::AttestationData {
                 schema: aegis::constants::schema::REGION,
                 value,
+                valid_from: 0,
                 expires_at,
             },
         }
@@ -958,8 +958,8 @@ fn attestation_gating_composes_with_aegis() {
     // Update to include the required bit → now allowed.
     let update = Instruction {
         program_id: aegis::id(),
-        accounts: aegis::accounts::UpdateAttestation {
-            authority: issuer_authority.pubkey(),
+        accounts: aegis::accounts::ManageAttestation {
+            signer: issuer_authority.pubkey(),
             issuer,
             attestation,
         }
@@ -968,6 +968,7 @@ fn attestation_gating_composes_with_aegis() {
             data: aegis::instructions::attestation::AttestationData {
                 schema: aegis::constants::schema::REGION,
                 value: 0b0011,
+                valid_from: 0,
                 expires_at: 0,
             },
         }
@@ -982,13 +983,13 @@ fn attestation_gating_composes_with_aegis() {
     // Revoke → gate closes again (fresh day to dodge the daily cap).
     let revoke = Instruction {
         program_id: aegis::id(),
-        accounts: aegis::accounts::RevokeAttestation {
-            authority: issuer_authority.pubkey(),
+        accounts: aegis::accounts::ManageAttestation {
+            signer: issuer_authority.pubkey(),
             issuer,
             attestation,
         }
         .to_account_metas(None),
-        data: aegis::instruction::RevokeAttestation {}.data(),
+        data: aegis::instruction::RevokeAttestation { reason_code: 1 }.data(),
     };
     w.send(&[revoke], &[&issuer_authority], &issuer_authority.pubkey())
         .unwrap();
@@ -1039,7 +1040,7 @@ fn aegis_issuer_authority_pause_and_expiry() {
     let issue_ix = |signer: Pubkey, expires_at: i64| Instruction {
         program_id: aegis::id(),
         accounts: aegis::accounts::IssueAttestation {
-            authority: signer,
+            signer,
             issuer,
             attestation,
             system_program: system_program::ID,
@@ -1050,6 +1051,7 @@ fn aegis_issuer_authority_pause_and_expiry() {
             data: aegis::instructions::attestation::AttestationData {
                 schema: aegis::constants::schema::REGION,
                 value: 0b0001,
+                valid_from: 0,
                 expires_at,
             },
         }
@@ -1099,7 +1101,7 @@ fn aegis_issuer_authority_pause_and_expiry() {
     let issue2 = Instruction {
         program_id: aegis::id(),
         accounts: aegis::accounts::IssueAttestation {
-            authority: authority.pubkey(),
+            signer: authority.pubkey(),
             issuer,
             attestation: attestation2,
             system_program: system_program::ID,
@@ -1110,6 +1112,7 @@ fn aegis_issuer_authority_pause_and_expiry() {
             data: aegis::instructions::attestation::AttestationData {
                 schema: aegis::constants::schema::REGION,
                 value: 0b0001,
+                valid_from: 0,
                 expires_at: 0,
             },
         }
@@ -1119,6 +1122,271 @@ fn aegis_issuer_authority_pause_and_expiry() {
         w.send(&[issue2], &[&authority], &authority.pubkey()).is_err(),
         "paused issuer still issued"
     );
+}
+
+/// The hot/cold key split: an operator issues but cannot administer.
+#[test]
+fn aegis_operator_issues_but_cannot_administer() {
+    let mut w = setup();
+    let authority = Keypair::new();
+    let operator = Keypair::new();
+    let subject = Keypair::new().pubkey();
+    w.svm.airdrop(&authority.pubkey(), 5_000_000_000).unwrap();
+    w.svm.airdrop(&operator.pubkey(), 5_000_000_000).unwrap();
+
+    let issuer =
+        Pubkey::find_program_address(&[b"issuer", authority.pubkey().as_ref()], &aegis::id()).0;
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::InitIssuer {
+                authority: authority.pubkey(),
+                issuer,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::InitIssuer { name: "Oracle".into() }.data(),
+        }],
+        &[&authority],
+        &authority.pubkey(),
+    )
+    .unwrap();
+
+    // Grant the operator.
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::IssuerAuthorityOnly {
+                authority: authority.pubkey(),
+                issuer,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::SetOperator {
+                operator: Some(operator.pubkey()),
+            }
+            .data(),
+        }],
+        &[&authority],
+        &authority.pubkey(),
+    )
+    .unwrap();
+
+    // Operator issues — allowed.
+    let attestation = Pubkey::find_program_address(
+        &[b"attestation", issuer.as_ref(), subject.as_ref()],
+        &aegis::id(),
+    )
+    .0;
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::IssueAttestation {
+                signer: operator.pubkey(),
+                issuer,
+                attestation,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::IssueAttestation {
+                subject,
+                data: aegis::instructions::attestation::AttestationData {
+                    schema: aegis::constants::schema::REGION,
+                    value: 0b0001,
+                    valid_from: 0,
+                    expires_at: 0,
+                },
+            }
+            .data(),
+        }],
+        &[&operator],
+        &operator.pubkey(),
+    )
+    .unwrap();
+
+    // Operator tries to administer (pause) — rejected (authority only).
+    assert!(
+        w.send(
+            &[Instruction {
+                program_id: aegis::id(),
+                accounts: aegis::accounts::IssuerAuthorityOnly {
+                    authority: operator.pubkey(),
+                    issuer,
+                }
+                .to_account_metas(None),
+                data: aegis::instruction::SetIssuerPaused { paused: true }.data(),
+            }],
+            &[&operator],
+            &operator.pubkey()
+        )
+        .is_err(),
+        "operator administered the issuer"
+    );
+}
+
+/// Closing an attestation returns its rent to the issuer authority.
+#[test]
+fn aegis_close_reclaims_rent() {
+    let mut w = setup();
+    let authority = Keypair::new();
+    let subject = Keypair::new().pubkey();
+    w.svm.airdrop(&authority.pubkey(), 5_000_000_000).unwrap();
+
+    let issuer =
+        Pubkey::find_program_address(&[b"issuer", authority.pubkey().as_ref()], &aegis::id()).0;
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::InitIssuer {
+                authority: authority.pubkey(),
+                issuer,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::InitIssuer { name: "Oracle".into() }.data(),
+        }],
+        &[&authority],
+        &authority.pubkey(),
+    )
+    .unwrap();
+
+    let attestation = Pubkey::find_program_address(
+        &[b"attestation", issuer.as_ref(), subject.as_ref()],
+        &aegis::id(),
+    )
+    .0;
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::IssueAttestation {
+                signer: authority.pubkey(),
+                issuer,
+                attestation,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::IssueAttestation {
+                subject,
+                data: aegis::instructions::attestation::AttestationData {
+                    schema: aegis::constants::schema::REGION,
+                    value: 0b0001,
+                    valid_from: 0,
+                    expires_at: 0,
+                },
+            }
+            .data(),
+        }],
+        &[&authority],
+        &authority.pubkey(),
+    )
+    .unwrap();
+    assert!(w.svm.get_account(&attestation).is_some_and(|a| !a.data.is_empty()));
+
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::CloseAttestation {
+                signer: authority.pubkey(),
+                issuer,
+                authority: authority.pubkey(),
+                attestation,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::CloseAttestation {}.data(),
+        }],
+        &[&authority],
+        &authority.pubkey(),
+    )
+    .unwrap();
+    // Closed → account gone (or zero-lamport, empty).
+    assert!(
+        w.svm.get_account(&attestation).is_none_or(|a| a.lamports == 0),
+        "attestation not closed"
+    );
+}
+
+/// argus honors a not-before window: pre-issued attestations gate until valid.
+#[test]
+fn aegis_valid_from_gates_until_active() {
+    let issuer_authority = Keypair::new();
+    let issuer = Pubkey::find_program_address(
+        &[b"issuer", issuer_authority.pubkey().as_ref()],
+        &aegis::id(),
+    )
+    .0;
+
+    let mut policy = base_policy();
+    policy.flags |= argus::constants::flags::REQUIRE_ATTESTATION;
+    policy.attestation_issuer = issuer;
+    policy.attestation_schema = aegis::constants::schema::REGION;
+    policy.attestation_mask = 0b0001;
+
+    let mut w = setup_with_policy(policy);
+    w.svm.airdrop(&issuer_authority.pubkey(), 5_000_000_000).unwrap();
+    let alice = Keypair::new();
+    let bob = Keypair::new();
+    prime_sender(&mut w, &alice, bob.pubkey(), 5_000);
+
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::InitIssuer {
+                authority: issuer_authority.pubkey(),
+                issuer,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::InitIssuer { name: "Geo".into() }.data(),
+        }],
+        &[&issuer_authority],
+        &issuer_authority.pubkey(),
+    )
+    .unwrap();
+
+    // Pre-issue with valid_from one day out.
+    let now = w.svm.get_sysvar::<Clock>().unix_timestamp;
+    let attestation = Pubkey::find_program_address(
+        &[b"attestation", issuer.as_ref(), bob.pubkey().as_ref()],
+        &aegis::id(),
+    )
+    .0;
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::IssueAttestation {
+                signer: issuer_authority.pubkey(),
+                issuer,
+                attestation,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::IssueAttestation {
+                subject: bob.pubkey(),
+                data: aegis::instructions::attestation::AttestationData {
+                    schema: aegis::constants::schema::REGION,
+                    value: 0b0001,
+                    valid_from: now + 86_400,
+                    expires_at: 0,
+                },
+            }
+            .data(),
+        }],
+        &[&issuer_authority],
+        &issuer_authority.pubkey(),
+    )
+    .unwrap();
+
+    // Not yet valid → rejected.
+    let ix = w.hooked_transfer_ix(alice.pubkey(), alice.pubkey(), bob.pubkey(), 1_000, issuer, true);
+    assert!(
+        w.send(&[ix], &[&alice], &alice.pubkey()).is_err(),
+        "pre-active attestation passed"
+    );
+
+    // After the window opens → allowed.
+    w.warp_days(1);
+    let ix = w.hooked_transfer_ix(alice.pubkey(), alice.pubkey(), bob.pubkey(), 1_000, issuer, true);
+    w.send(&[ix], &[&alice], &alice.pubkey()).unwrap();
+    assert_eq!(w.state_of(alice.pubkey()).sent_today, 1_000);
 }
 
 #[test]

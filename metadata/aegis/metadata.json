@@ -1,0 +1,6 @@
+{
+  "name": "aegis",
+  "logo": "https://raw.githubusercontent.com/ivasik-k7/vesta-core/main/metadata/logos/aegis.svg",
+  "description": "VESTA's shield: an attestation issuer. Signs region / KYC-tier / age credentials into per-subject accounts that argus and vesta_core gate on for geofenced and compliance-gated flows.",
+  "project_url": "https://github.com/ivasik-k7/vesta-core"
+}

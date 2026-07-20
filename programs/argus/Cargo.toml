@@ -23,6 +23,7 @@ custom-panic = []
 
 [dependencies]
 anchor-lang = "1.1.2"
+solana-security-txt = "1.1.1"
 spl-discriminator = "0.5.2"
 spl-tlv-account-resolution = "0.11.1"
 spl-token-2022-interface = "2.1.0"

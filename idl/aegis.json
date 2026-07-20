@@ -36,6 +36,75 @@
       "args": []
     },
     {
+      "name": "close_attestation",
+      "docs": [
+        "Close an attestation and reclaim rent to the issuer authority."
+      ],
+      "discriminator": [
+        249,
+        84,
+        133,
+        23,
+        48,
+        175,
+        252,
+        221
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "signer": true
+        },
+        {
+          "name": "issuer",
+          "relations": [
+            "attestation"
+          ]
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "relations": [
+            "issuer"
+          ]
+        },
+        {
+          "name": "attestation",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  116,
+                  116,
+                  101,
+                  115,
+                  116,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "issuer"
+              },
+              {
+                "kind": "account",
+                "path": "attestation.subject",
+                "account": "Attestation"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "init_issuer",
       "docs": [
         "Create an attestation authority (one per creator wallet)."
@@ -94,7 +163,7 @@
     {
       "name": "issue_attestation",
       "docs": [
-        "Issue a fresh attestation for a subject wallet."
+        "Issue a fresh attestation for a subject wallet (authority or operator)."
       ],
       "discriminator": [
         18,
@@ -108,12 +177,12 @@
       ],
       "accounts": [
         {
-          "name": "authority",
+          "name": "signer",
+          "docs": [
+            "Authority or the issuer's hot operator."
+          ],
           "writable": true,
-          "signer": true,
-          "relations": [
-            "issuer"
-          ]
+          "signer": true
         },
         {
           "name": "issuer",
@@ -188,11 +257,8 @@
       ],
       "accounts": [
         {
-          "name": "authority",
-          "signer": true,
-          "relations": [
-            "issuer"
-          ]
+          "name": "signer",
+          "signer": true
         },
         {
           "name": "issuer",
@@ -234,12 +300,17 @@
           }
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "reason_code",
+          "type": "u16"
+        }
+      ]
     },
     {
       "name": "set_issuer_paused",
       "docs": [
-        "Pause / resume issuance for this issuer."
+        "Pause / resume issuance for this issuer (authority only)."
       ],
       "discriminator": [
         207,
@@ -272,9 +343,46 @@
       ]
     },
     {
+      "name": "set_operator",
+      "docs": [
+        "Set or clear the hot operator key (authority only)."
+      ],
+      "discriminator": [
+        238,
+        153,
+        101,
+        169,
+        243,
+        131,
+        36,
+        1
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "issuer"
+          ]
+        },
+        {
+          "name": "issuer",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "operator",
+          "type": {
+            "option": "pubkey"
+          }
+        }
+      ]
+    },
+    {
       "name": "transfer_issuer_authority",
       "docs": [
-        "Propose a new issuer authority (two-step)."
+        "Propose a new issuer authority (two-step, authority only)."
       ],
       "discriminator": [
         37,
@@ -309,7 +417,7 @@
     {
       "name": "update_attestation",
       "docs": [
-        "Retune an existing attestation (also un-revokes)."
+        "Retune an existing attestation, also clearing revocation (authority or operator)."
       ],
       "discriminator": [
         251,
@@ -323,11 +431,8 @@
       ],
       "accounts": [
         {
-          "name": "authority",
-          "signer": true,
-          "relations": [
-            "issuer"
-          ]
+          "name": "signer",
+          "signer": true
         },
         {
           "name": "issuer",
@@ -411,6 +516,19 @@
   ],
   "events": [
     {
+      "name": "AttestationClosed",
+      "discriminator": [
+        126,
+        45,
+        96,
+        171,
+        16,
+        201,
+        11,
+        78
+      ]
+    },
+    {
       "name": "AttestationIssued",
       "discriminator": [
         173,
@@ -489,6 +607,19 @@
       ]
     },
     {
+      "name": "IssuerOperatorSet",
+      "discriminator": [
+        147,
+        104,
+        232,
+        228,
+        89,
+        161,
+        13,
+        32
+      ]
+    },
+    {
       "name": "IssuerPausedSet",
       "discriminator": [
         93,
@@ -505,31 +636,41 @@
   "errors": [
     {
       "code": 6000,
-      "name": "NameTooLong",
-      "msg": "Issuer name exceeds the maximum length"
+      "name": "InvalidName",
+      "msg": "Issuer name is empty or exceeds the maximum length"
     },
     {
       "code": 6001,
       "name": "Unauthorized",
-      "msg": "Not the issuer authority"
+      "msg": "Not authorized for this issuer (authority or operator required)"
     },
     {
       "code": 6002,
+      "name": "AuthorityOnly",
+      "msg": "Only the issuer authority may perform this action"
+    },
+    {
+      "code": 6003,
       "name": "PendingAuthorityMismatch",
       "msg": "Pending authority does not match the signer"
     },
     {
-      "code": 6003,
+      "code": 6004,
       "name": "IssuerPaused",
       "msg": "Issuer is paused — issuance disabled"
     },
     {
-      "code": 6004,
+      "code": 6005,
       "name": "InvalidExpiry",
-      "msg": "Expiry must be in the future or zero (never)"
+      "msg": "Expiry must be zero (never) or after both now and valid_from"
     },
     {
-      "code": 6005,
+      "code": 6006,
+      "name": "InvalidValidFrom",
+      "msg": "valid_from must be zero or a sane (non-negative) timestamp"
+    },
+    {
+      "code": 6007,
       "name": "AlreadyRevoked",
       "msg": "Attestation already revoked"
     }
@@ -543,8 +684,8 @@
         "FIELD ORDER IS AN ABI. argus reads this account by fixed byte offset",
         "(`argus::constants::attestation_offset`) rather than linking the aegis",
         "crate. The layout below MUST stay: disc(8) · issuer(32) · subject(32) ·",
-        "schema(u16) · value(u64) · issued_at(i64) · expires_at(i64) · revoked(bool)",
-        "· bump(u8). Reordering breaks every guard that gates on attestation."
+        "schema(u16) · value(u64) · issued_at(i64) · valid_from(i64) · expires_at(i64)",
+        "· revoked(bool) · bump(u8). Reordering breaks every guard that gates on it."
       ],
       "type": {
         "kind": "struct",
@@ -573,6 +714,13 @@
             "type": "i64"
           },
           {
+            "name": "valid_from",
+            "docs": [
+              "Unix \"not-before\"; 0 means valid immediately. Enables pre-issuance."
+            ],
+            "type": "i64"
+          },
+          {
             "name": "expires_at",
             "docs": [
               "Unix expiry; 0 means never expires."
@@ -586,6 +734,22 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AttestationClosed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "issuer",
+            "type": "pubkey"
+          },
+          {
+            "name": "subject",
+            "type": "pubkey"
           }
         ]
       }
@@ -605,6 +769,13 @@
           {
             "name": "value",
             "type": "u64"
+          },
+          {
+            "name": "valid_from",
+            "docs": [
+              "Unix \"not-before\"; 0 = valid immediately."
+            ],
+            "type": "i64"
           },
           {
             "name": "expires_at",
@@ -638,6 +809,10 @@
             "type": "u64"
           },
           {
+            "name": "valid_from",
+            "type": "i64"
+          },
+          {
             "name": "expires_at",
             "type": "i64"
           }
@@ -656,6 +831,10 @@
           {
             "name": "subject",
             "type": "pubkey"
+          },
+          {
+            "name": "reason_code",
+            "type": "u16"
           }
         ]
       }
@@ -682,6 +861,10 @@
             "type": "u64"
           },
           {
+            "name": "valid_from",
+            "type": "i64"
+          },
+          {
             "name": "expires_at",
             "type": "i64"
           }
@@ -692,7 +875,13 @@
       "name": "Issuer",
       "docs": [
         "An attestation authority. Issues credentials for subjects that downstream",
-        "programs (argus, vesta_core campaigns) gate on."
+        "programs (argus, vesta_core campaigns) gate on.",
+        "",
+        "Two keys, by design (hot/cold separation): `authority` is the cold admin —",
+        "it rotates authority, pauses, and sets the operator. `operator` is an",
+        "optional hot signing key that may issue / update / revoke / close",
+        "attestations but can never touch admin state. High-volume issuers keep the",
+        "authority offline and rotate the operator freely."
       ],
       "type": {
         "kind": "struct",
@@ -703,6 +892,15 @@
           },
           {
             "name": "pending_authority",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "operator",
+            "docs": [
+              "Optional hot signing key for day-to-day issuance (None = authority only)."
+            ],
             "type": {
               "option": "pubkey"
             }
@@ -784,6 +982,24 @@
           {
             "name": "authority",
             "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "IssuerOperatorSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "issuer",
+            "type": "pubkey"
+          },
+          {
+            "name": "operator",
+            "type": {
+              "option": "pubkey"
+            }
           }
         ]
       }
