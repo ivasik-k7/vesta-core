@@ -1,5 +1,5 @@
 {
-  "name": "argus",
+  "name": "VESTA Argus",
   "logo": "https://raw.githubusercontent.com/ivasik-k7/vesta-core/main/metadata/logos/argus.svg",
   "description": "VESTA's hundred-eyed guard: a per-mint, configurable Token-2022 transfer-hook policy engine (velocity caps, allow/deny lists, pause, aegis attestation gating).",
   "project_url": "https://github.com/ivasik-k7/vesta-core"

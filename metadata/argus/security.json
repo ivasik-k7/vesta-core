@@ -1,10 +1,16 @@
 {
-  "name": "argus",
+  "name": "VESTA Argus",
   "project_url": "https://github.com/ivasik-k7/vesta-core",
-  "contacts": ["email:kovtun.ivan@proton.me"],
+  "contacts": [
+    "email:kovtun.ivan@proton.me"
+  ],
   "policy": "https://github.com/ivasik-k7/vesta-core/blob/main/SECURITY.md",
-  "preferred_languages": ["en"],
+  "preferred_languages": [
+    "en"
+  ],
   "source_code": "https://github.com/ivasik-k7/vesta-core",
   "source_revision": "main",
-  "auditors": ["None"]
+  "auditors": [
+    "None"
+  ]
 }

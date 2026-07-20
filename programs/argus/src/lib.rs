@@ -26,9 +26,9 @@ declare_id!("9zJEWrk47z1ACT3ySMwzmUrMsQzFC8afBSFcsCzsz3rx");
 
 #[cfg(not(feature = "no-entrypoint"))]
 solana_security_txt::security_txt! {
-    name: "VESTA — argus (transfer-hook policy engine)",
+    name: "VESTA Argus — transfer-hook policy engine",
     project_url: "https://github.com/ivasik-k7/vesta-core",
-    contacts: "email:kovtun.ivan@proton.meink:https://github.com/ivasik-k7/vesta-core/blob/main/SECURITY.md",
+    contacts: "email:kovtun.ivan@proton.me,link:https://github.com/ivasik-k7/vesta-core/blob/main/SECURITY.md",
     policy: "https://github.com/ivasik-k7/vesta-core/blob/main/SECURITY.md",
     preferred_languages: "en",
     source_code: "https://github.com/ivasik-k7/vesta-core",

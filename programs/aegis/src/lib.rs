@@ -23,9 +23,9 @@ declare_id!("AcCdMQC1rj4KukjhFzf4S8metEAXpnt9gzvMThsu15e1");
 
 #[cfg(not(feature = "no-entrypoint"))]
 solana_security_txt::security_txt! {
-    name: "VESTA — aegis (attestation issuer)",
+    name: "VESTA Aegis — attestation issuer",
     project_url: "https://github.com/ivasik-k7/vesta-core",
-    contacts: "email:kovtun.ivan@proton.meink:https://github.com/ivasik-k7/vesta-core/blob/main/SECURITY.md",
+    contacts: "email:kovtun.ivan@proton.me,link:https://github.com/ivasik-k7/vesta-core/blob/main/SECURITY.md",
     policy: "https://github.com/ivasik-k7/vesta-core/blob/main/SECURITY.md",
     preferred_languages: "en",
     source_code: "https://github.com/ivasik-k7/vesta-core",
