@@ -30,6 +30,7 @@ move only under merchant-defined policy, and compose across brands.
 - [Deployments](#deployments)
 - [Quick start](#quick-start)
 - [How the economy works](#how-the-economy-works)
+- [Transaction flows](#transaction-flows)
 - [Account model](#account-model)
 - [Instruction surface](#instruction-surface)
 - [Security & compliance](#security--compliance)
@@ -37,6 +38,7 @@ move only under merchant-defined policy, and compose across brands.
 - [Operations runbook](#operations-runbook)
 - [Live demo evidence](#live-demo-evidence)
 - [Repository layout](#repository-layout)
+- [Documentation & resources](#documentation--resources)
 - [Ecosystem](#ecosystem)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
@@ -144,22 +146,36 @@ Honest costs of the design, and how they are managed:
 
 ## Architecture
 
-```
-                        ┌──────────────────────┐
-                        │      vesta_core      │  protocol: merchants, points,
-                        │  gaMq6BpH…RG6L4LDz   │  offers, campaigns, badges,
-                        └─────────┬────────────┘  alliances, clawback
-                                  │ configures / finalizes
-                 Token-2022 mint  │  (TransferHook extension)
-                        ┌─────────▼────────────┐
-   every peer transfer  │        argus         │  policy engine: velocity caps,
-  ──────────────────────►  9zJEWrk4…Czsz3rx    │  allow/deny lists, cooldowns,
-                        └─────────┬────────────┘  attestation gating — fail-closed
-                                  │ reads (pinned PDA derivation)
-                        ┌─────────▼────────────┐
-                        │        aegis         │  attestation issuers: region,
-                        │  AcCdMQC1…Thsu15e1   │  KYC tier, age band
-                        └──────────────────────┘
+Three programs with strictly one-directional trust — the economy configures the
+guard, the guard reads identity, and nothing points back up:
+
+```mermaid
+flowchart TB
+    subgraph clients["Clients (untrusted)"]
+        UI["vesta-ui<br/>web client"]
+        SDK["vesta-sdk<br/>Python"]
+        WALLET["any wallet /<br/>third-party dApp"]
+    end
+
+    subgraph chain["Solana devnet"]
+        CORE["<b>vesta_core</b><br/>merchants · points · offers<br/>campaigns · badges · alliances · clawback<br/><i>gaMq6BpH…RG6L4LDz</i>"]
+        T22["<b>Token-2022</b><br/>point mints with<br/>InterestBearing · TransferHook<br/>PermanentDelegate · Metadata"]
+        ARGUS["<b>argus</b> — policy engine<br/>velocity caps · lists · cooldowns<br/>attestation gates · <i>fail-closed</i><br/><i>9zJEWrk4…Czsz3rx</i>"]
+        AEGIS["<b>aegis</b> — attestations<br/>region · KYC tier · age band<br/><i>AcCdMQC1…Thsu15e1</i>"]
+    end
+
+    UI --> CORE
+    SDK --> CORE
+    WALLET -- "peer transfer" --> T22
+    CORE -- "mints / burns via CPI" --> T22
+    CORE -- "configures & finalizes guard" --> ARGUS
+    T22 -- "TransferHook CPI on<br/><b>every</b> peer transfer" --> ARGUS
+    ARGUS -- "reads attestation PDAs<br/>(pinned program id + issuer)" --> AEGIS
+
+    style CORE fill:#7c2d12,stroke:#fb923c,color:#fff
+    style ARGUS fill:#1e3a8a,stroke:#60a5fa,color:#fff
+    style AEGIS fill:#14532d,stroke:#4ade80,color:#fff
+    style T22 fill:#3f3f46,stroke:#a1a1aa,color:#fff
 ```
 
 - **vesta_core** owns the economy. Registering a merchant mints a Token-2022
@@ -245,6 +261,91 @@ layout so argus reads fixed byte offsets with zero deserialization drift.
 wallet-state, wrong PDA, paused guard, exceeded velocity, absent/revoked/
 expired attestation. There is no permissive fallback.
 
+The whole loop, from the customer's point of view:
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> Earned: earn_points — gasless, streak-boosted
+    Earned --> Cooling: negative interest ticks
+    Cooling --> Earned: next visit outpaces decay
+    Cooling --> Redeemed: redeem_offer — burn at decayed value
+    Cooling --> Gifted: peer transfer — argus approves
+    Cooling --> Swapped: swap_points — cross-brand, atomic
+    Cooling --> Badge: grant_achievement — soulbound
+    Cooling --> Clawed: clawback — reason-coded, capped
+    Redeemed --> [*]
+    Clawed --> [*]
+```
+
+## Transaction flows
+
+### Gasless earn — the hot path
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor M as Merchant (or operator)
+    participant VC as vesta_core
+    participant CP as CustomerProfile PDA
+    participant T22 as Token-2022
+    actor C as Customer wallet
+
+    M->>VC: earn_points(base, visit_day)
+    VC->>VC: verify signer = authority or operator[0..4]
+    VC->>CP: load streak · tier · lifetime
+    VC->>VC: multiplier = streak + campaign (cap ×2.4)<br/>minted ≤ MAX_EARN_PER_TX
+    VC->>T22: mint_to via CPI (mint PDA signs)
+    T22-->>C: points land — customer paid no gas
+    VC->>CP: update streak / lifetime / tier
+```
+
+### Guarded peer transfer — every gift pays the toll
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor A as Sender
+    participant T22 as Token-2022
+    participant AR as argus (hook)
+    participant AE as aegis
+
+    A->>T22: transfer_checked(amount)
+    T22->>AR: execute() — TransferHook CPI
+    AR->>AR: resolve GuardConfig + WalletState<br/>from PINNED seeds (no substitution)
+    AR->>AR: paused? per-tx cap? daily gift cap?<br/>cooldown? balance floor? deny list?
+    opt policy requires identity
+        AR->>AE: read Attestation PDA<br/>(pinned program id + issuer)
+        AR->>AR: present? not revoked? not expired?<br/>region / KYC tier / age band ok?
+    end
+    alt every check passes
+        AR-->>T22: approve
+        T22-->>A: transfer settles
+    else anything is off
+        AR-->>T22: reject (typed error)
+        T22-->>A: transaction fails — fail-closed
+    end
+```
+
+### Cross-brand alliance swap — one atomic transaction
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor C as Customer
+    participant VC as vesta_core
+    participant AL as Alliance + Members
+    participant TA as Mint A (Token-2022)
+    participant TB as Mint B (Token-2022)
+
+    C->>VC: swap_points(amount_ui, A→B)
+    VC->>AL: alliance active? members active?<br/>rate set? budget left? amount in bounds?
+    VC->>TA: burn A-points (UI value → raw via on-chain conversion)
+    VC->>TB: mint B-points at governed rate, minus fee
+    VC->>AL: decrement swap budget
+    Note over TA,TB: both legs UI-value denominated —<br/>mint age never leaks an edge
+```
+
 ## Account model
 
 | Account | Seeds | Program |
@@ -259,6 +360,48 @@ expired attestation. There is no permissive fallback.
 | `Alliance` / `AllianceMember` | `["alliance", creator, id_le]` / `["member", alliance, merchant]` | vesta_core |
 | `GuardConfig` / `WalletState` / `ListEntry` | `["guard", mint]` / `["wstate", mint, owner]` / `["entry", mint, target]` | argus |
 | `Issuer` / `Attestation` | `["issuer", authority, id_le]` / `["attestation", issuer, subject]` | aegis |
+
+Everything hangs off `(authority, id)` roots, so the full state graph is
+derivable from a wallet address alone:
+
+```mermaid
+flowchart LR
+    W(["wallet<br/>authority"])
+
+    subgraph core["vesta_core"]
+        M["Merchant<br/><i>merchant · authority · id</i>"]
+        MINT["point mint<br/><i>mint · merchant</i>"]
+        CP["CustomerProfile<br/><i>customer · merchant · wallet</i>"]
+        O["Offer / Campaign / Achievement<br/><i>… · merchant · id</i>"]
+        CPR["CampaignProgress<br/><i>cprogress · campaign · customer</i>"]
+        B["badge mint + KleosReceipt<br/><i>badge/kleos · achievement · customer</i>"]
+        AL["Alliance<br/><i>alliance · creator · id</i>"]
+        AM["AllianceMember<br/><i>member · alliance · merchant</i>"]
+    end
+
+    subgraph argus["argus"]
+        GC["GuardConfig<br/><i>guard · mint</i>"]
+        WS["WalletState<br/><i>wstate · mint · owner</i>"]
+        LE["ListEntry<br/><i>entry · mint · target</i>"]
+    end
+
+    subgraph aegis["aegis"]
+        IS["Issuer<br/><i>issuer · authority · id</i>"]
+        AT["Attestation<br/><i>attestation · issuer · subject</i>"]
+    end
+
+    W --> M & AL & IS
+    M --> MINT & CP & O
+    O --> CPR & B
+    AL --> AM
+    MINT --> GC
+    GC --> WS & LE
+    IS --> AT
+
+    style core fill:none,stroke:#fb923c
+    style argus fill:none,stroke:#60a5fa
+    style aegis fill:none,stroke:#4ade80
+```
 
 ## Instruction surface
 
@@ -397,6 +540,39 @@ scripts/
   init-config-devnet.ts
 CONTRIBUTING.md · CODE_OF_CONDUCT.md · SECURITY.md · CHANGELOG.md · LICENSE
 ```
+
+## Documentation & resources
+
+### In this repository
+
+| Document | What it covers |
+|---|---|
+| [`docs/TECHNICAL_SPEC.md`](docs/TECHNICAL_SPEC.md) | Protocol-wide specification: state, math, invariants |
+| [`docs/ARGUS_SPEC.md`](docs/ARGUS_SPEC.md) | The hook engine in depth: policy fields, pinned derivation, failure taxonomy |
+| [`docs/PRODUCTION_REVIEW.md`](docs/PRODUCTION_REVIEW.md) | Internal security review — 21 findings and their remediation status |
+| [`idl/`](idl/) | Canonical IDLs for all three programs (also published on-chain) |
+| [`metadata/`](metadata/) | Program logos, metadata.json, security.json + the publish runbook |
+| [SECURITY.md](SECURITY.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [CHANGELOG.md](CHANGELOG.md) | Disclosure policy · contribution bar · release history |
+
+### Live on-chain
+
+| Resource | Link |
+|---|---|
+| Program: `vesta_core` | [Explorer](https://explorer.solana.com/address/gaMq6BpH1aqC8ZCYtAxwZBjTa9AnfdWvYwURG6L4LDz?cluster=devnet) · [Solscan](https://solscan.io/account/gaMq6BpH1aqC8ZCYtAxwZBjTa9AnfdWvYwURG6L4LDz?cluster=devnet) |
+| Program: `argus` | [Explorer](https://explorer.solana.com/address/9zJEWrk47z1ACT3ySMwzmUrMsQzFC8afBSFcsCzsz3rx?cluster=devnet) · [Solscan](https://solscan.io/account/9zJEWrk47z1ACT3ySMwzmUrMsQzFC8afBSFcsCzsz3rx?cluster=devnet) |
+| Program: `aegis` | [Explorer](https://explorer.solana.com/address/AcCdMQC1rj4KukjhFzf4S8metEAXpnt9gzvMThsu15e1?cluster=devnet) · [Solscan](https://solscan.io/account/AcCdMQC1rj4KukjhFzf4S8metEAXpnt9gzvMThsu15e1?cluster=devnet) |
+| Reference client | [dev-vesta.netlify.app](https://dev-vesta.netlify.app/) — Network & Verify pages double as a protocol health view |
+
+### Upstream references
+
+| Topic | Reference |
+|---|---|
+| Token-2022 extensions | [spl.solana.com/token-2022/extensions](https://spl.solana.com/token-2022/extensions) — InterestBearingConfig, TransferHook, PermanentDelegate, NonTransferable, MetadataPointer |
+| Transfer hook interface | [Transfer Hook guide](https://solana.com/developers/guides/token-extensions/transfer-hook) |
+| Anchor framework | [anchor-lang.com](https://www.anchor-lang.com/) (this repo pins Anchor 1.1.2) |
+| LiteSVM test runtime | [github.com/LiteSVM/litesvm](https://github.com/LiteSVM/litesvm) |
+| Program metadata / security.txt | [@solana-program/program-metadata](https://github.com/solana-program/program-metadata) · [solana-security-txt](https://github.com/neodyme-labs/solana-security-txt) |
+| PDAs | [solana.com/docs/core/pda](https://solana.com/docs/core/pda) |
 
 ## Ecosystem
 
