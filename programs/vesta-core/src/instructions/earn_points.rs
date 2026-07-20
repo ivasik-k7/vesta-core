@@ -190,7 +190,7 @@ pub struct EarnPointsCampaign<'info> {
         bump = merchant.bump,
         has_one = point_mint @ VestaError::MintMismatch,
     )]
-    pub merchant: Account<'info, Merchant>,
+    pub merchant: Box<Account<'info, Merchant>>,
 
     /// CHECK: identity only.
     pub customer: UncheckedAccount<'info>,
@@ -202,13 +202,13 @@ pub struct EarnPointsCampaign<'info> {
         seeds = [CUSTOMER_SEED, merchant.key().as_ref(), customer.key().as_ref()],
         bump,
     )]
-    pub customer_profile: Account<'info, CustomerProfile>,
+    pub customer_profile: Box<Account<'info, CustomerProfile>>,
 
     #[account(
         mut,
         has_one = merchant @ VestaError::MerchantMismatch,
     )]
-    pub campaign: Account<'info, Campaign>,
+    pub campaign: Box<Account<'info, Campaign>>,
 
     #[account(
         init_if_needed,
@@ -217,14 +217,14 @@ pub struct EarnPointsCampaign<'info> {
         seeds = [CAMPAIGN_PROGRESS_SEED, campaign.key().as_ref(), customer.key().as_ref()],
         bump,
     )]
-    pub campaign_progress: Account<'info, CampaignProgress>,
+    pub campaign_progress: Box<Account<'info, CampaignProgress>>,
 
     #[account(
         mut,
         seeds = [crate::constants::MINT_SEED, merchant.key().as_ref()],
         bump = merchant.mint_bump,
     )]
-    pub point_mint: InterfaceAccount<'info, Mint>,
+    pub point_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         init_if_needed,
@@ -233,10 +233,10 @@ pub struct EarnPointsCampaign<'info> {
         associated_token::authority = customer,
         associated_token::token_program = token_program,
     )]
-    pub customer_ata: InterfaceAccount<'info, TokenAccount>,
+    pub customer_ata: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(seeds = [CONFIG_SEED], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
 
     pub token_program: Program<'info, Token2022>,
     pub associated_token_program: Program<'info, AssociatedToken>,

@@ -298,6 +298,11 @@ pub fn handle_register_merchant(
     merchant.metadata_uri = String::new();
     merchant.lifetime_redemptions = 0;
     merchant.badges_issued = 0;
+    merchant.lifetime_clawed_back = 0;
+    merchant.clawback_count = 0;
+    merchant.clawback_daily_cap_raw = 0;
+    merchant.clawed_today = 0;
+    merchant.clawback_day = 0;
     merchant.bump = ctx.bumps.merchant;
     merchant.mint_bump = ctx.bumps.mint;
 

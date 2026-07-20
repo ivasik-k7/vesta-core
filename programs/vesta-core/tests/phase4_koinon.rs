@@ -26,7 +26,7 @@ use {
         constants::{
             ALLIANCE_SEED, CONFIG_SEED, CUSTOMER_SEED, MEMBER_SEED, MERCHANT_SEED, MINT_SEED,
         },
-        state::{Alliance, AllianceMember, Merchant},
+        state::{Alliance, AllianceMember, CustomerProfile, Merchant},
         RegisterMerchantArgs,
     },
 };
@@ -835,7 +835,7 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
     // owner = merchant authority who owns the treasury), then argus program +
     // eaml — passed as remaining_accounts in meta-list order.
     let g = |seeds: &[&[u8]]| Pubkey::find_program_address(seeds, &argus::id()).0;
-    let clawback_ix = |amount: u64, destination: Pubkey, dest_owner: Pubkey| {
+    let clawback_ix = |amount: u64, destination: Pubkey, dest_owner: Pubkey, reason: u16| {
         let attestation = Pubkey::find_program_address(
             &[
                 b"attestation",
@@ -845,15 +845,22 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
             &aegis::id(),
         )
         .0;
+        let customer_profile = Pubkey::find_program_address(
+            &[CUSTOMER_SEED, kavarna.merchant.as_ref(), customer.pubkey().as_ref()],
+            &vesta_core::id(),
+        )
+        .0;
         let mut accounts = vesta_core::accounts::ClawbackPoints {
             merchant_authority: authority.pubkey(),
             merchant: kavarna.merchant,
             customer: customer.pubkey(),
+            customer_profile,
             customer_ata,
             treasury: destination,
             point_mint: kavarna.mint,
             config,
             token_program: TOKEN_2022_ID,
+            system_program: system_program::ID,
         }
         .to_account_metas(None);
         accounts.extend([
@@ -875,16 +882,27 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
             accounts,
             data: vesta_core::instruction::Clawback {
                 amount_raw: amount,
-                reason_code: 7,
+                reason_code: reason,
             }
             .data(),
         }
     };
 
+    // A zero reason code is rejected (compliance: every clawback cites a reason).
+    assert!(
+        w.send(
+            &[clawback_ix(1_000, kavarna.treasury, authority.pubkey(), 0)],
+            &[&authority],
+            &authority.pubkey()
+        )
+        .is_err(),
+        "reasonless clawback accepted"
+    );
+
     // Works with NO gift ledger opened (argus rule 1 short-circuits).
     let before = w.balance(kavarna.mint, customer.pubkey());
     w.send(
-        &[clawback_ix(100_000, kavarna.treasury, authority.pubkey())],
+        &[clawback_ix(100_000, kavarna.treasury, authority.pubkey(), 7)],
         &[&authority],
         &authority.pubkey(),
     )
@@ -894,6 +912,22 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
     let treasury_state = StateWithExtensions::<TokenAccount>::unpack(&treasury_data).unwrap();
     assert_eq!(treasury_state.base.amount, 100_000);
 
+    // Tracking: merchant + per-customer counters recorded.
+    let m_data = w.svm.get_account(&kavarna.merchant).unwrap().data;
+    let m = Merchant::try_deserialize(&mut m_data.as_slice()).unwrap();
+    assert_eq!(m.clawback_count, 1);
+    assert_eq!(m.lifetime_clawed_back, 100_000);
+    assert_eq!(m.clawed_today, 100_000);
+    let profile_pda = Pubkey::find_program_address(
+        &[CUSTOMER_SEED, kavarna.merchant.as_ref(), customer.pubkey().as_ref()],
+        &vesta_core::id(),
+    )
+    .0;
+    let p_data = w.svm.get_account(&profile_pda).unwrap().data;
+    let p = CustomerProfile::try_deserialize(&mut p_data.as_slice()).unwrap();
+    assert_eq!(p.clawback_count, 1);
+    assert_eq!(p.lifetime_clawed_back, 100_000);
+
     // Destination other than the merchant treasury is rejected by has_one.
     let elsewhere = get_associated_token_address_with_program_id(
         &customer.pubkey(),
@@ -902,7 +936,7 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
     );
     assert!(
         w.send(
-            &[clawback_ix(1_000, elsewhere, customer.pubkey())],
+            &[clawback_ix(1_000, elsewhere, customer.pubkey(), 7)],
             &[&authority],
             &authority.pubkey()
         )
@@ -913,12 +947,44 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
     // Cannot claw more than the balance.
     assert!(
         w.send(
-            &[clawback_ix(10_000_000, kavarna.treasury, authority.pubkey())],
+            &[clawback_ix(10_000_000, kavarna.treasury, authority.pubkey(), 7)],
             &[&authority],
             &authority.pubkey()
         )
         .is_err(),
         "over-balance clawback accepted"
+    );
+
+    // Daily cap: set to 150_000 (100_000 already clawed today).
+    let set_cap = Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::MerchantOwnerOnly {
+            authority: authority.pubkey(),
+            merchant: kavarna.merchant,
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::SetClawbackCap {
+            daily_cap_raw: 150_000,
+        }
+        .data(),
+    };
+    w.send(&[set_cap], &[&authority], &authority.pubkey()).unwrap();
+    // +40_000 → 140_000 ≤ 150_000 passes.
+    w.send(
+        &[clawback_ix(40_000, kavarna.treasury, authority.pubkey(), 7)],
+        &[&authority],
+        &authority.pubkey(),
+    )
+    .unwrap();
+    // +40_000 → 180_000 > 150_000 rejected.
+    assert!(
+        w.send(
+            &[clawback_ix(40_000, kavarna.treasury, authority.pubkey(), 7)],
+            &[&authority],
+            &authority.pubkey()
+        )
+        .is_err(),
+        "daily cap not enforced"
     );
 }
 

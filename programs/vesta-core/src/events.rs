@@ -244,6 +244,18 @@ pub struct PointsSwapped {
 pub struct Clawback {
     pub merchant: Pubkey,
     pub customer: Pubkey,
+    /// The key that authorized this clawback (owner or operator).
+    pub actor: Pubkey,
     pub amount_raw: u64,
     pub reason_code: u16,
+    /// Customer's remaining balance after the clawback.
+    pub balance_after: u64,
+    /// Merchant's cumulative raw amount clawed back today.
+    pub clawed_today: u64,
+}
+
+#[event]
+pub struct ClawbackCapSet {
+    pub merchant: Pubkey,
+    pub daily_cap_raw: u64,
 }

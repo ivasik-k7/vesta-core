@@ -49,6 +49,15 @@ pub struct Merchant {
     pub metadata_uri: String,
     pub lifetime_redemptions: u64,
     pub badges_issued: u64,
+    // ── clawback (compliance) surface ───────────────────────────────────────
+    /// Lifetime raw points reclaimed via clawback (audit metric).
+    pub lifetime_clawed_back: u128,
+    pub clawback_count: u64,
+    /// Max raw points clawable per UTC day; 0 = unlimited. Bounds the blast
+    /// radius of a compromised operator key.
+    pub clawback_daily_cap_raw: u64,
+    pub clawed_today: u64,
+    pub clawback_day: u32,
     pub bump: u8,
     pub mint_bump: u8,
 }
@@ -76,6 +85,9 @@ pub struct CustomerProfile {
     pub lifetime_spend_base: u64,
     /// Count of quest-style campaigns completed.
     pub campaigns_completed: u16,
+    /// Lifetime raw points reclaimed from this customer via clawback.
+    pub lifetime_clawed_back: u64,
+    pub clawback_count: u32,
     pub bump: u8,
 }
 

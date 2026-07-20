@@ -42,6 +42,12 @@ pub enum VestaError {
     AlliancePaused,
     #[msg("Value exceeds the allowed maximum")]
     ValueTooLarge,
+    #[msg("Clawback requires a non-zero reason code")]
+    ReasonRequired,
+    #[msg("Clawback amount exceeds the customer's balance")]
+    ClawbackExceedsBalance,
+    #[msg("Merchant daily clawback cap exceeded")]
+    ClawbackCapExceeded,
     #[msg("Offer is not active")]
     OfferInactive,
     #[msg("Offer supply is exhausted")]

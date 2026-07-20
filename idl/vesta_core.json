@@ -86,10 +86,12 @@
       "accounts": [
         {
           "name": "merchant_authority",
+          "writable": true,
           "signer": true
         },
         {
           "name": "merchant",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -107,7 +109,8 @@
               },
               {
                 "kind": "account",
-                "path": "merchant_authority"
+                "path": "merchant.authority",
+                "account": "Merchant"
               }
             ]
           }
@@ -116,9 +119,42 @@
           "name": "customer"
         },
         {
+          "name": "customer_profile",
+          "docs": [
+            "Per-customer clawback stats; created if the customer holds points via a",
+            "swap without ever having earned at this merchant."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  117,
+                  115,
+                  116,
+                  111,
+                  109,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              },
+              {
+                "kind": "account",
+                "path": "customer"
+              }
+            ]
+          }
+        },
+        {
           "name": "customer_ata",
           "docs": [
-            "during the transfer (owner/mint bindings)."
+            "The customer's point account — bound to the mint and the customer."
           ],
           "writable": true
         },
@@ -174,6 +210,10 @@
         {
           "name": "token_program",
           "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
@@ -2205,6 +2245,62 @@
       ]
     },
     {
+      "name": "set_clawback_cap",
+      "docs": [
+        "Set the merchant's daily clawback cap (raw units; 0 = unlimited)."
+      ],
+      "discriminator": [
+        85,
+        232,
+        100,
+        43,
+        136,
+        239,
+        32,
+        183
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "daily_cap_raw",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "set_merchant_operator",
       "discriminator": [
         172,
@@ -3567,6 +3663,19 @@
       ]
     },
     {
+      "name": "ClawbackCapSet",
+      "discriminator": [
+        171,
+        158,
+        161,
+        175,
+        28,
+        9,
+        162,
+        54
+      ]
+    },
+    {
       "name": "ConfigInitialized",
       "discriminator": [
         181,
@@ -3917,91 +4026,106 @@
     },
     {
       "code": 6020,
+      "name": "ReasonRequired",
+      "msg": "Clawback requires a non-zero reason code"
+    },
+    {
+      "code": 6021,
+      "name": "ClawbackExceedsBalance",
+      "msg": "Clawback amount exceeds the customer's balance"
+    },
+    {
+      "code": 6022,
+      "name": "ClawbackCapExceeded",
+      "msg": "Merchant daily clawback cap exceeded"
+    },
+    {
+      "code": 6023,
       "name": "OfferInactive",
       "msg": "Offer is not active"
     },
     {
-      "code": 6021,
+      "code": 6024,
       "name": "OfferSoldOut",
       "msg": "Offer supply is exhausted"
     },
     {
-      "code": 6022,
+      "code": 6025,
       "name": "SlippageExceeded",
       "msg": "Slippage bound exceeded"
     },
     {
-      "code": 6023,
+      "code": 6026,
       "name": "MintMismatch",
       "msg": "Mint does not match the merchant point mint"
     },
     {
-      "code": 6024,
+      "code": 6027,
       "name": "MerchantMismatch",
       "msg": "Merchant account mismatch"
     },
     {
-      "code": 6025,
+      "code": 6028,
       "name": "TreasuryMismatch",
       "msg": "Treasury account mismatch"
     },
     {
-      "code": 6026,
+      "code": 6029,
       "name": "AllianceMismatch",
       "msg": "Alliance mismatch"
     },
     {
-      "code": 6027,
+      "code": 6030,
       "name": "MemberInactive",
       "msg": "Alliance member is not active"
     },
     {
-      "code": 6028,
+      "code": 6031,
       "name": "AlreadyInAlliance",
       "msg": "Merchant already belongs to an alliance"
     },
     {
-      "code": 6029,
+      "code": 6032,
       "name": "SwapBudgetExceeded",
       "msg": "Daily swap-in budget exceeded"
     },
     {
-      "code": 6030,
+      "code": 6033,
       "name": "InvalidSwapRate",
       "msg": "Invalid swap rate"
     },
     {
-      "code": 6031,
+      "code": 6034,
       "name": "GuardNotInitialized",
       "msg": "Transfer guard is not initialized"
     },
     {
-      "code": 6032,
+      "code": 6035,
       "name": "GuardAlreadyFinalized",
       "msg": "Transfer guard already finalized"
     },
     {
-      "code": 6033,
+      "code": 6036,
       "name": "ThresholdNotReached",
       "msg": "Achievement threshold not reached"
     },
     {
-      "code": 6034,
+      "code": 6037,
       "name": "AlreadyGranted",
       "msg": "Achievement already granted"
     },
     {
-      "code": 6035,
+      "code": 6038,
       "name": "InvalidAmount",
       "msg": "Amount must be greater than zero"
     },
     {
-      "code": 6036,
+      "code": 6039,
       "name": "Overflow",
       "msg": "Arithmetic overflow"
     },
     {
-      "code": 6037,
+      "code": 6040,
       "name": "ConversionFailed",
       "msg": "Conversion return data missing or malformed"
     }
@@ -4740,12 +4864,49 @@
             "type": "pubkey"
           },
           {
+            "name": "actor",
+            "docs": [
+              "The key that authorized this clawback (owner or operator)."
+            ],
+            "type": "pubkey"
+          },
+          {
             "name": "amount_raw",
             "type": "u64"
           },
           {
             "name": "reason_code",
             "type": "u16"
+          },
+          {
+            "name": "balance_after",
+            "docs": [
+              "Customer's remaining balance after the clawback."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "clawed_today",
+            "docs": [
+              "Merchant's cumulative raw amount clawed back today."
+            ],
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ClawbackCapSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "daily_cap_raw",
+            "type": "u64"
           }
         ]
       }
@@ -4852,6 +5013,17 @@
               "Count of quest-style campaigns completed."
             ],
             "type": "u16"
+          },
+          {
+            "name": "lifetime_clawed_back",
+            "docs": [
+              "Lifetime raw points reclaimed from this customer via clawback."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "clawback_count",
+            "type": "u32"
           },
           {
             "name": "bump",
@@ -4982,6 +5154,33 @@
           {
             "name": "badges_issued",
             "type": "u64"
+          },
+          {
+            "name": "lifetime_clawed_back",
+            "docs": [
+              "Lifetime raw points reclaimed via clawback (audit metric)."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "clawback_count",
+            "type": "u64"
+          },
+          {
+            "name": "clawback_daily_cap_raw",
+            "docs": [
+              "Max raw points clawable per UTC day; 0 = unlimited. Bounds the blast",
+              "radius of a compromised operator key."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "clawed_today",
+            "type": "u64"
+          },
+          {
+            "name": "clawback_day",
+            "type": "u32"
           },
           {
             "name": "bump",

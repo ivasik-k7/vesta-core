@@ -4,7 +4,8 @@ use crate::{
     constants::{CONFIG_SEED, MAX_METADATA_URI_LEN, MERCHANT_SEED},
     error::VestaError,
     events::{
-        MerchantOperatorSet, MerchantPausedSet, MerchantProfileUpdated, MerchantVerifiedSet,
+        ClawbackCapSet, MerchantOperatorSet, MerchantPausedSet, MerchantProfileUpdated,
+        MerchantVerifiedSet,
     },
     state::{Config, Merchant, MAX_OPERATORS},
 };
@@ -82,6 +83,16 @@ pub fn handle_update_merchant_profile(
     emit!(MerchantProfileUpdated {
         merchant: m.key(),
         category,
+    });
+    Ok(())
+}
+
+pub fn handle_set_clawback_cap(ctx: Context<MerchantOwnerOnly>, daily_cap_raw: u64) -> Result<()> {
+    let m = &mut ctx.accounts.merchant;
+    m.clawback_daily_cap_raw = daily_cap_raw;
+    emit!(ClawbackCapSet {
+        merchant: m.key(),
+        daily_cap_raw,
     });
     Ok(())
 }

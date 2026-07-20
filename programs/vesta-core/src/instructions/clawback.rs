@@ -2,42 +2,63 @@ use anchor_lang::{
     prelude::*,
     solana_program::{instruction::AccountMeta, program::invoke_signed},
 };
-use anchor_spl::token_2022::Token2022;
+use anchor_spl::{
+    token_2022::Token2022,
+    token_interface::TokenAccount,
+};
 
 use crate::{
-    constants::{CONFIG_SEED, DECIMALS, MERCHANT_SEED, MINT_SEED},
+    constants::{CONFIG_SEED, CUSTOMER_SEED, DECIMALS, MERCHANT_SEED, MINT_SEED, SECONDS_PER_DAY},
     error::VestaError,
     events::Clawback as ClawbackEvent,
-    state::{Config, Merchant},
+    state::{Config, CustomerProfile, Merchant},
 };
 
 /// Issuer clawback via PermanentDelegate — implemented exclusively as
-/// transfer_checked so argus observes and audits every one (spec §3.7).
-/// The permanent delegate's burn capability is never exercised.
+/// transfer_checked so argus observes and audits every one (spec §3.7). The
+/// permanent delegate's burn capability is never exercised.
 ///
-/// The argus transfer-hook extras (resolved from the ExtraAccountMetaList by
-/// the caller), the hook program, and the meta list itself are passed as
-/// `remaining_accounts` in interface order, so this instruction stays agnostic
-/// to the guard's policy shape as argus evolves.
+/// Enterprise controls: authorized by the owner OR any merchant operator; a
+/// non-zero reason code is mandatory; the amount is bounded to the customer's
+/// balance; a per-merchant daily cap bounds a compromised key; and every
+/// clawback updates merchant + per-customer counters and emits a full audit
+/// record. The argus hook extras, the argus program, and the meta list are
+/// passed as `remaining_accounts` in interface order.
 #[derive(Accounts)]
 pub struct ClawbackPoints<'info> {
+    #[account(mut)]
     pub merchant_authority: Signer<'info>,
 
     #[account(
-        seeds = [MERCHANT_SEED, merchant_authority.key().as_ref()],
+        mut,
+        seeds = [MERCHANT_SEED, merchant.authority.as_ref()],
         bump = merchant.bump,
         has_one = treasury @ VestaError::TreasuryMismatch,
         has_one = point_mint @ VestaError::MintMismatch,
     )]
     pub merchant: Account<'info, Merchant>,
 
-    /// CHECK: identity only; the source ATA is derived from this wallet.
+    /// CHECK: identity only; the profile PDA and ATA ownership bind to this key.
     pub customer: UncheckedAccount<'info>,
 
-    /// CHECK: the customer's ATA for the point mint; validated by Token-2022
-    /// during the transfer (owner/mint bindings).
-    #[account(mut)]
-    pub customer_ata: UncheckedAccount<'info>,
+    /// Per-customer clawback stats; created if the customer holds points via a
+    /// swap without ever having earned at this merchant.
+    #[account(
+        init_if_needed,
+        payer = merchant_authority,
+        space = 8 + CustomerProfile::INIT_SPACE,
+        seeds = [CUSTOMER_SEED, merchant.key().as_ref(), customer.key().as_ref()],
+        bump,
+    )]
+    pub customer_profile: Account<'info, CustomerProfile>,
+
+    /// The customer's point account — bound to the mint and the customer.
+    #[account(
+        mut,
+        constraint = customer_ata.mint == point_mint.key() @ VestaError::MintMismatch,
+        constraint = customer_ata.owner == customer.key() @ VestaError::Unauthorized,
+    )]
+    pub customer_ata: InterfaceAccount<'info, TokenAccount>,
 
     /// CHECK: destination is pinned to merchant.treasury by the has_one above.
     #[account(mut)]
@@ -55,9 +76,9 @@ pub struct ClawbackPoints<'info> {
     pub config: Account<'info, Config>,
 
     pub token_program: Program<'info, Token2022>,
+    pub system_program: Program<'info, System>,
     // remaining_accounts: argus hook extras (meta-list order), then the argus
-    // program, then the ExtraAccountMetaList — exactly what Token-2022 expects
-    // appended to a hooked transfer_checked.
+    // program, then the ExtraAccountMetaList.
 }
 
 pub fn handle_clawback<'info>(
@@ -67,6 +88,38 @@ pub fn handle_clawback<'info>(
 ) -> Result<()> {
     require!(!ctx.accounts.config.paused, VestaError::ProtocolPaused);
     require!(amount_raw > 0, VestaError::InvalidAmount);
+    // Compliance: every clawback must cite a reason.
+    require!(reason_code != 0, VestaError::ReasonRequired);
+    // Owner or an authorized operator may claw back.
+    require!(
+        ctx.accounts
+            .merchant
+            .can_operate(&ctx.accounts.merchant_authority.key()),
+        VestaError::Unauthorized
+    );
+
+    // Bound to the customer's balance for a clean, accountable failure.
+    let balance = ctx.accounts.customer_ata.amount;
+    require!(amount_raw <= balance, VestaError::ClawbackExceedsBalance);
+    let balance_after = balance.saturating_sub(amount_raw);
+
+    // Per-merchant daily cap (0 = unlimited) — bounds a compromised key.
+    let today = u32::try_from(Clock::get()?.unix_timestamp / SECONDS_PER_DAY)
+        .map_err(|_| VestaError::Overflow)?;
+    {
+        let m = &mut ctx.accounts.merchant;
+        if m.clawback_day != today {
+            m.clawback_day = today;
+            m.clawed_today = 0;
+        }
+        m.clawed_today = m.clawed_today.checked_add(amount_raw).ok_or(VestaError::Overflow)?;
+        if m.clawback_daily_cap_raw > 0 {
+            require!(
+                m.clawed_today <= m.clawback_daily_cap_raw,
+                VestaError::ClawbackCapExceeded
+            );
+        }
+    }
 
     // Base hooked transfer: customer ATA → treasury, signed by the merchant PDA
     // acting as the mint's permanent delegate.
@@ -75,14 +128,13 @@ pub fn handle_clawback<'info>(
         &ctx.accounts.customer_ata.key(),
         &ctx.accounts.point_mint.key(),
         &ctx.accounts.treasury.key(),
-        &ctx.accounts.merchant.key(), // permanent delegate = merchant PDA
+        &ctx.accounts.merchant.key(),
         &[],
         amount_raw,
         DECIMALS,
     )
     .map_err(|_| VestaError::ConversionFailed)?;
 
-    // Append the caller-resolved hook extras verbatim, preserving writability.
     for acc in ctx.remaining_accounts {
         ix.accounts.push(AccountMeta {
             pubkey: acc.key(),
@@ -107,11 +159,33 @@ pub fn handle_clawback<'info>(
     ];
     invoke_signed(&ix, &infos, &[merchant_seeds])?;
 
+    // Counters (merchant + per-customer). Fresh profile → wire identity.
+    let merchant_key = ctx.accounts.merchant.key();
+    let customer_key = ctx.accounts.customer.key();
+    let profile = &mut ctx.accounts.customer_profile;
+    if profile.wallet == Pubkey::default() {
+        profile.wallet = customer_key;
+        profile.merchant = merchant_key;
+        profile.bump = ctx.bumps.customer_profile;
+    }
+    profile.lifetime_clawed_back = profile.lifetime_clawed_back.saturating_add(amount_raw);
+    profile.clawback_count = profile.clawback_count.saturating_add(1);
+
+    let clawed_today = {
+        let m = &mut ctx.accounts.merchant;
+        m.lifetime_clawed_back = m.lifetime_clawed_back.saturating_add(u128::from(amount_raw));
+        m.clawback_count = m.clawback_count.saturating_add(1);
+        m.clawed_today
+    };
+
     emit!(ClawbackEvent {
-        merchant: ctx.accounts.merchant.key(),
-        customer: ctx.accounts.customer.key(),
+        merchant: merchant_key,
+        customer: customer_key,
+        actor: ctx.accounts.merchant_authority.key(),
         amount_raw,
         reason_code,
+        balance_after,
+        clawed_today,
     });
     Ok(())
 }
