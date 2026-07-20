@@ -66,9 +66,8 @@ pub struct CreateCampaign<'info> {
     pub authority: Signer<'info>,
 
     #[account(
-        seeds = [MERCHANT_SEED, authority.key().as_ref(), &merchant.id.to_le_bytes()],
+        seeds = [MERCHANT_SEED, merchant.authority.as_ref(), &merchant.id.to_le_bytes()],
         bump = merchant.bump,
-        has_one = authority @ VestaError::Unauthorized,
     )]
     pub merchant: Account<'info, Merchant>,
 
@@ -93,6 +92,11 @@ pub fn handle_create_campaign(
     args: CampaignArgs,
 ) -> Result<()> {
     require!(!ctx.accounts.config.paused, VestaError::ProtocolPaused);
+    require!(!ctx.accounts.merchant.paused, VestaError::MerchantPaused);
+    require!(
+        ctx.accounts.merchant.can_operate(&ctx.accounts.authority.key()),
+        VestaError::Unauthorized
+    );
     validate(&args)?;
 
     let c = &mut ctx.accounts.campaign;

@@ -976,3 +976,74 @@ fn achievement_grant_is_permissionless_for_earned_badges() {
     let state = StateWithExtensions::<MintState2>::unpack(&mint_data).unwrap();
     assert_eq!(state.base.supply, 1, "keeper failed to grant an earned badge");
 }
+
+#[test]
+fn operator_creates_campaign_and_pause_blocks() {
+    let mut w = setup();
+    let owner = w.merchant_authority.insecure_clone();
+    let operator = Keypair::new();
+    w.svm.airdrop(&operator.pubkey(), 5_000_000_000).unwrap();
+    w.send(&[set_operator_ix(&w, &owner, operator.pubkey(), true)], &[&owner], &owner.pubkey())
+        .unwrap();
+
+    let now = w.now();
+    let merchant = w.merchant;
+    let config = w.config;
+    let c = [w.campaign_pda(40), w.campaign_pda(41), w.campaign_pda(42)];
+    let make = |id: u64, campaign: Pubkey, signer: Pubkey| Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::CreateCampaign {
+            authority: signer,
+            merchant,
+            campaign,
+            config,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::CreateCampaign {
+            id,
+            args: vesta_core::CampaignArgs {
+                kind: 0,
+                multiplier_bps: 5_000,
+                flat_bonus: 0,
+                quest_target: 0,
+                quest_reward: 0,
+                min_spend_base: 0,
+                min_tier: 0,
+                points_budget: 0,
+                per_customer_cap: 0,
+                starts_at: now - 60,
+                ends_at: now + 86_400,
+                name: "Op".into(),
+            },
+        }
+        .data(),
+    };
+    // Operator (not the owner) creates a campaign.
+    w.send(&[make(40, c[0], operator.pubkey())], &[&operator], &operator.pubkey()).unwrap();
+    assert!(w.svm.get_account(&c[0]).is_some());
+
+    // A random signer cannot.
+    let rando = Keypair::new();
+    w.svm.airdrop(&rando.pubkey(), 5_000_000_000).unwrap();
+    assert!(
+        w.send(&[make(41, c[1], rando.pubkey())], &[&rando], &rando.pubkey()).is_err(),
+        "non-operator created a campaign"
+    );
+
+    // Pausing the merchant blocks campaign creation.
+    let pause = Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::MerchantOwnerOnly {
+            authority: owner.pubkey(),
+            merchant: w.merchant,
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::SetMerchantPaused { paused: true }.data(),
+    };
+    w.send(&[pause], &[&owner], &owner.pubkey()).unwrap();
+    assert!(
+        w.send(&[make(42, c[2], owner.pubkey())], &[&owner], &owner.pubkey()).is_err(),
+        "paused merchant created a campaign"
+    );
+}

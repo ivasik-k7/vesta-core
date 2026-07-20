@@ -541,10 +541,7 @@
         {
           "name": "authority",
           "writable": true,
-          "signer": true,
-          "relations": [
-            "merchant"
-          ]
+          "signer": true
         },
         {
           "name": "merchant",
@@ -565,7 +562,8 @@
               },
               {
                 "kind": "account",
-                "path": "authority"
+                "path": "merchant.authority",
+                "account": "Merchant"
               },
               {
                 "kind": "account",
@@ -742,10 +740,7 @@
         {
           "name": "authority",
           "writable": true,
-          "signer": true,
-          "relations": [
-            "merchant"
-          ]
+          "signer": true
         },
         {
           "name": "merchant",
@@ -766,7 +761,8 @@
               },
               {
                 "kind": "account",
-                "path": "authority"
+                "path": "merchant.authority",
+                "account": "Merchant"
               },
               {
                 "kind": "account",
@@ -859,10 +855,7 @@
         {
           "name": "authority",
           "writable": true,
-          "signer": true,
-          "relations": [
-            "merchant"
-          ]
+          "signer": true
         },
         {
           "name": "merchant",
@@ -883,7 +876,8 @@
               },
               {
                 "kind": "account",
-                "path": "authority"
+                "path": "merchant.authority",
+                "account": "Merchant"
               },
               {
                 "kind": "account",

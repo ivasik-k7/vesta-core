@@ -34,9 +34,8 @@ pub struct CreateAchievement<'info> {
     pub authority: Signer<'info>,
 
     #[account(
-        seeds = [MERCHANT_SEED, authority.key().as_ref(), &merchant.id.to_le_bytes()],
+        seeds = [MERCHANT_SEED, merchant.authority.as_ref(), &merchant.id.to_le_bytes()],
         bump = merchant.bump,
-        has_one = authority @ VestaError::Unauthorized,
     )]
     pub merchant: Account<'info, Merchant>,
 
@@ -63,6 +62,11 @@ pub fn handle_create_achievement(
     threshold_lifetime: u64,
 ) -> Result<()> {
     require!(!ctx.accounts.config.paused, VestaError::ProtocolPaused);
+    require!(!ctx.accounts.merchant.paused, VestaError::MerchantPaused);
+    require!(
+        ctx.accounts.merchant.can_operate(&ctx.accounts.authority.key()),
+        VestaError::Unauthorized
+    );
     require!(name.len() <= MAX_NAME_LEN, VestaError::StringTooLong);
     require!(uri.len() <= MAX_URI_LEN, VestaError::StringTooLong);
     require!(threshold_lifetime > 0, VestaError::InvalidAmount);
@@ -128,10 +132,10 @@ pub struct GrantAchievement<'info> {
         seeds = [MERCHANT_SEED, merchant.authority.as_ref(), &merchant.id.to_le_bytes()],
         bump = merchant.bump,
     )]
-    pub merchant: Account<'info, Merchant>,
+    pub merchant: Box<Account<'info, Merchant>>,
 
     #[account(mut, has_one = merchant @ VestaError::MerchantMismatch)]
-    pub achievement: Account<'info, Achievement>,
+    pub achievement: Box<Account<'info, Achievement>>,
 
     /// CHECK: identity only; profile and badge PDAs derive from this key.
     pub customer: UncheckedAccount<'info>,
@@ -140,7 +144,7 @@ pub struct GrantAchievement<'info> {
         seeds = [CUSTOMER_SEED, merchant.key().as_ref(), customer.key().as_ref()],
         bump = customer_profile.bump,
     )]
-    pub customer_profile: Account<'info, CustomerProfile>,
+    pub customer_profile: Box<Account<'info, CustomerProfile>>,
 
     /// CHECK: created and initialized as the soulbound badge mint in the handler.
     #[account(mut, seeds = [BADGE_SEED, achievement.key().as_ref(), customer.key().as_ref()], bump)]
@@ -160,10 +164,10 @@ pub struct GrantAchievement<'info> {
         seeds = [KLEOS_SEED, achievement.key().as_ref(), customer.key().as_ref()],
         bump,
     )]
-    pub kleos_receipt: Account<'info, KleosReceipt>,
+    pub kleos_receipt: Box<Account<'info, KleosReceipt>>,
 
     #[account(seeds = [CONFIG_SEED], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
 
     pub token_program: Program<'info, Token2022>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -172,6 +176,7 @@ pub struct GrantAchievement<'info> {
 
 pub fn handle_grant_achievement(ctx: Context<GrantAchievement>) -> Result<()> {
     require!(!ctx.accounts.config.paused, VestaError::ProtocolPaused);
+    require!(!ctx.accounts.merchant.paused, VestaError::MerchantPaused);
     require!(
         ctx.accounts.customer_profile.lifetime_earned
             >= ctx.accounts.achievement.threshold_lifetime,

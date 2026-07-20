@@ -467,6 +467,10 @@ pub fn handle_swap_points(
 ) -> Result<()> {
     require!(!ctx.accounts.config.paused, VestaError::ProtocolPaused);
     require!(!ctx.accounts.alliance.paused, VestaError::AlliancePaused);
+    require!(
+        !ctx.accounts.merchant_a.paused && !ctx.accounts.merchant_b.paused,
+        VestaError::MerchantPaused
+    );
     require!(ui_amount > 0, VestaError::InvalidAmount);
 
     // Leg A: how much raw the customer burns for this UI value.
