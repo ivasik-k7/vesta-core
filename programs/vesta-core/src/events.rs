@@ -113,3 +113,70 @@ pub struct AchievementGranted {
     pub customer: Pubkey,
     pub badge_mint: Pubkey,
 }
+
+#[event]
+pub struct AllianceCreated {
+    pub alliance: Pubkey,
+    pub id: u64,
+    pub authority: Pubkey,
+}
+
+#[event]
+pub struct AllianceJoined {
+    pub alliance: Pubkey,
+    pub merchant: Pubkey,
+    pub rate_bps: u32,
+    pub swap_in_budget: u64,
+}
+
+#[event]
+pub struct AllianceLeft {
+    pub alliance: Pubkey,
+    pub merchant: Pubkey,
+}
+
+#[event]
+pub struct AllianceAuthorityProposed {
+    pub alliance: Pubkey,
+    pub old: Pubkey,
+    pub new: Pubkey,
+}
+
+#[event]
+pub struct AllianceAuthorityChanged {
+    pub alliance: Pubkey,
+    pub old: Pubkey,
+    pub new: Pubkey,
+}
+
+#[event]
+pub struct SwapRateSet {
+    pub member: Pubkey,
+    pub old: u32,
+    pub new: u32,
+}
+
+#[event]
+pub struct SwapBudgetSet {
+    pub member: Pubkey,
+    pub old: u64,
+    pub new: u64,
+}
+
+#[event]
+pub struct PointsSwapped {
+    pub customer: Pubkey,
+    pub merchant_a: Pubkey,
+    pub merchant_b: Pubkey,
+    pub ui_amount: u64,
+    pub raw_in: u64,
+    pub raw_out: u64,
+}
+
+#[event]
+pub struct Clawback {
+    pub merchant: Pubkey,
+    pub customer: Pubkey,
+    pub amount_raw: u64,
+    pub reason_code: u16,
+}

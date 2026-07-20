@@ -101,3 +101,30 @@ pub struct KleosReceipt {
     pub granted_at: i64,
     pub bump: u8,
 }
+
+/// Koinon alliance root; creator in the seeds kills permissionless id squatting.
+#[account]
+#[derive(InitSpace)]
+pub struct Alliance {
+    pub id: u64,
+    pub authority: Pubkey,
+    pub pending_authority: Option<Pubkey>,
+    #[max_len(32)]
+    pub name: String,
+    pub member_count: u16,
+    pub bump: u8,
+}
+
+/// Alliance membership: normalized swap rate + inbound-swap risk budget.
+#[account]
+#[derive(InitSpace)]
+pub struct AllianceMember {
+    pub alliance: Pubkey,
+    pub merchant: Pubkey,
+    pub rate_bps_to_alliance: u32,
+    pub swap_in_budget_raw: u64,
+    pub swapped_in_today: u64,
+    pub budget_day: u32,
+    pub active: bool,
+    pub bump: u8,
+}

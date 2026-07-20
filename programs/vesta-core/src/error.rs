@@ -44,6 +44,8 @@ pub enum VestaError {
     AllianceMismatch,
     #[msg("Alliance member is not active")]
     MemberInactive,
+    #[msg("Merchant already belongs to an alliance")]
+    AlreadyInAlliance,
     #[msg("Daily swap-in budget exceeded")]
     SwapBudgetExceeded,
     #[msg("Invalid swap rate")]

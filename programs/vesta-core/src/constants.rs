@@ -20,6 +20,10 @@ pub const ACHIEVE_SEED: &[u8] = b"achieve";
 pub const KLEOS_SEED: &[u8] = b"kleos";
 #[constant]
 pub const BADGE_SEED: &[u8] = b"badge";
+#[constant]
+pub const ALLIANCE_SEED: &[u8] = b"alliance";
+#[constant]
+pub const MEMBER_SEED: &[u8] = b"member";
 
 /// UI points carry two implied decimals; all mints.
 #[constant]

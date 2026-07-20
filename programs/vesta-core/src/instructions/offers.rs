@@ -1,7 +1,4 @@
-use anchor_lang::{
-    prelude::*,
-    solana_program::program::{get_return_data, invoke},
-};
+use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
     token_2022::{burn, Burn, Token2022},
@@ -168,28 +165,12 @@ pub fn handle_redeem_offer(ctx: Context<RedeemOffer>, max_raw_amount: u64) -> Re
     require!(offer.active, VestaError::OfferInactive);
     require!(offer.supply_remaining > 0, VestaError::OfferSoldOut);
 
-    // UI → raw on-chain, one direction only (float conversions are documented
-    // as non-round-trippable): CPI UiAmountToAmount and read the u64 LE return.
-    let price_str = format_ui_amount(offer.price_points);
-    let ix = spl_token_2022_interface::instruction::ui_amount_to_amount(
+    // UI → raw on-chain via the shared verified path (spec §3.4).
+    let raw_needed = crate::util::ui_points_to_raw(
         &ctx.accounts.token_program.key(),
-        &ctx.accounts.point_mint.key(),
-        &price_str,
-    )
-    .map_err(|_| VestaError::ConversionFailed)?;
-    invoke(&ix, &[ctx.accounts.point_mint.to_account_info()])?;
-    let (returner, data) = get_return_data().ok_or(VestaError::ConversionFailed)?;
-    require_keys_eq!(
-        returner,
-        ctx.accounts.token_program.key(),
-        VestaError::ConversionFailed
-    );
-    let raw_needed = u64::from_le_bytes(
-        data.as_slice()
-            .try_into()
-            .map_err(|_| VestaError::ConversionFailed)?,
-    );
-
+        &ctx.accounts.point_mint.to_account_info(),
+        offer.price_points,
+    )?;
     require!(raw_needed <= max_raw_amount, VestaError::SlippageExceeded);
 
     burn(
@@ -254,9 +235,4 @@ pub fn handle_close_receipt(ctx: Context<CloseReceipt>) -> Result<()> {
         customer: ctx.accounts.customer.key(),
     });
     Ok(())
-}
-
-/// Integer-only "12.34" formatting for a UI-points value carrying two decimals.
-fn format_ui_amount(price_points: u64) -> String {
-    format!("{}.{:02}", price_points / 100, price_points % 100)
 }

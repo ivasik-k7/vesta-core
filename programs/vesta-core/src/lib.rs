@@ -3,6 +3,7 @@ pub mod error;
 pub mod events;
 pub mod instructions;
 pub mod state;
+pub(crate) mod util;
 
 use anchor_lang::prelude::*;
 
@@ -107,6 +108,54 @@ pub mod vesta_core {
 
     pub fn redeem_offer(ctx: Context<RedeemOffer>, max_raw_amount: u64) -> Result<()> {
         instructions::offers::handle_redeem_offer(ctx, max_raw_amount)
+    }
+
+    pub fn create_alliance(ctx: Context<CreateAlliance>, id: u64, name: String) -> Result<()> {
+        instructions::koinon::handle_create_alliance(ctx, id, name)
+    }
+
+    pub fn transfer_alliance_authority(
+        ctx: Context<AllianceAuthorityOnly>,
+        new_authority: Pubkey,
+    ) -> Result<()> {
+        instructions::koinon::handle_transfer_alliance_authority(ctx, new_authority)
+    }
+
+    pub fn accept_alliance_authority(ctx: Context<AcceptAllianceAuthority>) -> Result<()> {
+        instructions::koinon::handle_accept_alliance_authority(ctx)
+    }
+
+    pub fn join_alliance(
+        ctx: Context<JoinAlliance>,
+        rate_bps_to_alliance: u32,
+        swap_in_budget_raw: u64,
+    ) -> Result<()> {
+        instructions::koinon::handle_join_alliance(ctx, rate_bps_to_alliance, swap_in_budget_raw)
+    }
+
+    pub fn leave_alliance(ctx: Context<LeaveAlliance>) -> Result<()> {
+        instructions::koinon::handle_leave_alliance(ctx)
+    }
+
+    pub fn set_swap_rate(ctx: Context<SetSwapRate>, new_rate: u32) -> Result<()> {
+        instructions::koinon::handle_set_swap_rate(ctx, new_rate)
+    }
+
+    pub fn set_swap_budget(ctx: Context<SetSwapBudget>, new_budget: u64) -> Result<()> {
+        instructions::koinon::handle_set_swap_budget(ctx, new_budget)
+    }
+
+    pub fn swap_points(
+        ctx: Context<SwapPoints>,
+        ui_amount: u64,
+        max_raw_in: u64,
+        min_raw_out: u64,
+    ) -> Result<()> {
+        instructions::koinon::handle_swap_points(ctx, ui_amount, max_raw_in, min_raw_out)
+    }
+
+    pub fn clawback(ctx: Context<ClawbackPoints>, amount_raw: u64, reason_code: u16) -> Result<()> {
+        instructions::clawback::handle_clawback(ctx, amount_raw, reason_code)
     }
 
     pub fn close_receipt(ctx: Context<CloseReceipt>) -> Result<()> {
