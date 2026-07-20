@@ -41,7 +41,7 @@ typos:
 
 deploy-devnet:
     anchor deploy
-    anchor idl upgrade --filepath target/idl/vesta_core.json Am2X4B1SCnJKXL8Yir2j6yGpHAKrmwcf2E5aKnA9BZV || anchor idl init --filepath target/idl/vesta_core.json Am2X4B1SCnJKXL8Yir2j6yGpHAKrmwcf2E5aKnA9BZV
+    anchor idl upgrade --filepath target/idl/vesta_core.json gaMq6BpH1aqC8ZCYtAxwZBjTa9AnfdWvYwURG6L4LDz || anchor idl init --filepath target/idl/vesta_core.json gaMq6BpH1aqC8ZCYtAxwZBjTa9AnfdWvYwURG6L4LDz
 
 doc:
     cargo doc --no-deps --workspace

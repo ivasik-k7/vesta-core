@@ -20,7 +20,18 @@ Traditional loyalty programs are siloed, restrictive, and static. VESTA turns po
 
 ## Devnet
 
-Deployed programs:
+Deployed programs (all four phases live):
+
+- [`vesta_core`: `gaMq6BpH1aqC8ZCYtAxwZBjTa9AnfdWvYwURG6L4LDz`](https://explorer.solana.com/address/gaMq6BpH1aqC8ZCYtAxwZBjTa9AnfdWvYwURG6L4LDz?cluster=devnet)
+- [`argus`: `9zJEWrk47z1ACT3ySMwzmUrMsQzFC8afBSFcsCzsz3rx`](https://explorer.solana.com/address/9zJEWrk47z1ACT3ySMwzmUrMsQzFC8afBSFcsCzsz3rx?cluster=devnet)
+- [`init_config`](https://explorer.solana.com/tx/G3CKMtqSkNx1F9GMPZtQiJxiwcSFG65gsVMHhK91QybWGucweMnLXX7PhrATdejyf9DdvPMisTge8S9Z3DM9urc?cluster=devnet) — Config PDA `4aeV5JNqBXBa1M1gxch7b2h36hHBoobAR8Ajqax6J5Nr`
+
+Program ids were rotated when the full protocol shipped: the phase-0 deployment's
+upgrade authority had already been handed to the owner wallet, so development
+continues under a hot dev key on fresh ids; authority moves to the owner wallet
+again at submission (spec §16). Historical phase-0 artifacts below.
+
+Phase-0 deployment (historical):
 
 - [`vesta_core`: `Am2X4B1SCnJKXL8Yir2j6yGpHAKrmwcf2E5aKnA9BZV`](https://explorer.solana.com/address/Am2X4B1SCnJKXL8Yir2j6yGpHAKrmwcf2E5aKnA9BZV?cluster=devnet) (IDL published on-chain)
 - [`argus`: `CrzLCMSQ1pWTuLXBomoLn6eAB1c1gLsw5x9sBeuyBNKt`](https://explorer.solana.com/address/CrzLCMSQ1pWTuLXBomoLn6eAB1c1gLsw5x9sBeuyBNKt?cluster=devnet)

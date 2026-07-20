@@ -11,7 +11,7 @@ pub use constants::*;
 pub use instructions::*;
 pub use state::*;
 
-declare_id!("Am2X4B1SCnJKXL8Yir2j6yGpHAKrmwcf2E5aKnA9BZV");
+declare_id!("gaMq6BpH1aqC8ZCYtAxwZBjTa9AnfdWvYwURG6L4LDz");
 
 #[program]
 pub mod vesta_core {

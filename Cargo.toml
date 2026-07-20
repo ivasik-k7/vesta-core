@@ -26,6 +26,7 @@ redundant_clone = "warn"
 uninlined_format_args = "warn"
 
 [profile.release]
+opt-level = "z"
 overflow-checks = true
 lto = "fat"
 codegen-units = 1

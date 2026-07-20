@@ -27,7 +27,7 @@ use crate::{
     state::{Config, Merchant},
 };
 
-pub const ARGUS_ID: Pubkey = pubkey!("CrzLCMSQ1pWTuLXBomoLn6eAB1c1gLsw5x9sBeuyBNKt");
+pub const ARGUS_ID: Pubkey = pubkey!("9zJEWrk47z1ACT3ySMwzmUrMsQzFC8afBSFcsCzsz3rx");
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct RegisterMerchantArgs {

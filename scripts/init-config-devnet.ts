@@ -17,7 +17,7 @@ import {
 } from '@solana/web3.js'
 
 const RPC_URL = process.env.RPC_URL ?? 'https://api.devnet.solana.com'
-const VESTA_CORE = new PublicKey('Am2X4B1SCnJKXL8Yir2j6yGpHAKrmwcf2E5aKnA9BZV')
+const VESTA_CORE = new PublicKey('gaMq6BpH1aqC8ZCYtAxwZBjTa9AnfdWvYwURG6L4LDz')
 
 function discriminator(ixName: string): Buffer {
   return createHash('sha256').update(`global:${ixName}`).digest().subarray(0, 8)

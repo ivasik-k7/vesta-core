@@ -7,7 +7,7 @@
 > critic); see the verification log in §13.
 
 - Status: **v4 — panel & critic findings integrated; implementation-ready**
-- Deployed (devnet): `vesta_core` `Am2X4B1SCnJKXL8Yir2j6yGpHAKrmwcf2E5aKnA9BZV` · `argus` `CrzLCMSQ1pWTuLXBomoLn6eAB1c1gLsw5x9sBeuyBNKt`
+- Deployed (devnet): `vesta_core` `gaMq6BpH1aqC8ZCYtAxwZBjTa9AnfdWvYwURG6L4LDz` · `argus` `9zJEWrk47z1ACT3ySMwzmUrMsQzFC8afBSFcsCzsz3rx`
 - Upgrade authority: `JC2b9dnqMge1pGAoM1VGg416vmvy6xiLfep6oNJFAWsQ` (owner wallet; disclosure in §16)
 - Toolchain: Rust 1.89 (pinned) · Solana CLI 4.1.1 (Agave) · Anchor 1.1.2 · LiteSVM 0.10
 

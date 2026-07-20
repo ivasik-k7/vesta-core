@@ -19,7 +19,7 @@ pub use constants::*;
 pub use instructions::*;
 pub use state::*;
 
-declare_id!("CrzLCMSQ1pWTuLXBomoLn6eAB1c1gLsw5x9sBeuyBNKt");
+declare_id!("9zJEWrk47z1ACT3ySMwzmUrMsQzFC8afBSFcsCzsz3rx");
 
 #[program]
 pub mod argus {
