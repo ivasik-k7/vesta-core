@@ -297,7 +297,11 @@ fn setup() -> World {
     svm.airdrop(&merchant_authority.pubkey(), 50_000_000_000)
         .unwrap();
     let merchant = Pubkey::find_program_address(
-        &[MERCHANT_SEED, merchant_authority.pubkey().as_ref(), &0u64.to_le_bytes()],
+        &[
+            MERCHANT_SEED,
+            merchant_authority.pubkey().as_ref(),
+            &0u64.to_le_bytes(),
+        ],
         &vesta_core::id(),
     )
     .0;
@@ -347,7 +351,8 @@ fn setup() -> World {
                 system_program: system_program::ID,
             }
             .to_account_metas(None),
-            data: vesta_core::instruction::RegisterMerchant { id: 0,
+            data: vesta_core::instruction::RegisterMerchant {
+                id: 0,
                 args: RegisterMerchantArgs {
                     name: "Kavarna".into(),
                     symbol: "PTS".into(),
@@ -445,7 +450,11 @@ fn campaign_rejects_wrong_merchant_expired_and_closed() {
         .airdrop(&other_authority.pubkey(), 50_000_000_000)
         .unwrap();
     let other_merchant = Pubkey::find_program_address(
-        &[MERCHANT_SEED, other_authority.pubkey().as_ref(), &0u64.to_le_bytes()],
+        &[
+            MERCHANT_SEED,
+            other_authority.pubkey().as_ref(),
+            &0u64.to_le_bytes(),
+        ],
         &vesta_core::id(),
     )
     .0;
@@ -470,7 +479,8 @@ fn campaign_rejects_wrong_merchant_expired_and_closed() {
                 system_program: system_program::ID,
             }
             .to_account_metas(None),
-            data: vesta_core::instruction::RegisterMerchant { id: 0,
+            data: vesta_core::instruction::RegisterMerchant {
+                id: 0,
                 args: RegisterMerchantArgs {
                     name: "Litera".into(),
                     symbol: "BKS".into(),
@@ -602,8 +612,7 @@ fn kleos_badge_full_lifecycle_and_burn_proof_guard() {
     );
 
     // Cross the threshold, grant for real.
-    w.earn(customer.pubkey(), 5_000)
-        .unwrap();
+    w.earn(customer.pubkey(), 5_000).unwrap();
     w.send(
         std::slice::from_ref(&grant),
         &[&authority],
@@ -748,7 +757,22 @@ fn campaign_flat_bonus_respects_budget_and_per_customer_cap() {
     let now = w.now();
     // FLAT_BONUS 5_000, total budget 8_000, per-customer cap 5_000.
     let c = w
-        .create_campaign_args(10, args(1, 0, 5_000, 0, 0, 0, 0, 8_000, 5_000, now - 60, now + 86_400))
+        .create_campaign_args(
+            10,
+            args(
+                1,
+                0,
+                5_000,
+                0,
+                0,
+                0,
+                0,
+                8_000,
+                5_000,
+                now - 60,
+                now + 86_400,
+            ),
+        )
         .unwrap();
 
     // Alice: base (streak 1) 10_200 + flat 5_000.
@@ -770,7 +794,10 @@ fn campaign_quest_pays_reward_once() {
     let now = w.now();
     // QUEST: 2 qualifying visits → 7_000 reward.
     let c = w
-        .create_campaign_args(11, args(2, 0, 0, 2, 7_000, 0, 0, 0, 0, now - 60, now + 40 * 86_400))
+        .create_campaign_args(
+            11,
+            args(2, 0, 0, 2, 7_000, 0, 0, 0, 0, now - 60, now + 40 * 86_400),
+        )
         .unwrap();
 
     // Visit 1 (streak 1): base 10_200, no reward yet.
@@ -795,7 +822,10 @@ fn campaign_gates_on_min_spend() {
     let alice = Keypair::new().pubkey();
     let now = w.now();
     let c = w
-        .create_campaign_args(12, args(1, 0, 5_000, 0, 0, 1_000, 0, 0, 0, now - 60, now + 86_400))
+        .create_campaign_args(
+            12,
+            args(1, 0, 5_000, 0, 0, 1_000, 0, 0, 0, now - 60, now + 86_400),
+        )
         .unwrap();
     // Below min spend → rejected.
     assert!(
@@ -829,7 +859,9 @@ fn merchant_operator_earns_and_pause_blocks() {
     w.svm.airdrop(&rando.pubkey(), 5_000_000_000).unwrap();
     let alice = Keypair::new().pubkey();
     let now = w.now();
-    let c = w.create_campaign(20, 5_000, now - 60, now + 86_400).unwrap();
+    let c = w
+        .create_campaign(20, 5_000, now - 60, now + 86_400)
+        .unwrap();
 
     // Grant the operator.
     let ix = set_operator_ix(&w, &owner, operator.pubkey(), true);
@@ -864,34 +896,99 @@ fn merchant_operator_earns_and_pause_blocks() {
         data: vesta_core::instruction::SetMerchantPaused { paused: true }.data(),
     };
     w.send(&[pause], &[&owner], &owner.pubkey()).unwrap();
-    assert!(
-        w.earn(alice, 100).is_err(),
-        "paused merchant still earned"
-    );
+    assert!(w.earn(alice, 100).is_err(), "paused merchant still earned");
 }
 
 #[test]
-fn quest_stays_open_when_budget_clamps_the_reward() {
+fn quest_stays_open_on_transient_budget_clamp() {
     let mut w = setup();
     let auth = w.merchant_authority.insecure_clone();
     let alice = Keypair::new().pubkey();
+    let bob = Keypair::new().pubkey();
     let now = w.now();
-    // QUEST: 1 visit → 5_000 reward, but total budget only 3_000.
+    // QUEST: 1 visit → 5_000 reward, budget 6_000 (valid: enough for one full
+    // completion). The budget is then consumed transiently.
     let c = w
-        .create_campaign_args(30, args(2, 0, 0, 1, 5_000, 0, 0, 3_000, 0, now - 60, now + 40 * 86_400))
+        .create_campaign_args(
+            30,
+            args(
+                2,
+                0,
+                0,
+                1,
+                5_000,
+                0,
+                0,
+                6_000,
+                0,
+                now - 60,
+                now + 40 * 86_400,
+            ),
+        )
         .unwrap();
 
-    // First (target-reaching) visit: reward clamped to 3_000 → quest NOT completed.
+    // Alice reaches the target and is paid in full → completed.
     w.earn_campaign(alice, 100, c, &auth).unwrap();
-    let prog = Pubkey::find_program_address(
+    let alice_prog = Pubkey::find_program_address(
         &[b"cprogress", c.as_ref(), alice.as_ref()],
         &vesta_core::id(),
     )
     .0;
-    let data = w.svm.get_account(&prog).unwrap().data;
-    let p = vesta_core::state::CampaignProgress::try_deserialize(&mut data.as_slice()).unwrap();
-    assert!(!p.completed, "quest completed on a clamped (partial) payout");
-    assert_eq!(p.bonus_drawn, 3_000);
+    let ap = vesta_core::state::CampaignProgress::try_deserialize(
+        &mut w.svm.get_account(&alice_prog).unwrap().data.as_slice(),
+    )
+    .unwrap();
+    assert!(ap.completed, "full-reward quest not marked complete");
+    assert_eq!(ap.bonus_drawn, 5_000);
+
+    // Bob reaches the target but only 1_000 budget remains → clamped payout, so
+    // the quest stays OPEN (retryable) rather than burning the completion.
+    w.earn_campaign(bob, 100, c, &auth).unwrap();
+    let bob_prog =
+        Pubkey::find_program_address(&[b"cprogress", c.as_ref(), bob.as_ref()], &vesta_core::id())
+            .0;
+    let bp = vesta_core::state::CampaignProgress::try_deserialize(
+        &mut w.svm.get_account(&bob_prog).unwrap().data.as_slice(),
+    )
+    .unwrap();
+    assert!(
+        !bp.completed,
+        "quest completed on a clamped (partial) payout"
+    );
+    assert_eq!(bp.bonus_drawn, 1_000);
+}
+
+#[test]
+fn quest_rejects_structurally_impossible_config() {
+    let mut w = setup();
+    let now = w.now();
+    // Budget below the reward → no customer could ever complete: rejected (L-5).
+    assert!(
+        w.create_campaign_args(
+            31,
+            args(2, 0, 0, 1, 5_000, 0, 0, 3_000, 0, now - 60, now + 86_400)
+        )
+        .is_err(),
+        "quest with budget < reward accepted"
+    );
+    // Per-customer cap below the reward → same, rejected.
+    assert!(
+        w.create_campaign_args(
+            32,
+            args(2, 0, 0, 1, 5_000, 0, 0, 0, 3_000, now - 60, now + 86_400)
+        )
+        .is_err(),
+        "quest with per_customer_cap < reward accepted"
+    );
+    // Both unlimited (0) is fine.
+    assert!(
+        w.create_campaign_args(
+            33,
+            args(2, 0, 0, 1, 5_000, 0, 0, 0, 0, now - 60, now + 86_400)
+        )
+        .is_ok(),
+        "valid unlimited-budget quest rejected"
+    );
 }
 
 #[test]
@@ -917,7 +1014,8 @@ fn close_achievement_reclaims_and_removes_definition() {
         }
         .data(),
     };
-    w.send(&[create], &[&authority], &authority.pubkey()).unwrap();
+    w.send(&[create], &[&authority], &authority.pubkey())
+        .unwrap();
     assert!(w.svm.get_account(&achievement).is_some());
 
     let close = Instruction {
@@ -930,8 +1028,12 @@ fn close_achievement_reclaims_and_removes_definition() {
         .to_account_metas(None),
         data: vesta_core::instruction::CloseAchievement {}.data(),
     };
-    w.send(&[close], &[&authority], &authority.pubkey()).unwrap();
-    assert!(w.svm.get_account(&achievement).is_none_or(|a| a.lamports == 0));
+    w.send(&[close], &[&authority], &authority.pubkey())
+        .unwrap();
+    assert!(w
+        .svm
+        .get_account(&achievement)
+        .is_none_or(|a| a.lamports == 0));
 }
 
 #[test]
@@ -963,7 +1065,8 @@ fn achievement_grant_is_permissionless_for_earned_badges() {
         }
         .data(),
     };
-    w.send(&[create], &[&authority], &authority.pubkey()).unwrap();
+    w.send(&[create], &[&authority], &authority.pubkey())
+        .unwrap();
 
     // Customer crosses the threshold.
     w.earn(customer.pubkey(), 5_000).unwrap();
@@ -974,7 +1077,10 @@ fn achievement_grant_is_permissionless_for_earned_badges() {
 
     let mint_data = w.svm.get_account(&badge_mint).unwrap().data;
     let state = StateWithExtensions::<MintState2>::unpack(&mint_data).unwrap();
-    assert_eq!(state.base.supply, 1, "keeper failed to grant an earned badge");
+    assert_eq!(
+        state.base.supply, 1,
+        "keeper failed to grant an earned badge"
+    );
 }
 
 #[test]
@@ -983,8 +1089,12 @@ fn operator_creates_campaign_and_pause_blocks() {
     let owner = w.merchant_authority.insecure_clone();
     let operator = Keypair::new();
     w.svm.airdrop(&operator.pubkey(), 5_000_000_000).unwrap();
-    w.send(&[set_operator_ix(&w, &owner, operator.pubkey(), true)], &[&owner], &owner.pubkey())
-        .unwrap();
+    w.send(
+        &[set_operator_ix(&w, &owner, operator.pubkey(), true)],
+        &[&owner],
+        &owner.pubkey(),
+    )
+    .unwrap();
 
     let now = w.now();
     let merchant = w.merchant;
@@ -1020,14 +1130,24 @@ fn operator_creates_campaign_and_pause_blocks() {
         .data(),
     };
     // Operator (not the owner) creates a campaign.
-    w.send(&[make(40, c[0], operator.pubkey())], &[&operator], &operator.pubkey()).unwrap();
+    w.send(
+        &[make(40, c[0], operator.pubkey())],
+        &[&operator],
+        &operator.pubkey(),
+    )
+    .unwrap();
     assert!(w.svm.get_account(&c[0]).is_some());
 
     // A random signer cannot.
     let rando = Keypair::new();
     w.svm.airdrop(&rando.pubkey(), 5_000_000_000).unwrap();
     assert!(
-        w.send(&[make(41, c[1], rando.pubkey())], &[&rando], &rando.pubkey()).is_err(),
+        w.send(
+            &[make(41, c[1], rando.pubkey())],
+            &[&rando],
+            &rando.pubkey()
+        )
+        .is_err(),
         "non-operator created a campaign"
     );
 
@@ -1043,7 +1163,12 @@ fn operator_creates_campaign_and_pause_blocks() {
     };
     w.send(&[pause], &[&owner], &owner.pubkey()).unwrap();
     assert!(
-        w.send(&[make(42, c[2], owner.pubkey())], &[&owner], &owner.pubkey()).is_err(),
+        w.send(
+            &[make(42, c[2], owner.pubkey())],
+            &[&owner],
+            &owner.pubkey()
+        )
+        .is_err(),
         "paused merchant created a campaign"
     );
 }

@@ -156,8 +156,11 @@ impl World {
                 merchant_authority: signer,
                 merchant,
                 mint,
-                guard_config: Pubkey::find_program_address(&[b"guard", mint.as_ref()], &argus::id())
-                    .0,
+                guard_config: Pubkey::find_program_address(
+                    &[b"guard", mint.as_ref()],
+                    &argus::id(),
+                )
+                .0,
                 extra_account_meta_list: Pubkey::find_program_address(
                     &[b"extra-account-metas", mint.as_ref()],
                     &argus::id(),
@@ -181,7 +184,8 @@ impl World {
             .to_account_metas(None),
             data: argus::instruction::ConfigurePolicy { update }.data(),
         };
-        self.send(&[ix], &[&authority], &authority.pubkey()).unwrap();
+        self.send(&[ix], &[&authority], &authority.pubkey())
+            .unwrap();
     }
 
     fn set_paused(&mut self, paused: bool) {
@@ -195,7 +199,8 @@ impl World {
             .to_account_metas(None),
             data: argus::instruction::SetGuardPaused { paused }.data(),
         };
-        self.send(&[ix], &[&authority], &authority.pubkey()).unwrap();
+        self.send(&[ix], &[&authority], &authority.pubkey())
+            .unwrap();
     }
 
     fn add_list_entry(&mut self, target: Pubkey) {
@@ -216,7 +221,8 @@ impl World {
             .to_account_metas(None),
             data: argus::instruction::AddListEntry { target }.data(),
         };
-        self.send(&[ix], &[&authority], &authority.pubkey()).unwrap();
+        self.send(&[ix], &[&authority], &authority.pubkey())
+            .unwrap();
     }
 
     fn open_state(&mut self, owner: &Keypair) -> Pubkey {
@@ -348,7 +354,11 @@ fn setup() -> World {
     svm.airdrop(&merchant_authority.pubkey(), 50_000_000_000)
         .unwrap();
     let merchant = Pubkey::find_program_address(
-        &[MERCHANT_SEED, merchant_authority.pubkey().as_ref(), &0u64.to_le_bytes()],
+        &[
+            MERCHANT_SEED,
+            merchant_authority.pubkey().as_ref(),
+            &0u64.to_le_bytes(),
+        ],
         &vesta_core::id(),
     )
     .0;
@@ -404,7 +414,8 @@ fn setup() -> World {
                 system_program: system_program::ID,
             }
             .to_account_metas(None),
-            data: vesta_core::instruction::RegisterMerchant { id: 0,
+            data: vesta_core::instruction::RegisterMerchant {
+                id: 0,
                 args: RegisterMerchantArgs {
                     name: "Kavarna".into(),
                     symbol: "PTS".into(),
@@ -560,20 +571,41 @@ fn gift_flow_enforces_cap_rollover_and_fail_closed() {
 
     // Fail-closed: extras omitted entirely.
     w.open_state(&alice);
-    let bare = w.hooked_transfer_ix(alice.pubkey(), alice.pubkey(), bob.pubkey(), 1_000, d, false);
+    let bare = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        1_000,
+        d,
+        false,
+    );
     assert!(
         w.send(&[bare], &[&alice], &alice.pubkey()).is_err(),
         "hookless transfer passed"
     );
 
     // Within cap passes and the state tracks it.
-    let ix = w.hooked_transfer_ix(alice.pubkey(), alice.pubkey(), bob.pubkey(), 30_000, d, true);
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        30_000,
+        d,
+        true,
+    );
     w.send(&[ix], &[&alice], &alice.pubkey()).unwrap();
     assert_eq!(w.state_of(alice.pubkey()).sent_today, 30_000);
     assert_eq!(w.state_of(alice.pubkey()).transfers_today, 1);
 
     // Exactly to the cap passes; one more unit fails.
-    let ix = w.hooked_transfer_ix(alice.pubkey(), alice.pubkey(), bob.pubkey(), CAP - 30_000, d, true);
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        CAP - 30_000,
+        d,
+        true,
+    );
     w.send(&[ix], &[&alice], &alice.pubkey()).unwrap();
     assert_eq!(w.state_of(alice.pubkey()).sent_today, CAP);
     let ix = w.hooked_transfer_ix(alice.pubkey(), alice.pubkey(), bob.pubkey(), 1, d, true);
@@ -633,7 +665,14 @@ fn delegated_transfers_spend_the_source_owners_state() {
 
     // The delegate signs, but the state is derived from ALICE's owner field —
     // a delegate cannot mint themselves a fresh cap.
-    let ix = w.hooked_transfer_ix(alice.pubkey(), delegate.pubkey(), bob.pubkey(), 25_000, d, true);
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        delegate.pubkey(),
+        bob.pubkey(),
+        25_000,
+        d,
+        true,
+    );
     w.send(&[ix], &[&delegate], &delegate.pubkey()).unwrap();
     assert_eq!(w.state_of(alice.pubkey()).sent_today, 25_000);
 }
@@ -677,14 +716,28 @@ fn per_tx_cap_and_balance_cap_bound_single_transfers() {
     prime_sender(&mut w, &alice, bob.pubkey(), 5_000);
 
     // Above per-tx cap → rejected.
-    let ix = w.hooked_transfer_ix(alice.pubkey(), alice.pubkey(), bob.pubkey(), 10_001, d, true);
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        10_001,
+        d,
+        true,
+    );
     assert!(
         w.send(&[ix], &[&alice], &alice.pubkey()).is_err(),
         "per-tx breach passed"
     );
 
     // Balance cap is measured post-transfer. Bring bob to 10_000 (ok).
-    let ix = w.hooked_transfer_ix(alice.pubkey(), alice.pubkey(), bob.pubkey(), 10_000, d, true);
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        10_000,
+        d,
+        true,
+    );
     w.send(&[ix], &[&alice], &alice.pubkey()).unwrap();
     // +6_000 would push bob to 16_000 > 15_000 → rejected.
     let ix = w.hooked_transfer_ix(alice.pubkey(), alice.pubkey(), bob.pubkey(), 6_000, d, true);
@@ -869,7 +922,11 @@ fn two_step_authority_rotation() {
 fn attestation_gating_composes_with_aegis() {
     let issuer_authority = Keypair::new();
     let issuer = Pubkey::find_program_address(
-        &[b"issuer", issuer_authority.pubkey().as_ref(), &0u64.to_le_bytes()],
+        &[
+            b"issuer",
+            issuer_authority.pubkey().as_ref(),
+            &0u64.to_le_bytes(),
+        ],
         &aegis::id(),
     )
     .0;
@@ -899,7 +956,8 @@ fn attestation_gating_composes_with_aegis() {
                 system_program: system_program::ID,
             }
             .to_account_metas(None),
-            data: aegis::instruction::InitIssuer { id: 0,
+            data: aegis::instruction::InitIssuer {
+                id: 0,
                 name: "GeoOracle".into(),
             }
             .data(),
@@ -910,7 +968,14 @@ fn attestation_gating_composes_with_aegis() {
     .unwrap();
 
     // No attestation on bob yet → gift rejected.
-    let ix = w.hooked_transfer_ix(alice.pubkey(), alice.pubkey(), bob.pubkey(), 1_000, issuer, true);
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        1_000,
+        issuer,
+        true,
+    );
     assert!(
         w.send(&[ix], &[&alice], &alice.pubkey()).is_err(),
         "gift passed without attestation"
@@ -948,7 +1013,14 @@ fn attestation_gating_composes_with_aegis() {
         &issuer_authority.pubkey(),
     )
     .unwrap();
-    let ix = w.hooked_transfer_ix(alice.pubkey(), alice.pubkey(), bob.pubkey(), 1_000, issuer, true);
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        1_000,
+        issuer,
+        true,
+    );
     assert!(
         w.send(&[ix], &[&alice], &alice.pubkey()).is_err(),
         "wrong-region attestation passed"
@@ -975,7 +1047,14 @@ fn attestation_gating_composes_with_aegis() {
     };
     w.send(&[update], &[&issuer_authority], &issuer_authority.pubkey())
         .unwrap();
-    let ix = w.hooked_transfer_ix(alice.pubkey(), alice.pubkey(), bob.pubkey(), 1_000, issuer, true);
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        1_000,
+        issuer,
+        true,
+    );
     w.send(&[ix], &[&alice], &alice.pubkey()).unwrap();
     assert_eq!(w.state_of(alice.pubkey()).sent_today, 1_000);
 
@@ -993,7 +1072,14 @@ fn attestation_gating_composes_with_aegis() {
     w.send(&[revoke], &[&issuer_authority], &issuer_authority.pubkey())
         .unwrap();
     w.warp_days(1);
-    let ix = w.hooked_transfer_ix(alice.pubkey(), alice.pubkey(), bob.pubkey(), 1_000, issuer, true);
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        1_000,
+        issuer,
+        true,
+    );
     assert!(
         w.send(&[ix], &[&alice], &alice.pubkey()).is_err(),
         "revoked attestation passed"
@@ -1010,8 +1096,11 @@ fn aegis_issuer_authority_pause_and_expiry() {
     w.svm.airdrop(&authority.pubkey(), 5_000_000_000).unwrap();
     w.svm.airdrop(&stranger.pubkey(), 5_000_000_000).unwrap();
 
-    let issuer =
-        Pubkey::find_program_address(&[b"issuer", authority.pubkey().as_ref(), &0u64.to_le_bytes()], &aegis::id()).0;
+    let issuer = Pubkey::find_program_address(
+        &[b"issuer", authority.pubkey().as_ref(), &0u64.to_le_bytes()],
+        &aegis::id(),
+    )
+    .0;
     w.send(
         &[Instruction {
             program_id: aegis::id(),
@@ -1021,7 +1110,8 @@ fn aegis_issuer_authority_pause_and_expiry() {
                 system_program: system_program::ID,
             }
             .to_account_metas(None),
-            data: aegis::instruction::InitIssuer { id: 0,
+            data: aegis::instruction::InitIssuer {
+                id: 0,
                 name: "Oracle".into(),
             }
             .data(),
@@ -1059,22 +1149,34 @@ fn aegis_issuer_authority_pause_and_expiry() {
 
     // A stranger cannot issue on someone else's issuer.
     assert!(
-        w.send(&[issue_ix(stranger.pubkey(), 0)], &[&stranger], &stranger.pubkey())
-            .is_err(),
+        w.send(
+            &[issue_ix(stranger.pubkey(), 0)],
+            &[&stranger],
+            &stranger.pubkey()
+        )
+        .is_err(),
         "stranger issued an attestation"
     );
 
     // Expiry in the past is rejected.
     let past = w.svm.get_sysvar::<Clock>().unix_timestamp - 10;
     assert!(
-        w.send(&[issue_ix(authority.pubkey(), past)], &[&authority], &authority.pubkey())
-            .is_err(),
+        w.send(
+            &[issue_ix(authority.pubkey(), past)],
+            &[&authority],
+            &authority.pubkey()
+        )
+        .is_err(),
         "past expiry accepted"
     );
 
     // Valid issuance succeeds.
-    w.send(&[issue_ix(authority.pubkey(), 0)], &[&authority], &authority.pubkey())
-        .unwrap();
+    w.send(
+        &[issue_ix(authority.pubkey(), 0)],
+        &[&authority],
+        &authority.pubkey(),
+    )
+    .unwrap();
 
     // Pausing the issuer blocks further issuance (update path).
     let subject2 = Keypair::new().pubkey();
@@ -1118,7 +1220,8 @@ fn aegis_issuer_authority_pause_and_expiry() {
         .data(),
     };
     assert!(
-        w.send(&[issue2], &[&authority], &authority.pubkey()).is_err(),
+        w.send(&[issue2], &[&authority], &authority.pubkey())
+            .is_err(),
         "paused issuer still issued"
     );
 }
@@ -1133,8 +1236,11 @@ fn aegis_operator_issues_but_cannot_administer() {
     w.svm.airdrop(&authority.pubkey(), 5_000_000_000).unwrap();
     w.svm.airdrop(&operator.pubkey(), 5_000_000_000).unwrap();
 
-    let issuer =
-        Pubkey::find_program_address(&[b"issuer", authority.pubkey().as_ref(), &0u64.to_le_bytes()], &aegis::id()).0;
+    let issuer = Pubkey::find_program_address(
+        &[b"issuer", authority.pubkey().as_ref(), &0u64.to_le_bytes()],
+        &aegis::id(),
+    )
+    .0;
     w.send(
         &[Instruction {
             program_id: aegis::id(),
@@ -1144,7 +1250,11 @@ fn aegis_operator_issues_but_cannot_administer() {
                 system_program: system_program::ID,
             }
             .to_account_metas(None),
-            data: aegis::instruction::InitIssuer { id: 0, name: "Oracle".into() }.data(),
+            data: aegis::instruction::InitIssuer {
+                id: 0,
+                name: "Oracle".into(),
+            }
+            .data(),
         }],
         &[&authority],
         &authority.pubkey(),
@@ -1230,8 +1340,11 @@ fn aegis_close_reclaims_rent() {
     let subject = Keypair::new().pubkey();
     w.svm.airdrop(&authority.pubkey(), 5_000_000_000).unwrap();
 
-    let issuer =
-        Pubkey::find_program_address(&[b"issuer", authority.pubkey().as_ref(), &0u64.to_le_bytes()], &aegis::id()).0;
+    let issuer = Pubkey::find_program_address(
+        &[b"issuer", authority.pubkey().as_ref(), &0u64.to_le_bytes()],
+        &aegis::id(),
+    )
+    .0;
     w.send(
         &[Instruction {
             program_id: aegis::id(),
@@ -1241,7 +1354,11 @@ fn aegis_close_reclaims_rent() {
                 system_program: system_program::ID,
             }
             .to_account_metas(None),
-            data: aegis::instruction::InitIssuer { id: 0, name: "Oracle".into() }.data(),
+            data: aegis::instruction::InitIssuer {
+                id: 0,
+                name: "Oracle".into(),
+            }
+            .data(),
         }],
         &[&authority],
         &authority.pubkey(),
@@ -1278,7 +1395,10 @@ fn aegis_close_reclaims_rent() {
         &authority.pubkey(),
     )
     .unwrap();
-    assert!(w.svm.get_account(&attestation).is_some_and(|a| !a.data.is_empty()));
+    assert!(w
+        .svm
+        .get_account(&attestation)
+        .is_some_and(|a| !a.data.is_empty()));
 
     w.send(
         &[Instruction {
@@ -1298,7 +1418,9 @@ fn aegis_close_reclaims_rent() {
     .unwrap();
     // Closed → account gone (or zero-lamport, empty).
     assert!(
-        w.svm.get_account(&attestation).is_none_or(|a| a.lamports == 0),
+        w.svm
+            .get_account(&attestation)
+            .is_none_or(|a| a.lamports == 0),
         "attestation not closed"
     );
 }
@@ -1308,7 +1430,11 @@ fn aegis_close_reclaims_rent() {
 fn aegis_valid_from_gates_until_active() {
     let issuer_authority = Keypair::new();
     let issuer = Pubkey::find_program_address(
-        &[b"issuer", issuer_authority.pubkey().as_ref(), &0u64.to_le_bytes()],
+        &[
+            b"issuer",
+            issuer_authority.pubkey().as_ref(),
+            &0u64.to_le_bytes(),
+        ],
         &aegis::id(),
     )
     .0;
@@ -1320,7 +1446,9 @@ fn aegis_valid_from_gates_until_active() {
     policy.attestation_mask = 0b0001;
 
     let mut w = setup_with_policy(policy);
-    w.svm.airdrop(&issuer_authority.pubkey(), 5_000_000_000).unwrap();
+    w.svm
+        .airdrop(&issuer_authority.pubkey(), 5_000_000_000)
+        .unwrap();
     let alice = Keypair::new();
     let bob = Keypair::new();
     prime_sender(&mut w, &alice, bob.pubkey(), 5_000);
@@ -1334,7 +1462,11 @@ fn aegis_valid_from_gates_until_active() {
                 system_program: system_program::ID,
             }
             .to_account_metas(None),
-            data: aegis::instruction::InitIssuer { id: 0, name: "Geo".into() }.data(),
+            data: aegis::instruction::InitIssuer {
+                id: 0,
+                name: "Geo".into(),
+            }
+            .data(),
         }],
         &[&issuer_authority],
         &issuer_authority.pubkey(),
@@ -1375,7 +1507,14 @@ fn aegis_valid_from_gates_until_active() {
     .unwrap();
 
     // Not yet valid → rejected.
-    let ix = w.hooked_transfer_ix(alice.pubkey(), alice.pubkey(), bob.pubkey(), 1_000, issuer, true);
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        1_000,
+        issuer,
+        true,
+    );
     assert!(
         w.send(&[ix], &[&alice], &alice.pubkey()).is_err(),
         "pre-active attestation passed"
@@ -1383,7 +1522,14 @@ fn aegis_valid_from_gates_until_active() {
 
     // After the window opens → allowed.
     w.warp_days(1);
-    let ix = w.hooked_transfer_ix(alice.pubkey(), alice.pubkey(), bob.pubkey(), 1_000, issuer, true);
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        1_000,
+        issuer,
+        true,
+    );
     w.send(&[ix], &[&alice], &alice.pubkey()).unwrap();
     assert_eq!(w.state_of(alice.pubkey()).sent_today, 1_000);
 }
@@ -1395,8 +1541,11 @@ fn aegis_revocation_is_sticky() {
     let authority = Keypair::new();
     let subject = Keypair::new().pubkey();
     w.svm.airdrop(&authority.pubkey(), 5_000_000_000).unwrap();
-    let issuer =
-        Pubkey::find_program_address(&[b"issuer", authority.pubkey().as_ref(), &0u64.to_le_bytes()], &aegis::id()).0;
+    let issuer = Pubkey::find_program_address(
+        &[b"issuer", authority.pubkey().as_ref(), &0u64.to_le_bytes()],
+        &aegis::id(),
+    )
+    .0;
     let attestation = Pubkey::find_program_address(
         &[b"attestation", issuer.as_ref(), subject.as_ref()],
         &aegis::id(),
@@ -1411,7 +1560,11 @@ fn aegis_revocation_is_sticky() {
                 system_program: system_program::ID,
             }
             .to_account_metas(None),
-            data: aegis::instruction::InitIssuer { id: 0, name: "Oracle".into() }.data(),
+            data: aegis::instruction::InitIssuer {
+                id: 0,
+                name: "Oracle".into(),
+            }
+            .data(),
         }],
         &[&authority],
         &authority.pubkey(),
@@ -1433,7 +1586,11 @@ fn aegis_revocation_is_sticky() {
                 system_program: system_program::ID,
             }
             .to_account_metas(None),
-            data: aegis::instruction::IssueAttestation { subject, data: data.clone() }.data(),
+            data: aegis::instruction::IssueAttestation {
+                subject,
+                data: data.clone(),
+            }
+            .data(),
         }],
         &[&authority],
         &authority.pubkey(),

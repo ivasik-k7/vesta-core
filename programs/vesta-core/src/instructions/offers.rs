@@ -48,7 +48,9 @@ pub fn handle_create_offer(
     require!(!ctx.accounts.config.paused, VestaError::ProtocolPaused);
     require!(!ctx.accounts.merchant.paused, VestaError::MerchantPaused);
     require!(
-        ctx.accounts.merchant.can_operate(&ctx.accounts.authority.key()),
+        ctx.accounts
+            .merchant
+            .can_operate(&ctx.accounts.authority.key()),
         VestaError::Unauthorized
     );
     require!(price_points > 0, VestaError::InvalidAmount);
@@ -196,19 +198,27 @@ pub fn handle_redeem_offer(ctx: Context<RedeemOffer>, max_raw_amount: u64) -> Re
         .checked_sub(1)
         .ok_or(VestaError::OfferSoldOut)?;
 
-    let profile = &mut ctx.accounts.customer_profile;
-    if profile.wallet == Pubkey::default() {
-        profile.wallet = ctx.accounts.customer.key();
-        profile.merchant = ctx.accounts.merchant.key();
-        profile.bump = ctx.bumps.customer_profile;
+    let first_touch = ctx.accounts.customer_profile.wallet == Pubkey::default();
+    {
+        let profile = &mut ctx.accounts.customer_profile;
+        if first_touch {
+            profile.wallet = ctx.accounts.customer.key();
+            profile.merchant = ctx.accounts.merchant.key();
+            profile.bump = ctx.bumps.customer_profile;
+        }
+        profile.lifetime_redemptions = profile
+            .lifetime_redemptions
+            .checked_add(1)
+            .ok_or(VestaError::Overflow)?;
     }
-    profile.lifetime_redemptions = profile
-        .lifetime_redemptions
-        .checked_add(1)
-        .ok_or(VestaError::Overflow)?;
 
     let merchant = &mut ctx.accounts.merchant;
     merchant.lifetime_redemptions = merchant.lifetime_redemptions.saturating_add(1);
+    // Count a customer whose first-ever touch at this merchant is a redemption
+    // (gift-then-redeem) so customer_count is not under-reported (AUDIT L-4).
+    if first_touch {
+        merchant.customer_count = merchant.customer_count.saturating_add(1);
+    }
 
     let receipt = &mut ctx.accounts.receipt;
     receipt.offer = offer.key();

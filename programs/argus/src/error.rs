@@ -42,6 +42,8 @@ pub enum GuardError {
     ProgramOwnedDestination,
     #[msg("Provided extra account does not match the meta list derivation")]
     MetaListMismatch,
+    #[msg("execute invoked outside a genuine Token-2022 transfer")]
+    NotTransferring,
     #[msg("Arithmetic overflow")]
     Overflow,
 }

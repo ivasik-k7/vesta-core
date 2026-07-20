@@ -74,7 +74,8 @@ pub mod aegis {
         instructions::attestation::handle_issue_attestation(ctx, subject, data)
     }
 
-    /// Retune an existing attestation, also clearing revocation (authority or operator).
+    /// Retune an existing attestation (authority or operator). Revocation is
+    /// terminal — a revoked attestation is rejected, never reinstated here.
     pub fn update_attestation(
         ctx: Context<ManageAttestation>,
         data: AttestationData,

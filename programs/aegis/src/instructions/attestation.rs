@@ -119,7 +119,10 @@ pub fn handle_update_attestation(
     require!(!ctx.accounts.issuer.paused, AegisError::IssuerPaused);
     // Revocation is terminal — a revoked credential cannot be silently
     // reinstated by an update; the issuer must close and re-issue.
-    require!(!ctx.accounts.attestation.revoked, AegisError::AlreadyRevoked);
+    require!(
+        !ctx.accounts.attestation.revoked,
+        AegisError::AlreadyRevoked
+    );
     validate(&data)?;
 
     let att = &mut ctx.accounts.attestation;

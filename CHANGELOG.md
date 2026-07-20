@@ -30,6 +30,11 @@ Current live deployment. Program IDs in [README → Deployments](README.md#deplo
 - Internal adversarial pre-audit (`docs/SECURITY_AUDIT.md`): 1 High, 3 Medium,
   5 Low, 3 Info; cross-mint swap proven value-conserving; Token-2022 extension
   authorities verified backdoor-free. Not a substitute for a third-party audit.
+- Remediated 9/10 actionable audit findings (M-2 deferred to the mainnet
+  migration): argus `execute` now fails closed outside a real transfer (H-1);
+  clawback is owner-only (M-1); campaign progress is instance-scoped by slot
+  (M-3); plus L-1..L-5 and I-1/I-2 hardening. Regression tests added for H-1
+  and M-1.
 
 ## [1.0.0] — 2026-07 (devnet, superseded)
 

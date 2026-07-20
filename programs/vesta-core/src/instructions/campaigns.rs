@@ -53,6 +53,17 @@ fn validate(args: &CampaignArgs) -> Result<()> {
                 args.quest_reward > 0 && args.quest_reward <= MAX_CAMPAIGN_BONUS,
                 VestaError::CampaignWindowInvalid
             );
+            // A cap or budget below the reward clamps every payout, so the quest
+            // can never register as complete. Reject the impossible config
+            // (0 = unlimited on both, which is fine) (AUDIT L-5).
+            require!(
+                args.per_customer_cap == 0 || args.per_customer_cap >= args.quest_reward,
+                VestaError::CampaignWindowInvalid
+            );
+            require!(
+                args.points_budget == 0 || args.points_budget >= args.quest_reward,
+                VestaError::CampaignWindowInvalid
+            );
         }
         _ => return err!(VestaError::CampaignWindowInvalid),
     }
@@ -94,7 +105,9 @@ pub fn handle_create_campaign(
     require!(!ctx.accounts.config.paused, VestaError::ProtocolPaused);
     require!(!ctx.accounts.merchant.paused, VestaError::MerchantPaused);
     require!(
-        ctx.accounts.merchant.can_operate(&ctx.accounts.authority.key()),
+        ctx.accounts
+            .merchant
+            .can_operate(&ctx.accounts.authority.key()),
         VestaError::Unauthorized
     );
     validate(&args)?;
@@ -119,6 +132,7 @@ pub fn handle_create_campaign(
     c.name = args.name;
     c.active = true;
     c.paused = false;
+    c.created_slot = Clock::get()?.slot;
     c.bump = ctx.bumps.campaign;
 
     emit!(CampaignCreated {
@@ -158,21 +172,34 @@ pub struct UpdateCampaign<'info> {
     pub campaign: Account<'info, Campaign>,
 }
 
-pub fn handle_update_campaign(ctx: Context<UpdateCampaign>, args: UpdateCampaignArgs) -> Result<()> {
+pub fn handle_update_campaign(
+    ctx: Context<UpdateCampaign>,
+    args: UpdateCampaignArgs,
+) -> Result<()> {
     let c = &mut ctx.accounts.campaign;
     if let Some(ends_at) = args.ends_at {
         require!(ends_at > c.starts_at, VestaError::CampaignWindowInvalid);
         c.ends_at = ends_at;
     }
+    let is_quest = c.kind == campaign_kind::QUEST;
     if let Some(budget) = args.points_budget {
         // Never below what has already been paid out.
         require!(
             budget == 0 || budget >= c.points_spent,
             VestaError::CampaignWindowInvalid
         );
+        // A quest budget below the reward makes completion unreachable (L-5).
+        require!(
+            !is_quest || budget == 0 || budget >= c.quest_reward,
+            VestaError::CampaignWindowInvalid
+        );
         c.points_budget = budget;
     }
     if let Some(cap) = args.per_customer_cap {
+        require!(
+            !is_quest || cap == 0 || cap >= c.quest_reward,
+            VestaError::CampaignWindowInvalid
+        );
         c.per_customer_cap = cap;
     }
     if let Some(paused) = args.paused {

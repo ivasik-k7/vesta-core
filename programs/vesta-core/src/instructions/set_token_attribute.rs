@@ -12,10 +12,10 @@ use anchor_spl::{
 use spl_token_metadata_interface::state::Field;
 
 use crate::{
-    constants::{MAX_URI_LEN, MERCHANT_SEED, MINT_SEED},
+    constants::{CONFIG_SEED, MAX_URI_LEN, MERCHANT_SEED, MINT_SEED},
     error::VestaError,
     events::{DecayRateUpdated, TokenAttributeSet, TokenMetadataUpdated},
-    state::Merchant,
+    state::{Config, Merchant},
 };
 
 /// Max length for a custom attribute key or value, bytes.
@@ -55,8 +55,20 @@ pub struct SetTokenAttribute<'info> {
     )]
     pub point_mint: UncheckedAccount<'info>,
 
+    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Account<'info, Config>,
+
     pub token_program: Program<'info, Token2022>,
     pub system_program: Program<'info, System>,
+}
+
+/// The global pause and the merchant pause must halt token mutation too — decay
+/// rate and metadata are value-/trust-affecting and are exactly what an admin
+/// would freeze to contain an incident (AUDIT L-2).
+fn assert_not_paused(ctx: &Context<SetTokenAttribute>) -> Result<()> {
+    require!(!ctx.accounts.config.paused, VestaError::ProtocolPaused);
+    require!(!ctx.accounts.merchant.paused, VestaError::MerchantPaused);
+    Ok(())
 }
 
 pub fn handle_set_token_attribute(
@@ -64,6 +76,7 @@ pub fn handle_set_token_attribute(
     key: String,
     value: String,
 ) -> Result<()> {
+    assert_not_paused(&ctx)?;
     require!(
         !key.is_empty() && key.len() <= MAX_ATTR_LEN && value.len() <= MAX_ATTR_LEN,
         VestaError::StringTooLong
@@ -72,10 +85,7 @@ pub fn handle_set_token_attribute(
     // Token-2022 UpdateField reallocs the metadata account but does not fund it;
     // pre-fund the rent for the growth (over-estimated; surplus stays in-account).
     let mint_ai = ctx.accounts.point_mint.to_account_info();
-    let grow = key
-        .len()
-        .saturating_add(value.len())
-        .saturating_add(16);
+    let grow = key.len().saturating_add(value.len()).saturating_add(16);
     let new_len = mint_ai.data_len().saturating_add(grow);
     let needed = Rent::get()?.minimum_balance(new_len);
     let delta = needed.saturating_sub(mint_ai.lamports());
@@ -95,8 +105,12 @@ pub fn handle_set_token_attribute(
     let merchant_key = ctx.accounts.merchant.key();
     let authority_key = ctx.accounts.authority.key();
     let id_bytes = ctx.accounts.merchant.id.to_le_bytes();
-    let merchant_seeds: &[&[u8]] =
-        &[MERCHANT_SEED, authority_key.as_ref(), &id_bytes, &[ctx.accounts.merchant.bump]];
+    let merchant_seeds: &[&[u8]] = &[
+        MERCHANT_SEED,
+        authority_key.as_ref(),
+        &id_bytes,
+        &[ctx.accounts.merchant.bump],
+    ];
 
     token_metadata_update_field(
         CpiContext::new_with_signer(
@@ -128,6 +142,7 @@ pub fn handle_update_token_metadata(
     field_kind: u8,
     value: String,
 ) -> Result<()> {
+    assert_not_paused(&ctx)?;
     require!(value.len() <= MAX_URI_LEN, VestaError::StringTooLong);
     let field = match field_kind {
         metadata_field::NAME => Field::Name,
@@ -138,7 +153,10 @@ pub fn handle_update_token_metadata(
 
     // Pre-fund any realloc growth (surplus stays in-account).
     let mint_ai = ctx.accounts.point_mint.to_account_info();
-    let new_len = mint_ai.data_len().saturating_add(value.len()).saturating_add(16);
+    let new_len = mint_ai
+        .data_len()
+        .saturating_add(value.len())
+        .saturating_add(16);
     let needed = Rent::get()?.minimum_balance(new_len);
     let delta = needed.saturating_sub(mint_ai.lamports());
     if delta > 0 {
@@ -156,8 +174,12 @@ pub fn handle_update_token_metadata(
 
     let authority_key = ctx.accounts.authority.key();
     let id_bytes = ctx.accounts.merchant.id.to_le_bytes();
-    let merchant_seeds: &[&[u8]] =
-        &[MERCHANT_SEED, authority_key.as_ref(), &id_bytes, &[ctx.accounts.merchant.bump]];
+    let merchant_seeds: &[&[u8]] = &[
+        MERCHANT_SEED,
+        authority_key.as_ref(),
+        &id_bytes,
+        &[ctx.accounts.merchant.bump],
+    ];
     token_metadata_update_field(
         CpiContext::new_with_signer(
             ctx.accounts.token_program.key(),
@@ -183,14 +205,19 @@ pub fn handle_update_token_metadata(
 /// Update the point token's interest-bearing (decay) rate. The merchant PDA is
 /// the rate authority (set at registration). Owner only.
 pub fn handle_update_decay_rate(ctx: Context<SetTokenAttribute>, new_rate_bps: i16) -> Result<()> {
+    assert_not_paused(&ctx)?;
     require!(
         (-10_000..=0).contains(&new_rate_bps),
         VestaError::InvalidDecayRate
     );
     let authority_key = ctx.accounts.authority.key();
     let id_bytes = ctx.accounts.merchant.id.to_le_bytes();
-    let merchant_seeds: &[&[u8]] =
-        &[MERCHANT_SEED, authority_key.as_ref(), &id_bytes, &[ctx.accounts.merchant.bump]];
+    let merchant_seeds: &[&[u8]] = &[
+        MERCHANT_SEED,
+        authority_key.as_ref(),
+        &id_bytes,
+        &[ctx.accounts.merchant.bump],
+    ];
     interest_bearing_mint_update_rate(
         CpiContext::new_with_signer(
             ctx.accounts.token_program.key(),

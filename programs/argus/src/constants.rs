@@ -74,11 +74,8 @@ pub mod flags {
     pub const GIFTING_DISABLED: u16 = 1 << 4;
 
     /// Bits with defined meaning; anything else is rejected at configure time.
-    pub const KNOWN: u16 = BLOCK_PROGRAM_OWNED
-        | ALLOWLIST_ONLY
-        | DENYLIST
-        | REQUIRE_ATTESTATION
-        | GIFTING_DISABLED;
+    pub const KNOWN: u16 =
+        BLOCK_PROGRAM_OWNED | ALLOWLIST_ONLY | DENYLIST | REQUIRE_ATTESTATION | GIFTING_DISABLED;
 }
 
 /// Stable reason codes emitted with every `execute` decision (spec §10).

@@ -2,10 +2,7 @@ use anchor_lang::{
     prelude::*,
     solana_program::{instruction::AccountMeta, program::invoke_signed},
 };
-use anchor_spl::{
-    token_2022::Token2022,
-    token_interface::TokenAccount,
-};
+use anchor_spl::{token_2022::Token2022, token_interface::TokenAccount};
 
 use crate::{
     constants::{CONFIG_SEED, CUSTOMER_SEED, DECIMALS, MERCHANT_SEED, MINT_SEED, SECONDS_PER_DAY},
@@ -90,11 +87,12 @@ pub fn handle_clawback<'info>(
     require!(amount_raw > 0, VestaError::InvalidAmount);
     // Compliance: every clawback must cite a reason.
     require!(reason_code != 0, VestaError::ReasonRequired);
-    // Owner or an authorized operator may claw back.
-    require!(
-        ctx.accounts
-            .merchant
-            .can_operate(&ctx.accounts.merchant_authority.key()),
+    // Clawback confiscates a customer's balance — a high-privilege compliance
+    // action. Owner-only, never an operator hot key: a compromised POS key must
+    // not be able to drain the customer base (SECURITY_AUDIT M-1).
+    require_keys_eq!(
+        ctx.accounts.merchant_authority.key(),
+        ctx.accounts.merchant.authority,
         VestaError::Unauthorized
     );
 
@@ -112,7 +110,10 @@ pub fn handle_clawback<'info>(
             m.clawback_day = today;
             m.clawed_today = 0;
         }
-        m.clawed_today = m.clawed_today.checked_add(amount_raw).ok_or(VestaError::Overflow)?;
+        m.clawed_today = m
+            .clawed_today
+            .checked_add(amount_raw)
+            .ok_or(VestaError::Overflow)?;
         if m.clawback_daily_cap_raw > 0 {
             require!(
                 m.clawed_today <= m.clawback_daily_cap_raw,
@@ -164,18 +165,28 @@ pub fn handle_clawback<'info>(
     // Counters (merchant + per-customer). Fresh profile → wire identity.
     let merchant_key = ctx.accounts.merchant.key();
     let customer_key = ctx.accounts.customer.key();
-    let profile = &mut ctx.accounts.customer_profile;
-    if profile.wallet == Pubkey::default() {
-        profile.wallet = customer_key;
-        profile.merchant = merchant_key;
-        profile.bump = ctx.bumps.customer_profile;
+    let first_touch = ctx.accounts.customer_profile.wallet == Pubkey::default();
+    {
+        let profile = &mut ctx.accounts.customer_profile;
+        if first_touch {
+            profile.wallet = customer_key;
+            profile.merchant = merchant_key;
+            profile.bump = ctx.bumps.customer_profile;
+        }
+        profile.lifetime_clawed_back = profile.lifetime_clawed_back.saturating_add(amount_raw);
     }
-    profile.lifetime_clawed_back = profile.lifetime_clawed_back.saturating_add(amount_raw);
+    if first_touch {
+        ctx.accounts.merchant.customer_count =
+            ctx.accounts.merchant.customer_count.saturating_add(1);
+    }
+    let profile = &mut ctx.accounts.customer_profile;
     profile.clawback_count = profile.clawback_count.saturating_add(1);
 
     let clawed_today = {
         let m = &mut ctx.accounts.merchant;
-        m.lifetime_clawed_back = m.lifetime_clawed_back.saturating_add(u128::from(amount_raw));
+        m.lifetime_clawed_back = m
+            .lifetime_clawed_back
+            .saturating_add(u128::from(amount_raw));
         m.clawback_count = m.clawback_count.saturating_add(1);
         m.clawed_today
     };

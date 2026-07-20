@@ -906,6 +906,11 @@
     },
     {
       "code": 6020,
+      "name": "NotTransferring",
+      "msg": "execute invoked outside a genuine Token-2022 transfer"
+    },
+    {
+      "code": 6021,
       "name": "Overflow",
       "msg": "Arithmetic overflow"
     }

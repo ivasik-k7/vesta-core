@@ -7,7 +7,6 @@ use anchor_lang::{
 use anchor_spl::{
     associated_token::{self, AssociatedToken, Create},
     token_2022::{close_account, initialize_mint2, CloseAccount, InitializeMint2, Token2022},
-    token_interface::Mint,
     token_2022_extensions::{
         interest_bearing_mint_initialize, metadata_pointer_initialize,
         mint_close_authority_initialize, permanent_delegate_initialize, token_metadata_initialize,
@@ -15,6 +14,7 @@ use anchor_spl::{
         MintCloseAuthorityInitialize, PermanentDelegateInitialize, TokenMetadataInitialize,
         TransferHookInitialize,
     },
+    token_interface::Mint,
 };
 use spl_token_2022_interface::extension::ExtensionType;
 use spl_token_metadata_interface::state::TokenMetadata;

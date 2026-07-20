@@ -121,10 +121,16 @@ pub fn handle_accept_alliance_authority(ctx: Context<AcceptAllianceAuthority>) -
 /// Enforce the alliance's member-rate governance bounds (0 = unbounded).
 fn check_rate_bounds(alliance: &Alliance, rate: u32) -> Result<()> {
     if alliance.min_rate_bps > 0 {
-        require!(rate >= alliance.min_rate_bps, VestaError::SwapRateOutOfBounds);
+        require!(
+            rate >= alliance.min_rate_bps,
+            VestaError::SwapRateOutOfBounds
+        );
     }
     if alliance.max_rate_bps > 0 {
-        require!(rate <= alliance.max_rate_bps, VestaError::SwapRateOutOfBounds);
+        require!(
+            rate <= alliance.max_rate_bps,
+            VestaError::SwapRateOutOfBounds
+        );
     }
     Ok(())
 }
@@ -363,15 +369,23 @@ pub fn handle_set_swap_rate(ctx: Context<SetSwapRate>, new_rate: u32) -> Result<
 pub struct SetSwapBudget<'info> {
     pub merchant_authority: Signer<'info>,
 
+    /// The inbound-swap budget is the alliance's risk control over how much a
+    /// member can be minted-into; it needs the alliance authority's co-sign too,
+    /// mirroring `SetSwapRate` (AUDIT L-3).
+    pub alliance_authority: Signer<'info>,
+
     #[account(
         seeds = [MERCHANT_SEED, merchant_authority.key().as_ref(), &merchant.id.to_le_bytes()],
         bump = merchant.bump,
     )]
     pub merchant: Account<'info, Merchant>,
 
+    #[account(constraint = alliance.authority == alliance_authority.key() @ VestaError::Unauthorized)]
+    pub alliance: Account<'info, Alliance>,
+
     #[account(
         mut,
-        seeds = [MEMBER_SEED, member.alliance.as_ref(), merchant.key().as_ref()],
+        seeds = [MEMBER_SEED, alliance.key().as_ref(), merchant.key().as_ref()],
         bump = member.bump,
     )]
     pub member: Account<'info, AllianceMember>,
@@ -491,7 +505,11 @@ pub fn handle_swap_points(
     // alliance monetization stub — the spread is simply not minted).
     let fee_bps = u128::from(ctx.accounts.alliance.fee_bps);
     let ui_out = ui_out
-        .checked_mul(10_000u128.checked_sub(fee_bps).ok_or(VestaError::Overflow)?)
+        .checked_mul(
+            10_000u128
+                .checked_sub(fee_bps)
+                .ok_or(VestaError::Overflow)?,
+        )
         .and_then(|v| v.checked_div(10_000))
         .ok_or(VestaError::Overflow)?;
     let ui_out = u64::try_from(ui_out).map_err(|_| VestaError::Overflow)?;
@@ -562,7 +580,9 @@ pub fn handle_swap_points(
     member_a.total_swapped_out = member_a.total_swapped_out.saturating_add(raw_in);
     let alliance = &mut ctx.accounts.alliance;
     alliance.total_swaps = alliance.total_swaps.saturating_add(1);
-    alliance.total_ui_volume = alliance.total_ui_volume.saturating_add(u128::from(ui_amount));
+    alliance.total_ui_volume = alliance
+        .total_ui_volume
+        .saturating_add(u128::from(ui_amount));
 
     emit!(PointsSwapped {
         customer: ctx.accounts.customer.key(),

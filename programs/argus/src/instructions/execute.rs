@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 use spl_token_2022_interface::extension::{
-    permanent_delegate::PermanentDelegate, BaseStateWithExtensions, StateWithExtensions,
+    permanent_delegate::PermanentDelegate, transfer_hook::TransferHookAccount,
+    BaseStateWithExtensions, StateWithExtensions,
 };
 
 use crate::{
@@ -51,6 +52,15 @@ pub struct Execute<'info> {
 pub fn handle_execute(ctx: Context<Execute>, amount: u64) -> Result<()> {
     let a = &ctx.accounts;
     let mint_key = a.mint.key();
+
+    // Bind to a genuine transfer. The hook interface authenticates no caller and
+    // requires no signer, so without this an attacker could invoke `execute`
+    // directly to write another wallet's velocity state (DoS) or emit forged
+    // audit events. Token-2022 flips the source account's `transferring` flag
+    // for the duration of a real transfer and clears it after; assert it is set
+    // and that `source` is a Token-2022 account of exactly this mint.
+    assert_transferring(&a.source, &mint_key)?;
+
     let source_owner = token_account_owner(&a.source)?;
 
     // Rule 1: the permanent delegate (merchant PDA) moves funds — clawback /
@@ -103,14 +113,24 @@ pub fn handle_execute(ctx: Context<Execute>, amount: u64) -> Result<()> {
     if a.guard_config.flags & flags::BLOCK_PROGRAM_OWNED != 0
         && *a.destination_owner.owner != anchor_lang::system_program::ID
     {
-        decide(&ctx, source_owner, amount, false, reason::PROGRAM_OWNED_DEST)?;
+        decide(
+            &ctx,
+            source_owner,
+            amount,
+            false,
+            reason::PROGRAM_OWNED_DEST,
+        )?;
         return err!(GuardError::ProgramOwnedDestination);
     }
 
     // Rules 6–7: allow / deny lists (spec §2.4). Membership == entry exists.
     if a.guard_config.flags & (flags::ALLOWLIST_ONLY | flags::DENYLIST) != 0 {
         let expected_entry = Pubkey::find_program_address(
-            &[LIST_ENTRY_SEED, mint_key.as_ref(), destination_owner.as_ref()],
+            &[
+                LIST_ENTRY_SEED,
+                mint_key.as_ref(),
+                destination_owner.as_ref(),
+            ],
             &crate::ID,
         )
         .0;
@@ -135,7 +155,13 @@ pub fn handle_execute(ctx: Context<Execute>, amount: u64) -> Result<()> {
     if a.guard_config.flags & flags::REQUIRE_ATTESTATION != 0
         && !attestation_ok(&ctx, destination_owner)?
     {
-        decide(&ctx, source_owner, amount, false, reason::ATTESTATION_FAILED)?;
+        decide(
+            &ctx,
+            source_owner,
+            amount,
+            false,
+            reason::ATTESTATION_FAILED,
+        )?;
         return err!(GuardError::AttestationFailed);
     }
 
@@ -187,7 +213,9 @@ pub fn handle_execute(ctx: Context<Execute>, amount: u64) -> Result<()> {
     // Rule 11: cooldown between transfers.
     let cooldown = i64::from(a.guard_config.cooldown_secs);
     if cooldown > 0 && state.last_transfer_at != 0 {
-        let elapsed = now.checked_sub(state.last_transfer_at).unwrap_or(i64::MAX);
+        // Fail closed on a non-monotonic clock: a future-dated last_transfer_at
+        // enforces the cooldown rather than skipping it.
+        let elapsed = now.checked_sub(state.last_transfer_at).unwrap_or(0);
         if elapsed < cooldown {
             decide(&ctx, source_owner, amount, false, reason::COOLDOWN)?;
             return err!(GuardError::CooldownActive);
@@ -329,6 +357,27 @@ fn attestation_ok(ctx: &Context<Execute>, destination_owner: Pubkey) -> Result<b
     }
 
     Ok(true)
+}
+
+/// Fail closed unless `source` is a Token-2022 account of `mint` that is
+/// mid-transfer (the `TransferHookAccount.transferring` flag Token-2022 sets
+/// only while it is driving a real transfer through this hook). This is what
+/// makes direct third-party invocation of `execute` impossible.
+fn assert_transferring(source: &UncheckedAccount, mint_key: &Pubkey) -> Result<()> {
+    require_keys_eq!(
+        *source.owner,
+        spl_token_2022_interface::ID,
+        GuardError::NotTransferring
+    );
+    let data = source.try_borrow_data()?;
+    let account = StateWithExtensions::<spl_token_2022_interface::state::Account>::unpack(&data)
+        .map_err(|_| GuardError::NotTransferring)?;
+    require_keys_eq!(account.base.mint, *mint_key, GuardError::MintMismatch);
+    let hook = account
+        .get_extension::<TransferHookAccount>()
+        .map_err(|_| GuardError::NotTransferring)?;
+    require!(bool::from(hook.transferring), GuardError::NotTransferring);
+    Ok(())
 }
 
 /// The owner field of an SPL token account lives at bytes 32..64.

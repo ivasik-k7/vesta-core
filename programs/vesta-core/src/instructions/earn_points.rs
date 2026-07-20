@@ -164,7 +164,13 @@ pub fn handle_earn_points(
         unix_day,
         0,
     )?;
-    mint_points(&ctx.accounts.token_program, &ctx.accounts.point_mint, &ctx.accounts.customer_ata, &ctx.accounts.merchant, minted)?;
+    mint_points(
+        &ctx.accounts.token_program,
+        &ctx.accounts.point_mint,
+        &ctx.accounts.customer_ata,
+        &ctx.accounts.merchant,
+        minted,
+    )?;
 
     emit!(PointsEarned {
         merchant: ctx.accounts.merchant.key(),
@@ -279,12 +285,20 @@ pub fn handle_earn_points_campaign(
         VestaError::CampaignNotEligible
     );
 
-    // Fresh progress → count a participant.
+    // Fresh progress → count a participant. Also treat a progress account that
+    // survived a close+recreate of this campaign id as fresh: the campaign PDA
+    // is identical across instances, so we key freshness on the creation slot
+    // and reset the stale quest/bonus state (AUDIT M-3).
     let progress = &mut ctx.accounts.campaign_progress;
-    let fresh_progress = progress.campaign == Pubkey::default();
+    let fresh_progress =
+        progress.campaign == Pubkey::default() || progress.campaign_slot != campaign.created_slot;
     if fresh_progress {
         progress.campaign = campaign.key();
         progress.customer = ctx.accounts.customer.key();
+        progress.campaign_slot = campaign.created_slot;
+        progress.visits = 0;
+        progress.bonus_drawn = 0;
+        progress.completed = false;
         progress.bump = ctx.bumps.campaign_progress;
     }
 
@@ -296,7 +310,8 @@ pub fn handle_earn_points_campaign(
     let mut quest_completed = false;
     let gross_bonus: u64 = match campaign.kind {
         campaign_kind::MULTIPLIER => {
-            let eff_bps = u64::from(campaign.multiplier_bps).min(campaign_headroom_bps(streak_preview));
+            let eff_bps =
+                u64::from(campaign.multiplier_bps).min(campaign_headroom_bps(streak_preview));
             u128::from(amount_base)
                 .checked_mul(u128::from(ctx.accounts.merchant.base_earn_rate))
                 .and_then(|v| v.checked_mul(u128::from(eff_bps)))
@@ -321,7 +336,9 @@ pub fn handle_earn_points_campaign(
     // Clamp by per-customer cap, then by remaining budget.
     let mut bonus = gross_bonus;
     if campaign.per_customer_cap > 0 {
-        let room = campaign.per_customer_cap.saturating_sub(progress.bonus_drawn);
+        let room = campaign
+            .per_customer_cap
+            .saturating_sub(progress.bonus_drawn);
         bonus = bonus.min(room);
     }
     if campaign.points_budget > 0 {
@@ -342,7 +359,13 @@ pub fn handle_earn_points_campaign(
         unix_day,
         bonus,
     )?;
-    mint_points(&ctx.accounts.token_program, &ctx.accounts.point_mint, &ctx.accounts.customer_ata, &ctx.accounts.merchant, minted)?;
+    mint_points(
+        &ctx.accounts.token_program,
+        &ctx.accounts.point_mint,
+        &ctx.accounts.customer_ata,
+        &ctx.accounts.merchant,
+        minted,
+    )?;
 
     // Campaign bookkeeping.
     let campaign = &mut ctx.accounts.campaign;

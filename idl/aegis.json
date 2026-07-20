@@ -425,7 +425,8 @@
     {
       "name": "update_attestation",
       "docs": [
-        "Retune an existing attestation, also clearing revocation (authority or operator)."
+        "Retune an existing attestation (authority or operator). Revocation is",
+        "terminal — a revoked attestation is rejected, never reinstated here."
       ],
       "discriminator": [
         251,

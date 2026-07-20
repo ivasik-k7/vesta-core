@@ -5,6 +5,9 @@
 **Method:** adversarial source review — fan-out across five independent reviewers by program and vulnerability class, every reported finding re-verified line-by-line against source before inclusion.
 **Result:** 1 High, 3 Medium, 5 Low, 3 Informational (new). No Critical. The cross-mint swap is provably value-conserving and the Token-2022 extension authorities contain no backdoor.
 
+> [!NOTE]
+> **Remediation status (this repo):** 9 of the 10 actionable findings are **fixed** and covered by the passing test suite (54 integration tests, `cargo fmt`/`clippy -D warnings` clean). The one exception — **M-2** (merchant authority rotation) — is **deferred**: it requires a PDA-seed redesign that changes the deployed account layout, tracked with the mainnet migration. See per-finding **Status** below.
+
 > [!IMPORTANT]
 > **This is an internal, AI-assisted adversarial review — not an independent third-party firm audit.**
 > It does **not** satisfy the "external security audit" gate on the [mainnet roadmap](../README.md#roadmap).
@@ -27,17 +30,17 @@ Vulnerability classes examined: missing signer/owner checks, account substitutio
 
 | ID | Severity | Title | Status |
 |---|---|---|---|
-| **H-1** | 🔴 High | `argus::execute` is not bound to a real transfer — velocity-state DoS + audit forgery | Open |
-| **M-1** | 🟠 Medium | Operator clawback is unbounded by default (kill-switch ships disarmed) | Open |
-| **M-2** | 🟠 Medium | Merchant owner authority is non-rotatable (no recovery / transfer path) | Open |
-| **M-3** | 🟠 Medium | Stale `CampaignProgress` bleeds into a recreated campaign id | Open |
-| **L-1** | 🟡 Low | Cooldown fails open under a backward clock (`unwrap_or(i64::MAX)`) | Open |
-| **L-2** | 🟡 Low | Global pause does not cover decay-rate / token-metadata mutation | Open |
-| **L-3** | 🟡 Low | Member inbound swap budget is self-set and unbounded (no alliance co-sign) | Open |
-| **L-4** | 🟡 Low | `merchant.customer_count` under-counts redeem-first / clawback-first customers | Open |
-| **L-5** | 🟡 Low | Quest can become structurally impossible to complete when cap < reward | Open |
-| **I-1** | 🔵 Info | Stale `update_attestation` doc comment contradicts the (safe) code | Open |
-| **I-2** | 🔵 Info | `verify_merchant` target account is unconstrained (safe, admin-gated) | Open |
+| **H-1** | 🔴 High | `argus::execute` is not bound to a real transfer — velocity-state DoS + audit forgery | ✅ Fixed |
+| **M-1** | 🟠 Medium | Operator clawback is unbounded by default (kill-switch ships disarmed) | ✅ Fixed |
+| **M-2** | 🟠 Medium | Merchant owner authority is non-rotatable (no recovery / transfer path) | ⏸ Deferred |
+| **M-3** | 🟠 Medium | Stale `CampaignProgress` bleeds into a recreated campaign id | ✅ Fixed |
+| **L-1** | 🟡 Low | Cooldown fails open under a backward clock (`unwrap_or(i64::MAX)`) | ✅ Fixed |
+| **L-2** | 🟡 Low | Global pause does not cover decay-rate / token-metadata mutation | ✅ Fixed |
+| **L-3** | 🟡 Low | Member inbound swap budget is self-set and unbounded (no alliance co-sign) | ✅ Fixed |
+| **L-4** | 🟡 Low | `merchant.customer_count` under-counts redeem-first / clawback-first customers | ✅ Fixed |
+| **L-5** | 🟡 Low | Quest can become structurally impossible to complete when cap < reward | ✅ Fixed |
+| **I-1** | 🔵 Info | Stale `update_attestation` doc comment contradicts the (safe) code | ✅ Fixed |
+| **I-2** | 🔵 Info | `verify_merchant` target account is unconstrained (safe, admin-gated) | ✅ Fixed |
 | **I-3** | 🔵 Info | Sub-cent UI-amount rounding wobble in swaps (not profitably extractable) | Noted |
 
 ---
@@ -79,6 +82,8 @@ The merchant owner is baked into the PDA seeds `["merchant", authority, id]` and
 **Impact.** If the owner key is lost or compromised there is no recovery and operators cannot even be revoked (that too is owner-only). A clean "sell / transfer the merchant" operation is impossible, and the argus guard authority can drift away from a merchant owner that can never itself move.
 
 **Fix.** Add `pending_authority` to `Merchant` and a two-step `transfer_merchant_authority` / `accept_merchant_authority` (mirroring the alliance/issuer pattern). Note this interacts with the PDA seed design — likely store the owner in the account and derive the PDA from a stable id, or document the tradeoff explicitly.
+
+**Status: ⏸ Deferred.** The merchant owner is a PDA seed (`["merchant", authority, id]`) that every instruction and the argus guard re-derive, and the mint/treasury/delegate all hang off it. Making it rotatable requires deriving the merchant PDA from a stable id instead of the owner key — a layout change that invalidates all deployed accounts and seed state. It is tracked with the mainnet migration (which already gates on multisig custody) rather than retrofitted onto the live devnet layout.
 
 ### M-3 — 🟠 Stale `CampaignProgress` bleeds into a recreated campaign id
 
@@ -184,13 +189,29 @@ These are known and documented; several are gated behind the mainnet checklist r
 
 Five independent reviewers were run in parallel, each scoped to a program/concern with the vulnerability taxonomy above: (1) points economics, (2) koinon + clawback value integrity, (3) merchant/token/extension authorities, (4) the argus transfer hook, (5) aegis + the cross-program boundary + a protocol-wide PDA/signer sweep. Every finding a reviewer returned was then re-verified line-by-line against source by the coordinating reviewer before inclusion; claims without a concrete, source-backed exploit path were dropped. Findings already recorded in [`PRODUCTION_REVIEW.md`](PRODUCTION_REVIEW.md) (the v1 pass) were confirmed as fixed or carried forward, not re-counted.
 
-## Remediation priority
+## Remediation applied
 
-1. **H-1** — bind `execute` to a real transfer (`transferring` flag + source-mint/owner checks). Single most important change.
-2. **M-1** — arm the clawback cap by default; **M-3** — epoch-scope `CampaignProgress` seeds.
-3. **M-2** — merchant authority rotation (design decision required).
-4. **L-1/L-2/L-3** — quick, self-contained hardening.
-5. **L-4/L-5, I-1/I-2** — data-integrity and documentation cleanups.
+All fixes below are in-tree and covered by the test suite (54 integration tests
+green; `cargo fmt --all --check` and `cargo clippy --all-targets -- -D warnings`
+clean). Regression tests were added for the two behavioural changes most at risk
+of silent reversion (H-1 real-transfer path, M-1 owner-only clawback).
+
+| ID | Change |
+|---|---|
+| **H-1** | `execute` now asserts `source` is a Token-2022 account of `mint` with the `TransferHookAccount.transferring` flag set — direct third-party invocation fails closed (`GuardError::NotTransferring`). Covered by the 21 real-transfer guard tests. |
+| **M-1** | `clawback` is now owner-only (`require_keys_eq!(signer, merchant.authority)`); operators can no longer confiscate balances. New regression test asserts an operator clawback is rejected. |
+| **M-3** | `Campaign` gained `created_slot`; `CampaignProgress` gained `campaign_slot`. Progress whose slot ≠ the campaign's is treated as fresh and reset, so a reused campaign id starts clean. |
+| **L-1** | Cooldown underflow now `unwrap_or(0)` → a backward clock enforces (not skips) the cooldown. |
+| **L-2** | `SetTokenAttribute` now carries `config`; all three handlers assert `!config.paused && !merchant.paused`. |
+| **L-3** | `set_swap_budget` now requires the `alliance_authority` co-signer, mirroring `set_swap_rate`. |
+| **L-4** | Redeem-first and clawback-first profile creation now increments `merchant.customer_count`. |
+| **L-5** | `create`/`update_campaign` reject a QUEST whose `per_customer_cap` or `points_budget` is non-zero and below `quest_reward`. New regression test. |
+| **I-1** | Corrected the `update_attestation` doc comment (revocation is terminal). |
+| **I-2** | `verify_merchant` now re-derives the merchant PDA from its seeds. |
+| **M-2** | Deferred — requires a PDA-seed redesign that changes the deployed layout; tracked with the mainnet migration. |
+
+Remaining before mainnet: **M-2**, plus the accepted-risk list (external audit,
+multisig admin, `init_config` gate, `migrate_config` removal).
 
 ---
 

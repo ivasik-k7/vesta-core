@@ -109,7 +109,11 @@ pub mod vesta_core {
         instructions::earn_points::handle_earn_points_campaign(ctx, amount_base, visit_day)
     }
 
-    pub fn create_campaign(ctx: Context<CreateCampaign>, id: u64, args: CampaignArgs) -> Result<()> {
+    pub fn create_campaign(
+        ctx: Context<CreateCampaign>,
+        id: u64,
+        args: CampaignArgs,
+    ) -> Result<()> {
         instructions::campaigns::handle_create_campaign(ctx, id, args)
     }
 

@@ -140,7 +140,11 @@ impl World {
             .airdrop(&authority.pubkey(), 50_000_000_000)
             .unwrap();
         let merchant = Pubkey::find_program_address(
-            &[MERCHANT_SEED, authority.pubkey().as_ref(), &0u64.to_le_bytes()],
+            &[
+                MERCHANT_SEED,
+                authority.pubkey().as_ref(),
+                &0u64.to_le_bytes(),
+            ],
             &vesta_core::id(),
         )
         .0;
@@ -165,7 +169,8 @@ impl World {
                     system_program: system_program::ID,
                 }
                 .to_account_metas(None),
-                data: vesta_core::instruction::RegisterMerchant { id: 0,
+                data: vesta_core::instruction::RegisterMerchant {
+                    id: 0,
                     args: RegisterMerchantArgs {
                         name: name.into(),
                         symbol: "PTS".into(),
@@ -717,12 +722,15 @@ fn alliance_authority_two_step_and_rate_cosign() {
         12_000
     );
 
-    // Budget change is member-only.
+    // Budget change needs the merchant AND alliance authority co-sign (here the
+    // creator plays both roles).
     let budget_ix = Instruction {
         program_id: vesta_core::id(),
         accounts: vesta_core::accounts::SetSwapBudget {
             merchant_authority: creator.pubkey(),
+            alliance_authority: creator.pubkey(),
             merchant: kavarna.merchant,
+            alliance,
             member,
         }
         .to_account_metas(None),
@@ -835,63 +843,77 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
     // owner = merchant authority who owns the treasury), then argus program +
     // eaml — passed as remaining_accounts in meta-list order.
     let g = |seeds: &[&[u8]]| Pubkey::find_program_address(seeds, &argus::id()).0;
-    let clawback_ix = |amount: u64, destination: Pubkey, dest_owner: Pubkey, reason: u16| {
-        let attestation = Pubkey::find_program_address(
-            &[
-                b"attestation",
-                Pubkey::default().as_ref(),
-                dest_owner.as_ref(),
-            ],
-            &aegis::id(),
-        )
-        .0;
-        let customer_profile = Pubkey::find_program_address(
-            &[CUSTOMER_SEED, kavarna.merchant.as_ref(), customer.pubkey().as_ref()],
-            &vesta_core::id(),
-        )
-        .0;
-        let mut accounts = vesta_core::accounts::ClawbackPoints {
-            merchant_authority: authority.pubkey(),
-            merchant: kavarna.merchant,
-            customer: customer.pubkey(),
-            customer_profile,
-            customer_ata,
-            treasury: destination,
-            point_mint: kavarna.mint,
-            config,
-            token_program: TOKEN_2022_ID,
-            system_program: system_program::ID,
-        }
-        .to_account_metas(None);
-        accounts.extend([
-            AccountMeta::new_readonly(guard_config, false),
-            AccountMeta::new(
-                g(&[b"wstate", kavarna.mint.as_ref(), customer.pubkey().as_ref()]),
-                false,
-            ),
-            AccountMeta::new_readonly(dest_owner, false),
-            AccountMeta::new_readonly(g(&[b"entry", kavarna.mint.as_ref(), dest_owner.as_ref()]), false),
-            AccountMeta::new_readonly(aegis::id(), false),
-            AccountMeta::new_readonly(Pubkey::default(), false),
-            AccountMeta::new_readonly(attestation, false),
-            AccountMeta::new_readonly(argus::id(), false),
-            AccountMeta::new_readonly(eaml, false),
-        ]);
-        Instruction {
-            program_id: vesta_core::id(),
-            accounts,
-            data: vesta_core::instruction::Clawback {
-                amount_raw: amount,
-                reason_code: reason,
+    let clawback_ix =
+        |actor: Pubkey, amount: u64, destination: Pubkey, dest_owner: Pubkey, reason: u16| {
+            let attestation = Pubkey::find_program_address(
+                &[
+                    b"attestation",
+                    Pubkey::default().as_ref(),
+                    dest_owner.as_ref(),
+                ],
+                &aegis::id(),
+            )
+            .0;
+            let customer_profile = Pubkey::find_program_address(
+                &[
+                    CUSTOMER_SEED,
+                    kavarna.merchant.as_ref(),
+                    customer.pubkey().as_ref(),
+                ],
+                &vesta_core::id(),
+            )
+            .0;
+            let mut accounts = vesta_core::accounts::ClawbackPoints {
+                merchant_authority: actor,
+                merchant: kavarna.merchant,
+                customer: customer.pubkey(),
+                customer_profile,
+                customer_ata,
+                treasury: destination,
+                point_mint: kavarna.mint,
+                config,
+                token_program: TOKEN_2022_ID,
+                system_program: system_program::ID,
             }
-            .data(),
-        }
-    };
+            .to_account_metas(None);
+            accounts.extend([
+                AccountMeta::new_readonly(guard_config, false),
+                AccountMeta::new(
+                    g(&[b"wstate", kavarna.mint.as_ref(), customer.pubkey().as_ref()]),
+                    false,
+                ),
+                AccountMeta::new_readonly(dest_owner, false),
+                AccountMeta::new_readonly(
+                    g(&[b"entry", kavarna.mint.as_ref(), dest_owner.as_ref()]),
+                    false,
+                ),
+                AccountMeta::new_readonly(aegis::id(), false),
+                AccountMeta::new_readonly(Pubkey::default(), false),
+                AccountMeta::new_readonly(attestation, false),
+                AccountMeta::new_readonly(argus::id(), false),
+                AccountMeta::new_readonly(eaml, false),
+            ]);
+            Instruction {
+                program_id: vesta_core::id(),
+                accounts,
+                data: vesta_core::instruction::Clawback {
+                    amount_raw: amount,
+                    reason_code: reason,
+                }
+                .data(),
+            }
+        };
 
     // A zero reason code is rejected (compliance: every clawback cites a reason).
     assert!(
         w.send(
-            &[clawback_ix(1_000, kavarna.treasury, authority.pubkey(), 0)],
+            &[clawback_ix(
+                authority.pubkey(),
+                1_000,
+                kavarna.treasury,
+                authority.pubkey(),
+                0
+            )],
             &[&authority],
             &authority.pubkey()
         )
@@ -899,10 +921,51 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
         "reasonless clawback accepted"
     );
 
+    // Clawback is owner-only: an authorized operator hot key cannot claw back
+    // (AUDIT M-1). Grant an operator, then confirm its clawback is rejected.
+    let operator = Keypair::new();
+    w.svm.airdrop(&operator.pubkey(), 5_000_000_000).unwrap();
+    let grant = Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::MerchantOwnerOnly {
+            authority: authority.pubkey(),
+            merchant: kavarna.merchant,
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::SetMerchantOperator {
+            operator: operator.pubkey(),
+            add: true,
+        }
+        .data(),
+    };
+    w.send(&[grant], &[&authority], &authority.pubkey())
+        .unwrap();
+    assert!(
+        w.send(
+            &[clawback_ix(
+                operator.pubkey(),
+                1_000,
+                kavarna.treasury,
+                authority.pubkey(),
+                7
+            )],
+            &[&operator],
+            &operator.pubkey()
+        )
+        .is_err(),
+        "operator clawback accepted — must be owner-only"
+    );
+
     // Works with NO gift ledger opened (argus rule 1 short-circuits).
     let before = w.balance(kavarna.mint, customer.pubkey());
     w.send(
-        &[clawback_ix(100_000, kavarna.treasury, authority.pubkey(), 7)],
+        &[clawback_ix(
+            authority.pubkey(),
+            100_000,
+            kavarna.treasury,
+            authority.pubkey(),
+            7,
+        )],
         &[&authority],
         &authority.pubkey(),
     )
@@ -919,7 +982,11 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
     assert_eq!(m.lifetime_clawed_back, 100_000);
     assert_eq!(m.clawed_today, 100_000);
     let profile_pda = Pubkey::find_program_address(
-        &[CUSTOMER_SEED, kavarna.merchant.as_ref(), customer.pubkey().as_ref()],
+        &[
+            CUSTOMER_SEED,
+            kavarna.merchant.as_ref(),
+            customer.pubkey().as_ref(),
+        ],
         &vesta_core::id(),
     )
     .0;
@@ -936,7 +1003,13 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
     );
     assert!(
         w.send(
-            &[clawback_ix(1_000, elsewhere, customer.pubkey(), 7)],
+            &[clawback_ix(
+                authority.pubkey(),
+                1_000,
+                elsewhere,
+                customer.pubkey(),
+                7
+            )],
             &[&authority],
             &authority.pubkey()
         )
@@ -947,7 +1020,13 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
     // Cannot claw more than the balance.
     assert!(
         w.send(
-            &[clawback_ix(10_000_000, kavarna.treasury, authority.pubkey(), 7)],
+            &[clawback_ix(
+                authority.pubkey(),
+                10_000_000,
+                kavarna.treasury,
+                authority.pubkey(),
+                7
+            )],
             &[&authority],
             &authority.pubkey()
         )
@@ -968,10 +1047,17 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
         }
         .data(),
     };
-    w.send(&[set_cap], &[&authority], &authority.pubkey()).unwrap();
+    w.send(&[set_cap], &[&authority], &authority.pubkey())
+        .unwrap();
     // +40_000 → 140_000 ≤ 150_000 passes.
     w.send(
-        &[clawback_ix(40_000, kavarna.treasury, authority.pubkey(), 7)],
+        &[clawback_ix(
+            authority.pubkey(),
+            40_000,
+            kavarna.treasury,
+            authority.pubkey(),
+            7,
+        )],
         &[&authority],
         &authority.pubkey(),
     )
@@ -979,7 +1065,13 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
     // +40_000 → 180_000 > 150_000 rejected.
     assert!(
         w.send(
-            &[clawback_ix(40_000, kavarna.treasury, authority.pubkey(), 7)],
+            &[clawback_ix(
+                authority.pubkey(),
+                40_000,
+                kavarna.treasury,
+                authority.pubkey(),
+                7
+            )],
             &[&authority],
             &authority.pubkey()
         )
@@ -1000,10 +1092,12 @@ fn alliance_governance_bounds_and_pause() {
     let alliance = w.create_alliance(&creator, 2);
 
     // Governance: member rates must be within [5_000, 15_000].
-    w.set_alliance_params(&creator, alliance, 0, 5_000, 15_000).unwrap();
+    w.set_alliance_params(&creator, alliance, 0, 5_000, 15_000)
+        .unwrap();
     // Non-authority cannot set params.
     assert!(
-        w.set_alliance_params(&litera_auth, alliance, 0, 1, 2).is_err(),
+        w.set_alliance_params(&litera_auth, alliance, 0, 1, 2)
+            .is_err(),
         "non-authority set alliance params"
     );
 
@@ -1015,8 +1109,12 @@ fn alliance_governance_bounds_and_pause() {
         "out-of-bounds rate joined"
     );
     let join_litera = w.join_ix(&litera, alliance, creator.pubkey(), 10_000, 25_000);
-    w.send(&[join_litera], &[&litera_auth, &creator], &litera_auth.pubkey())
-        .unwrap();
+    w.send(
+        &[join_litera],
+        &[&litera_auth, &creator],
+        &litera_auth.pubkey(),
+    )
+    .unwrap();
     let join_kavarna = w.join_ix(&kavarna, alliance, creator.pubkey(), 10_000, 25_000);
     w.send(&[join_kavarna], &[&creator], &creator.pubkey())
         .unwrap();
@@ -1024,18 +1122,42 @@ fn alliance_governance_bounds_and_pause() {
     // Pause the alliance → swaps are frozen.
     w.earn(&kavarna, customer.pubkey(), 5_000);
     w.set_alliance_paused(&creator, alliance, true).unwrap();
-    let swap = w.swap_ix(customer.pubkey(), alliance, &kavarna, &litera, 10_000, 11_000, 9_000);
+    let swap = w.swap_ix(
+        customer.pubkey(),
+        alliance,
+        &kavarna,
+        &litera,
+        10_000,
+        11_000,
+        9_000,
+    );
     assert!(
-        w.send(&[cu_limit_ix(400_000), swap], &[&customer], &customer.pubkey())
-            .is_err(),
+        w.send(
+            &[cu_limit_ix(400_000), swap],
+            &[&customer],
+            &customer.pubkey()
+        )
+        .is_err(),
         "paused alliance swapped"
     );
 
     // Resume → swap works and volume stats accrue.
     w.set_alliance_paused(&creator, alliance, false).unwrap();
-    let swap = w.swap_ix(customer.pubkey(), alliance, &kavarna, &litera, 10_000, 11_000, 9_000);
-    w.send(&[cu_limit_ix(400_000), swap], &[&customer], &customer.pubkey())
-        .unwrap();
+    let swap = w.swap_ix(
+        customer.pubkey(),
+        alliance,
+        &kavarna,
+        &litera,
+        10_000,
+        11_000,
+        9_000,
+    );
+    w.send(
+        &[cu_limit_ix(400_000), swap],
+        &[&customer],
+        &customer.pubkey(),
+    )
+    .unwrap();
     assert!(w.balance(litera.mint, customer.pubkey()) > 0);
 }
 
@@ -1051,10 +1173,15 @@ fn alliance_can_suspend_a_member() {
     let alliance = w.create_alliance(&creator, 3);
 
     let join_litera = w.join_ix(&litera, alliance, creator.pubkey(), 10_000, 25_000);
-    w.send(&[join_litera], &[&litera_auth, &creator], &litera_auth.pubkey())
-        .unwrap();
+    w.send(
+        &[join_litera],
+        &[&litera_auth, &creator],
+        &litera_auth.pubkey(),
+    )
+    .unwrap();
     let join_kavarna = w.join_ix(&kavarna, alliance, creator.pubkey(), 10_000, 25_000);
-    w.send(&[join_kavarna], &[&creator], &creator.pubkey()).unwrap();
+    w.send(&[join_kavarna], &[&creator], &creator.pubkey())
+        .unwrap();
     w.earn(&kavarna, customer.pubkey(), 5_000);
 
     let litera_member = w.member_pda(alliance, litera.merchant);
@@ -1070,18 +1197,44 @@ fn alliance_can_suspend_a_member() {
     };
 
     // Suspend Litera → swaps into it are frozen.
-    w.send(&[set_active(false)], &[&creator], &creator.pubkey()).unwrap();
-    let swap = w.swap_ix(customer.pubkey(), alliance, &kavarna, &litera, 10_000, 11_000, 9_000);
+    w.send(&[set_active(false)], &[&creator], &creator.pubkey())
+        .unwrap();
+    let swap = w.swap_ix(
+        customer.pubkey(),
+        alliance,
+        &kavarna,
+        &litera,
+        10_000,
+        11_000,
+        9_000,
+    );
     assert!(
-        w.send(&[cu_limit_ix(400_000), swap], &[&customer], &customer.pubkey())
-            .is_err(),
+        w.send(
+            &[cu_limit_ix(400_000), swap],
+            &[&customer],
+            &customer.pubkey()
+        )
+        .is_err(),
         "swap into a suspended member succeeded"
     );
 
     // Reactivate → swap works.
-    w.send(&[set_active(true)], &[&creator], &creator.pubkey()).unwrap();
-    let swap = w.swap_ix(customer.pubkey(), alliance, &kavarna, &litera, 10_000, 11_000, 9_000);
-    w.send(&[cu_limit_ix(400_000), swap], &[&customer], &customer.pubkey())
+    w.send(&[set_active(true)], &[&creator], &creator.pubkey())
         .unwrap();
+    let swap = w.swap_ix(
+        customer.pubkey(),
+        alliance,
+        &kavarna,
+        &litera,
+        10_000,
+        11_000,
+        9_000,
+    );
+    w.send(
+        &[cu_limit_ix(400_000), swap],
+        &[&customer],
+        &customer.pubkey(),
+    )
+    .unwrap();
     assert!(w.balance(litera.mint, customer.pubkey()) > 0);
 }

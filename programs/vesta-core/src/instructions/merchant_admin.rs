@@ -102,7 +102,13 @@ pub fn handle_set_clawback_cap(ctx: Context<MerchantOwnerOnly>, daily_cap_raw: u
 pub struct VerifyMerchant<'info> {
     pub admin: Signer<'info>,
 
-    #[account(mut)]
+    // Re-derive the merchant PDA for defense in depth (AUDIT I-2), consistent
+    // with every other instruction that touches a merchant.
+    #[account(
+        mut,
+        seeds = [MERCHANT_SEED, merchant.authority.as_ref(), &merchant.id.to_le_bytes()],
+        bump = merchant.bump,
+    )]
     pub merchant: Account<'info, Merchant>,
 
     #[account(

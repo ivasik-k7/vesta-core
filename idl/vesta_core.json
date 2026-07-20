@@ -2773,6 +2773,15 @@
           "signer": true
         },
         {
+          "name": "alliance_authority",
+          "docs": [
+            "The inbound-swap budget is the alliance's risk control over how much a",
+            "member can be minted-into; it needs the alliance authority's co-sign too,",
+            "mirroring `SetSwapRate` (AUDIT L-3)."
+          ],
+          "signer": true
+        },
+        {
           "name": "merchant",
           "pda": {
             "seeds": [
@@ -2802,6 +2811,9 @@
           }
         },
         {
+          "name": "alliance"
+        },
+        {
           "name": "member",
           "writable": true,
           "pda": {
@@ -2819,8 +2831,7 @@
               },
               {
                 "kind": "account",
-                "path": "member.alliance",
-                "account": "AllianceMember"
+                "path": "alliance"
               },
               {
                 "kind": "account",
@@ -3002,6 +3013,24 @@
               {
                 "kind": "account",
                 "path": "merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
               }
             ]
           }
@@ -3525,6 +3554,24 @@
           }
         },
         {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
           "name": "token_program",
           "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
         },
@@ -3759,6 +3806,24 @@
           }
         },
         {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
           "name": "token_program",
           "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
         },
@@ -3800,7 +3865,34 @@
         },
         {
           "name": "merchant",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant.authority",
+                "account": "Merchant"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
+              }
+            ]
+          }
         },
         {
           "name": "config",
@@ -5242,6 +5334,15 @@
             "type": "bool"
           },
           {
+            "name": "created_slot",
+            "docs": [
+              "Slot at creation. Because a campaign PDA (`[campaign, merchant, id]`) is",
+              "reusable after close, this distinguishes one instance of an id from the",
+              "next so stale CampaignProgress cannot bleed across (AUDIT M-3)."
+            ],
+            "type": "u64"
+          },
+          {
             "name": "bump",
             "type": "u8"
           }
@@ -5400,6 +5501,14 @@
           {
             "name": "customer",
             "type": "pubkey"
+          },
+          {
+            "name": "campaign_slot",
+            "docs": [
+              "`Campaign.created_slot` of the instance this progress belongs to. A",
+              "mismatch means the id was closed and recreated → treat as fresh."
+            ],
+            "type": "u64"
           },
           {
             "name": "visits",
@@ -5818,8 +5927,8 @@
           {
             "name": "clawback_daily_cap_raw",
             "docs": [
-              "Max raw points clawable per UTC day; 0 = unlimited. Bounds the blast",
-              "radius of a compromised operator key."
+              "Max raw points clawable per UTC day; 0 = unlimited. Defense-in-depth cap",
+              "on the owner-only clawback action (owner key compromise)."
             ],
             "type": "u64"
           },

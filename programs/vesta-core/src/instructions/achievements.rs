@@ -64,7 +64,9 @@ pub fn handle_create_achievement(
     require!(!ctx.accounts.config.paused, VestaError::ProtocolPaused);
     require!(!ctx.accounts.merchant.paused, VestaError::MerchantPaused);
     require!(
-        ctx.accounts.merchant.can_operate(&ctx.accounts.authority.key()),
+        ctx.accounts
+            .merchant
+            .can_operate(&ctx.accounts.authority.key()),
         VestaError::Unauthorized
     );
     require!(name.len() <= MAX_NAME_LEN, VestaError::StringTooLong);

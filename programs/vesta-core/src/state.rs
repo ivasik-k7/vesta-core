@@ -56,8 +56,8 @@ pub struct Merchant {
     /// Lifetime raw points reclaimed via clawback (audit metric).
     pub lifetime_clawed_back: u128,
     pub clawback_count: u64,
-    /// Max raw points clawable per UTC day; 0 = unlimited. Bounds the blast
-    /// radius of a compromised operator key.
+    /// Max raw points clawable per UTC day; 0 = unlimited. Defense-in-depth cap
+    /// on the owner-only clawback action (owner key compromise).
     pub clawback_daily_cap_raw: u64,
     pub clawed_today: u64,
     pub clawback_day: u32,
@@ -164,6 +164,10 @@ pub struct Campaign {
     pub name: String,
     pub active: bool,
     pub paused: bool,
+    /// Slot at creation. Because a campaign PDA (`[campaign, merchant, id]`) is
+    /// reusable after close, this distinguishes one instance of an id from the
+    /// next so stale CampaignProgress cannot bleed across (AUDIT M-3).
+    pub created_slot: u64,
     pub bump: u8,
 }
 
@@ -185,6 +189,9 @@ impl Campaign {
 pub struct CampaignProgress {
     pub campaign: Pubkey,
     pub customer: Pubkey,
+    /// `Campaign.created_slot` of the instance this progress belongs to. A
+    /// mismatch means the id was closed and recreated → treat as fresh.
+    pub campaign_slot: u64,
     /// Qualifying earns applied (quest counter).
     pub visits: u16,
     /// Bonus raw points drawn by this customer under the campaign.
