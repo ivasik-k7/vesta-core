@@ -1,18 +1,16 @@
 {
   "name": "vesta-program-scripts",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "version": "2.0.0",
+  "description": "Operational scripts for the VESTA on-chain programs (deploy, seed, demos)",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "spike": "tsx scripts/spike-token2022.ts",
     "seed": "tsx scripts/seed-master.ts",
     "aegis-demo": "tsx scripts/aegis-demo.ts",
     "live-demo": "tsx scripts/live-demo.ts"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": ["solana", "anchor", "token-2022", "loyalty", "transfer-hook"],
+  "author": "Ivan Kovtun <kovtun.ivan@proton.me> (https://github.com/ivasik-k7)",
+  "license": "MIT",
   "private": "true",
   "type": "module",
   "devDependencies": {

@@ -7,7 +7,7 @@ security contact and disclosure policy referenced by each program's embedded
 
 ## Reporting a vulnerability
 
-Email \*\*kovtun.ivan@proton.me with:
+Email **kovtun.ivan@proton.me** with:
 
 - the affected program (`vesta_core` / `argus` / `aegis`) and program id,
 - a description and, ideally, a reproduction (a failing test or a devnet tx),
