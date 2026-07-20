@@ -453,6 +453,7 @@ transfer, `execute` (the hook).
 |---|---|
 | Disclosure policy & contact | [SECURITY.md](SECURITY.md) · `kovtun.ivan@proton.me` · on-chain `security.txt` in every program |
 | Internal production review | [`docs/PRODUCTION_REVIEW.md`](docs/PRODUCTION_REVIEW.md) — 21 tracked findings, Tier 1–3 remediated |
+| Security audit (pre-audit) | [`docs/SECURITY_AUDIT.md`](docs/SECURITY_AUDIT.md) — adversarial review: 1 High, 3 Medium, 5 Low, 3 Info; swap proven value-conserving. **Not** a third-party audit |
 | Contribution rules | [CONTRIBUTING.md](CONTRIBUTING.md) — enforced arithmetic/`unsafe` lints, quality gates |
 | Code of conduct | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) |
 | Dependency policy | [`deny.toml`](deny.toml) — license allow-list + advisory checks via `cargo deny` |
@@ -470,8 +471,10 @@ Design invariants baked into the codebase:
   arithmetic op is `checked_*`/`saturating_*` by construction.
 
 Known limitations: single-key admin on devnet (multisig planned for mainnet);
-`init_config` is first-come (deploy-time gate tracked in the review).
-**No external audit yet — do not use with real value.**
+`init_config` is first-come (deploy-time gate tracked in the review). An
+internal adversarial [pre-audit](docs/SECURITY_AUDIT.md) has been performed
+(highest open item: the argus `execute` transfer-context bind, H-1).
+**No independent third-party audit yet — do not use with real value.**
 
 ## Testing
 
@@ -584,7 +587,8 @@ CONTRIBUTING.md · CODE_OF_CONDUCT.md · SECURITY.md · CHANGELOG.md · LICENSE
 
 ## Roadmap
 
-- [ ] External security audit
+- [x] Internal adversarial pre-audit ([`docs/SECURITY_AUDIT.md`](docs/SECURITY_AUDIT.md))
+- [ ] External (third-party firm) security audit
 - [ ] Mainnet deployment behind a Squads multisig; role separation (admin ≠ deployer ≠ demo)
 - [ ] `init_config` deploy-time gate
 - [ ] Offer time-windows · achievement metadata updates · attribute removal

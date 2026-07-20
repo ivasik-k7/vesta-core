@@ -27,6 +27,9 @@ Current live deployment. Program IDs in [README → Deployments](README.md#deplo
 ### Security
 - Internal production review: 21 tracked findings, Tier 1–3 remediated
   (`docs/PRODUCTION_REVIEW.md`).
+- Internal adversarial pre-audit (`docs/SECURITY_AUDIT.md`): 1 High, 3 Medium,
+  5 Low, 3 Info; cross-mint swap proven value-conserving; Token-2022 extension
+  authorities verified backdoor-free. Not a substitute for a third-party audit.
 
 ## [1.0.0] — 2026-07 (devnet, superseded)
 
