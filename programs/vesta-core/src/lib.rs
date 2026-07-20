@@ -80,18 +80,50 @@ pub mod vesta_core {
         instructions::earn_points::handle_earn_points(ctx, amount_base, visit_day)
     }
 
-    pub fn create_campaign(
-        ctx: Context<CreateCampaign>,
-        id: u64,
-        multiplier_bps: u16,
-        starts_at: i64,
-        ends_at: i64,
+    /// Earn with a governed campaign applied (multiplier / flat bonus / quest).
+    pub fn earn_points_campaign(
+        ctx: Context<EarnPointsCampaign>,
+        amount_base: u64,
+        visit_day: u32,
     ) -> Result<()> {
-        instructions::campaigns::handle_create_campaign(ctx, id, multiplier_bps, starts_at, ends_at)
+        instructions::earn_points::handle_earn_points_campaign(ctx, amount_base, visit_day)
+    }
+
+    pub fn create_campaign(ctx: Context<CreateCampaign>, id: u64, args: CampaignArgs) -> Result<()> {
+        instructions::campaigns::handle_create_campaign(ctx, id, args)
+    }
+
+    pub fn update_campaign(ctx: Context<UpdateCampaign>, args: UpdateCampaignArgs) -> Result<()> {
+        instructions::campaigns::handle_update_campaign(ctx, args)
     }
 
     pub fn close_campaign(ctx: Context<CloseCampaign>) -> Result<()> {
         instructions::campaigns::handle_close_campaign(ctx)
+    }
+
+    // ── merchant enterprise controls ────────────────────────────────────────
+    pub fn set_merchant_operator(
+        ctx: Context<MerchantOwnerOnly>,
+        operator: Pubkey,
+        add: bool,
+    ) -> Result<()> {
+        instructions::merchant_admin::handle_set_merchant_operator(ctx, operator, add)
+    }
+
+    pub fn set_merchant_paused(ctx: Context<MerchantOwnerOnly>, paused: bool) -> Result<()> {
+        instructions::merchant_admin::handle_set_merchant_paused(ctx, paused)
+    }
+
+    pub fn update_merchant_profile(
+        ctx: Context<MerchantOwnerOnly>,
+        category: u8,
+        metadata_uri: String,
+    ) -> Result<()> {
+        instructions::merchant_admin::handle_update_merchant_profile(ctx, category, metadata_uri)
+    }
+
+    pub fn verify_merchant(ctx: Context<VerifyMerchant>, verified: bool) -> Result<()> {
+        instructions::merchant_admin::handle_verify_merchant(ctx, verified)
     }
 
     pub fn create_achievement(
@@ -144,6 +176,27 @@ pub mod vesta_core {
 
     pub fn accept_alliance_authority(ctx: Context<AcceptAllianceAuthority>) -> Result<()> {
         instructions::koinon::handle_accept_alliance_authority(ctx)
+    }
+
+    pub fn set_alliance_paused(ctx: Context<AllianceAuthorityOnly>, paused: bool) -> Result<()> {
+        instructions::koinon::handle_set_alliance_paused(ctx, paused)
+    }
+
+    pub fn set_alliance_params(
+        ctx: Context<AllianceAuthorityOnly>,
+        fee_bps: u16,
+        min_rate_bps: u32,
+        max_rate_bps: u32,
+    ) -> Result<()> {
+        instructions::koinon::handle_set_alliance_params(ctx, fee_bps, min_rate_bps, max_rate_bps)
+    }
+
+    pub fn update_alliance_profile(
+        ctx: Context<AllianceAuthorityOnly>,
+        category: u8,
+        metadata_uri: String,
+    ) -> Result<()> {
+        instructions::koinon::handle_update_alliance_profile(ctx, category, metadata_uri)
     }
 
     pub fn join_alliance(

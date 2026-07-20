@@ -624,16 +624,12 @@
           "type": "u64"
         },
         {
-          "name": "multiplier_bps",
-          "type": "u16"
-        },
-        {
-          "name": "starts_at",
-          "type": "i64"
-        },
-        {
-          "name": "ends_at",
-          "type": "i64"
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "CampaignArgs"
+            }
+          }
         }
       ]
     },
@@ -784,16 +780,14 @@
               },
               {
                 "kind": "account",
-                "path": "merchant_authority"
+                "path": "merchant.authority",
+                "account": "Merchant"
               }
             ]
           }
         },
         {
-          "name": "customer",
-          "docs": [
-            "are derived from this key."
-          ]
+          "name": "customer"
         },
         {
           "name": "customer_profile",
@@ -924,12 +918,243 @@
           }
         },
         {
+          "name": "token_program",
+          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount_base",
+          "type": "u64"
+        },
+        {
+          "name": "visit_day",
+          "type": "u32"
+        }
+      ]
+    },
+    {
+      "name": "earn_points_campaign",
+      "docs": [
+        "Earn with a governed campaign applied (multiplier / flat bonus / quest)."
+      ],
+      "discriminator": [
+        75,
+        167,
+        192,
+        106,
+        63,
+        132,
+        103,
+        143
+      ],
+      "accounts": [
+        {
+          "name": "merchant_authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant.authority",
+                "account": "Merchant"
+              }
+            ]
+          },
+          "relations": [
+            "campaign"
+          ]
+        },
+        {
+          "name": "customer"
+        },
+        {
+          "name": "customer_profile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  117,
+                  115,
+                  116,
+                  111,
+                  109,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              },
+              {
+                "kind": "account",
+                "path": "customer"
+              }
+            ]
+          }
+        },
+        {
           "name": "campaign",
-          "docs": [
-            "Optional earn-multiplier campaign; the program applies *the supplied*",
-            "campaign — it cannot claim \"best\" on-chain. Validated in the handler."
-          ],
-          "optional": true
+          "writable": true
+        },
+        {
+          "name": "campaign_progress",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  112,
+                  114,
+                  111,
+                  103,
+                  114,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign"
+              },
+              {
+                "kind": "account",
+                "path": "customer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "point_mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              }
+            ]
+          },
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "customer_ata",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "customer"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "point_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
         },
         {
           "name": "token_program",
@@ -1908,6 +2133,188 @@
       ]
     },
     {
+      "name": "set_alliance_params",
+      "discriminator": [
+        33,
+        227,
+        57,
+        252,
+        165,
+        39,
+        47,
+        112
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "alliance"
+          ]
+        },
+        {
+          "name": "alliance",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "fee_bps",
+          "type": "u16"
+        },
+        {
+          "name": "min_rate_bps",
+          "type": "u32"
+        },
+        {
+          "name": "max_rate_bps",
+          "type": "u32"
+        }
+      ]
+    },
+    {
+      "name": "set_alliance_paused",
+      "discriminator": [
+        189,
+        149,
+        231,
+        83,
+        68,
+        43,
+        35,
+        80
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "alliance"
+          ]
+        },
+        {
+          "name": "alliance",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "paused",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "set_merchant_operator",
+      "discriminator": [
+        172,
+        200,
+        175,
+        8,
+        225,
+        147,
+        150,
+        124
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "operator",
+          "type": "pubkey"
+        },
+        {
+          "name": "add",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "set_merchant_paused",
+      "discriminator": [
+        141,
+        35,
+        205,
+        237,
+        8,
+        77,
+        134,
+        13
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "paused",
+          "type": "bool"
+        }
+      ]
+    },
+    {
       "name": "set_paused",
       "discriminator": [
         91,
@@ -2228,10 +2635,12 @@
           "signer": true
         },
         {
-          "name": "alliance"
+          "name": "alliance",
+          "writable": true
         },
         {
           "name": "member_a",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -2524,6 +2933,105 @@
       ]
     },
     {
+      "name": "update_alliance_profile",
+      "discriminator": [
+        52,
+        61,
+        120,
+        73,
+        40,
+        198,
+        92,
+        16
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "alliance"
+          ]
+        },
+        {
+          "name": "alliance",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "category",
+          "type": "u8"
+        },
+        {
+          "name": "metadata_uri",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "update_campaign",
+      "discriminator": [
+        235,
+        31,
+        39,
+        49,
+        121,
+        173,
+        19,
+        92
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "merchant",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          },
+          "relations": [
+            "campaign"
+          ]
+        },
+        {
+          "name": "campaign",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "UpdateCampaignArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "update_merchant",
       "discriminator": [
         192,
@@ -2595,6 +3103,113 @@
           }
         }
       ]
+    },
+    {
+      "name": "update_merchant_profile",
+      "discriminator": [
+        122,
+        110,
+        182,
+        250,
+        186,
+        20,
+        206,
+        61
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "category",
+          "type": "u8"
+        },
+        {
+          "name": "metadata_uri",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "verify_merchant",
+      "discriminator": [
+        64,
+        211,
+        33,
+        148,
+        73,
+        229,
+        155,
+        133
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "merchant",
+          "writable": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "verified",
+          "type": "bool"
+        }
+      ]
     }
   ],
   "accounts": [
@@ -2648,6 +3263,19 @@
         220,
         229,
         192
+      ]
+    },
+    {
+      "name": "CampaignProgress",
+      "discriminator": [
+        113,
+        253,
+        6,
+        60,
+        161,
+        124,
+        158,
+        147
       ]
     },
     {
@@ -2848,6 +3476,45 @@
       ]
     },
     {
+      "name": "AllianceParamsSet",
+      "discriminator": [
+        42,
+        148,
+        18,
+        222,
+        125,
+        177,
+        194,
+        234
+      ]
+    },
+    {
+      "name": "AlliancePausedSet",
+      "discriminator": [
+        74,
+        13,
+        195,
+        163,
+        110,
+        190,
+        107,
+        38
+      ]
+    },
+    {
+      "name": "CampaignBonusPaid",
+      "discriminator": [
+        92,
+        2,
+        42,
+        164,
+        80,
+        40,
+        50,
+        233
+      ]
+    },
+    {
       "name": "CampaignClosed",
       "discriminator": [
         158,
@@ -2871,6 +3538,19 @@
         131,
         64,
         152
+      ]
+    },
+    {
+      "name": "CampaignUpdated",
+      "discriminator": [
+        110,
+        209,
+        206,
+        190,
+        205,
+        2,
+        234,
+        81
       ]
     },
     {
@@ -2913,6 +3593,45 @@
       ]
     },
     {
+      "name": "MerchantOperatorSet",
+      "discriminator": [
+        92,
+        165,
+        78,
+        8,
+        187,
+        17,
+        94,
+        7
+      ]
+    },
+    {
+      "name": "MerchantPausedSet",
+      "discriminator": [
+        161,
+        201,
+        149,
+        69,
+        240,
+        9,
+        113,
+        244
+      ]
+    },
+    {
+      "name": "MerchantProfileUpdated",
+      "discriminator": [
+        158,
+        43,
+        223,
+        232,
+        218,
+        150,
+        40,
+        155
+      ]
+    },
+    {
       "name": "MerchantRegistered",
       "discriminator": [
         202,
@@ -2936,6 +3655,19 @@
         56,
         193,
         252
+      ]
+    },
+    {
+      "name": "MerchantVerifiedSet",
+      "discriminator": [
+        46,
+        28,
+        206,
+        178,
+        158,
+        137,
+        47,
+        42
       ]
     },
     {
@@ -3150,91 +3882,126 @@
     },
     {
       "code": 6013,
+      "name": "CampaignNotEligible",
+      "msg": "Customer does not meet the campaign's eligibility (spend/tier)"
+    },
+    {
+      "code": 6014,
+      "name": "MerchantPaused",
+      "msg": "Merchant is paused"
+    },
+    {
+      "code": 6015,
+      "name": "OperatorsFull",
+      "msg": "Operator slots are full"
+    },
+    {
+      "code": 6016,
+      "name": "OperatorNotFound",
+      "msg": "Operator not found"
+    },
+    {
+      "code": 6017,
+      "name": "SwapRateOutOfBounds",
+      "msg": "Swap rate is outside the alliance's governance bounds"
+    },
+    {
+      "code": 6018,
+      "name": "AlliancePaused",
+      "msg": "Alliance is paused"
+    },
+    {
+      "code": 6019,
+      "name": "ValueTooLarge",
+      "msg": "Value exceeds the allowed maximum"
+    },
+    {
+      "code": 6020,
       "name": "OfferInactive",
       "msg": "Offer is not active"
     },
     {
-      "code": 6014,
+      "code": 6021,
       "name": "OfferSoldOut",
       "msg": "Offer supply is exhausted"
     },
     {
-      "code": 6015,
+      "code": 6022,
       "name": "SlippageExceeded",
       "msg": "Slippage bound exceeded"
     },
     {
-      "code": 6016,
+      "code": 6023,
       "name": "MintMismatch",
       "msg": "Mint does not match the merchant point mint"
     },
     {
-      "code": 6017,
+      "code": 6024,
       "name": "MerchantMismatch",
       "msg": "Merchant account mismatch"
     },
     {
-      "code": 6018,
+      "code": 6025,
       "name": "TreasuryMismatch",
       "msg": "Treasury account mismatch"
     },
     {
-      "code": 6019,
+      "code": 6026,
       "name": "AllianceMismatch",
       "msg": "Alliance mismatch"
     },
     {
-      "code": 6020,
+      "code": 6027,
       "name": "MemberInactive",
       "msg": "Alliance member is not active"
     },
     {
-      "code": 6021,
+      "code": 6028,
       "name": "AlreadyInAlliance",
       "msg": "Merchant already belongs to an alliance"
     },
     {
-      "code": 6022,
+      "code": 6029,
       "name": "SwapBudgetExceeded",
       "msg": "Daily swap-in budget exceeded"
     },
     {
-      "code": 6023,
+      "code": 6030,
       "name": "InvalidSwapRate",
       "msg": "Invalid swap rate"
     },
     {
-      "code": 6024,
+      "code": 6031,
       "name": "GuardNotInitialized",
       "msg": "Transfer guard is not initialized"
     },
     {
-      "code": 6025,
+      "code": 6032,
       "name": "GuardAlreadyFinalized",
       "msg": "Transfer guard already finalized"
     },
     {
-      "code": 6026,
+      "code": 6033,
       "name": "ThresholdNotReached",
       "msg": "Achievement threshold not reached"
     },
     {
-      "code": 6027,
+      "code": 6034,
       "name": "AlreadyGranted",
       "msg": "Achievement already granted"
     },
     {
-      "code": 6028,
+      "code": 6035,
       "name": "InvalidAmount",
       "msg": "Amount must be greater than zero"
     },
     {
-      "code": 6029,
+      "code": 6036,
       "name": "Overflow",
       "msg": "Arithmetic overflow"
     },
     {
-      "code": 6030,
+      "code": 6037,
       "name": "ConversionFailed",
       "msg": "Conversion return data missing or malformed"
     }
@@ -3354,7 +4121,11 @@
     {
       "name": "Alliance",
       "docs": [
-        "Koinon alliance root; creator in the seeds kills permissionless id squatting."
+        "Koinon alliance root; creator in the seeds kills permissionless id squatting.",
+        "",
+        "Enterprise surface: alliance-level pause, member swap-rate governance bounds,",
+        "a swap spread (`fee_bps`, an anti-abuse haircut on cross-swaps), a display",
+        "category + metadata URI, and aggregate swap stats."
       ],
       "type": {
         "kind": "struct",
@@ -3380,6 +4151,47 @@
           {
             "name": "member_count",
             "type": "u16"
+          },
+          {
+            "name": "paused",
+            "docs": [
+              "Freeze all cross-swaps in the alliance."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "fee_bps",
+            "docs": [
+              "Spread applied to each swap's output UI value (anti-abuse / spread), bps."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "min_rate_bps",
+            "docs": [
+              "Governance bounds on member `rate_bps_to_alliance` (0 = unbounded)."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "max_rate_bps",
+            "type": "u32"
+          },
+          {
+            "name": "category",
+            "type": "u8"
+          },
+          {
+            "name": "metadata_uri",
+            "type": "string"
+          },
+          {
+            "name": "total_swaps",
+            "type": "u64"
+          },
+          {
+            "name": "total_ui_volume",
+            "type": "u128"
           },
           {
             "name": "bump",
@@ -3491,7 +4303,7 @@
     {
       "name": "AllianceMember",
       "docs": [
-        "Alliance membership: normalized swap rate + inbound-swap risk budget."
+        "Alliance membership: normalized swap rate + inbound-swap risk budget + stats."
       ],
       "type": {
         "kind": "struct",
@@ -3525,6 +4337,18 @@
             "type": "bool"
           },
           {
+            "name": "joined_at",
+            "type": "i64"
+          },
+          {
+            "name": "total_swapped_in",
+            "type": "u64"
+          },
+          {
+            "name": "total_swapped_out",
+            "type": "u64"
+          },
+          {
             "name": "bump",
             "type": "u8"
           }
@@ -3532,9 +4356,50 @@
       }
     },
     {
+      "name": "AllianceParamsSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "alliance",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "min_rate_bps",
+            "type": "u32"
+          },
+          {
+            "name": "max_rate_bps",
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AlliancePausedSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "alliance",
+            "type": "pubkey"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
       "name": "Campaign",
       "docs": [
-        "Earn multiplier campaign (phase 3). `merchant` first for memcmp catalogs."
+        "A merchant engagement campaign (phase 3, enterprise/gamified). `merchant`",
+        "first for memcmp catalogs."
       ],
       "type": {
         "kind": "struct",
@@ -3548,8 +4413,71 @@
             "type": "u64"
           },
           {
+            "name": "kind",
+            "docs": [
+              "`campaign_kind::*`."
+            ],
+            "type": "u8"
+          },
+          {
             "name": "multiplier_bps",
+            "docs": [
+              "MULTIPLIER: additive earn boost, bps (stacks with streak, jointly capped)."
+            ],
             "type": "u16"
+          },
+          {
+            "name": "flat_bonus",
+            "docs": [
+              "FLAT_BONUS: raw points added per qualifying earn."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "quest_target",
+            "docs": [
+              "QUEST: qualifying earns required to complete."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "quest_reward",
+            "docs": [
+              "QUEST: raw-point reward on completion."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "min_spend_base",
+            "docs": [
+              "Minimum qualifying spend (base minor units) for the campaign to apply."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "min_tier",
+            "docs": [
+              "Minimum customer tier (VIP targeting)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "points_budget",
+            "docs": [
+              "Total bonus-point budget; 0 = unlimited. Campaign stops paying when hit."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "points_spent",
+            "type": "u64"
+          },
+          {
+            "name": "per_customer_cap",
+            "docs": [
+              "Max bonus a single customer may draw; 0 = unlimited."
+            ],
+            "type": "u64"
           },
           {
             "name": "starts_at",
@@ -3560,12 +4488,119 @@
             "type": "i64"
           },
           {
+            "name": "participant_count",
+            "type": "u32"
+          },
+          {
+            "name": "redemptions",
+            "docs": [
+              "Count of qualifying applications (payouts)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
             "name": "active",
+            "type": "bool"
+          },
+          {
+            "name": "paused",
             "type": "bool"
           },
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CampaignArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "kind",
+            "type": "u8"
+          },
+          {
+            "name": "multiplier_bps",
+            "type": "u16"
+          },
+          {
+            "name": "flat_bonus",
+            "type": "u64"
+          },
+          {
+            "name": "quest_target",
+            "type": "u16"
+          },
+          {
+            "name": "quest_reward",
+            "type": "u64"
+          },
+          {
+            "name": "min_spend_base",
+            "type": "u64"
+          },
+          {
+            "name": "min_tier",
+            "type": "u8"
+          },
+          {
+            "name": "points_budget",
+            "type": "u64"
+          },
+          {
+            "name": "per_customer_cap",
+            "type": "u64"
+          },
+          {
+            "name": "starts_at",
+            "type": "i64"
+          },
+          {
+            "name": "ends_at",
+            "type": "i64"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CampaignBonusPaid",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "campaign",
+            "type": "u64"
+          },
+          {
+            "name": "customer",
+            "type": "pubkey"
+          },
+          {
+            "name": "kind",
+            "type": "u8"
+          },
+          {
+            "name": "bonus",
+            "type": "u64"
+          },
+          {
+            "name": "quest_completed",
+            "type": "bool"
           }
         ]
       }
@@ -3600,12 +4635,89 @@
             "type": "u64"
           },
           {
+            "name": "kind",
+            "type": "u8"
+          },
+          {
             "name": "multiplier_bps",
             "type": "u16"
           },
           {
             "name": "starts_at",
             "type": "i64"
+          },
+          {
+            "name": "ends_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CampaignProgress",
+      "docs": [
+        "Per-(campaign, customer) participation state — enforces per-customer caps",
+        "and tracks quest progress. Created on first qualifying earn."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "campaign",
+            "type": "pubkey"
+          },
+          {
+            "name": "customer",
+            "type": "pubkey"
+          },
+          {
+            "name": "visits",
+            "docs": [
+              "Qualifying earns applied (quest counter)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "bonus_drawn",
+            "docs": [
+              "Bonus raw points drawn by this customer under the campaign."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "completed",
+            "docs": [
+              "Quest completed (reward already paid)."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CampaignUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "id",
+            "type": "u64"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          },
+          {
+            "name": "points_budget",
+            "type": "u64"
           },
           {
             "name": "ends_at",
@@ -3728,6 +4840,20 @@
             "type": "u8"
           },
           {
+            "name": "lifetime_spend_base",
+            "docs": [
+              "Total qualifying spend (base minor units) seen across earns."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "campaigns_completed",
+            "docs": [
+              "Count of quest-style campaigns completed."
+            ],
+            "type": "u16"
+          },
+          {
             "name": "bump",
             "type": "u8"
           }
@@ -3756,7 +4882,13 @@
     {
       "name": "Merchant",
       "docs": [
-        "One per merchant; authority is baked into the seeds (no key rotation in-scope)."
+        "One per merchant; authority is baked into the seeds (no key rotation in-scope).",
+        "",
+        "Enterprise surface: a cold `authority` (owner, in the seeds) plus up to",
+        "`MAX_OPERATORS` hot delegate keys that may run day-to-day operations",
+        "(earn, campaigns, achievements) without the owner key; a merchant-level",
+        "pause; an admin-set `verified` trust flag; a display category + metadata",
+        "URI; and lifetime operational stats."
       ],
       "type": {
         "kind": "struct",
@@ -3800,11 +4932,115 @@
             }
           },
           {
+            "name": "operators",
+            "docs": [
+              "Hot operational keys (earn/campaigns/achievements). Owner is implicit."
+            ],
+            "type": {
+              "array": [
+                "pubkey",
+                4
+              ]
+            }
+          },
+          {
+            "name": "operator_count",
+            "type": "u8"
+          },
+          {
+            "name": "paused",
+            "docs": [
+              "Merchant-scoped freeze of earn/redeem, independent of the global pause."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "verified",
+            "docs": [
+              "Protocol-admin-set trust badge (e.g. KYB-verified brand)."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "category",
+            "docs": [
+              "Display category (free-form enum; UI maps to a label)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "metadata_uri",
+            "docs": [
+              "Off-chain profile JSON (logo, links, description)."
+            ],
+            "type": "string"
+          },
+          {
+            "name": "lifetime_redemptions",
+            "type": "u64"
+          },
+          {
+            "name": "badges_issued",
+            "type": "u64"
+          },
+          {
             "name": "bump",
             "type": "u8"
           },
           {
             "name": "mint_bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MerchantOperatorSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "operator",
+            "type": "pubkey"
+          },
+          {
+            "name": "added",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MerchantPausedSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MerchantProfileUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "category",
             "type": "u8"
           }
         ]
@@ -3846,6 +5082,22 @@
           {
             "name": "base_earn_rate",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MerchantVerifiedSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "verified",
+            "type": "bool"
           }
         ]
       }
@@ -4183,6 +5435,43 @@
           }
         ]
       }
+    },
+    {
+      "name": "UpdateCampaignArgs",
+      "docs": [
+        "Partial in-flight retune. Owner may extend the window, grow the budget,",
+        "adjust the per-customer cap, or pause/resume — not change the kind or its",
+        "core payout params (those define the offer customers signed up for)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ends_at",
+            "type": {
+              "option": "i64"
+            }
+          },
+          {
+            "name": "points_budget",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "per_customer_cap",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "paused",
+            "type": {
+              "option": "bool"
+            }
+          }
+        ]
+      }
     }
   ],
   "constants": [
@@ -4208,6 +5497,11 @@
       ],
       "type": "u16",
       "value": "20000"
+    },
+    {
+      "name": "CAMPAIGN_PROGRESS_SEED",
+      "type": "bytes",
+      "value": "[99, 112, 114, 111, 103, 114, 101, 115, 115]"
     },
     {
       "name": "CAMPAIGN_SEED",
@@ -4238,9 +5532,26 @@
       "value": "[107, 108, 101, 111, 115]"
     },
     {
+      "name": "MAX_ALLIANCE_FEE_BPS",
+      "docs": [
+        "Alliance swap spread ceiling (10%)."
+      ],
+      "type": "u16",
+      "value": "1000"
+    },
+    {
       "name": "MAX_BASE_EARN_RATE",
       "type": "u64",
       "value": "1000"
+    },
+    {
+      "name": "MAX_CAMPAIGN_BONUS",
+      "docs": [
+        "Bonus-point ceiling for a single flat-bonus / quest payout, raw units",
+        "(= 10 000.00 pts). Bounds abuse of campaign bonuses."
+      ],
+      "type": "u64",
+      "value": "1000000"
     },
     {
       "name": "MAX_EARN_PER_TX",
@@ -4249,6 +5560,14 @@
       ],
       "type": "u64",
       "value": "1000000"
+    },
+    {
+      "name": "MAX_QUEST_TARGET",
+      "docs": [
+        "Max quest length (qualifying visits)."
+      ],
+      "type": "u16",
+      "value": "1000"
     },
     {
       "name": "MAX_TOTAL_MULTIPLIER_BPS",

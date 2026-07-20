@@ -28,6 +28,20 @@ pub enum VestaError {
     CampaignInactive,
     #[msg("Campaign window is invalid")]
     CampaignWindowInvalid,
+    #[msg("Customer does not meet the campaign's eligibility (spend/tier)")]
+    CampaignNotEligible,
+    #[msg("Merchant is paused")]
+    MerchantPaused,
+    #[msg("Operator slots are full")]
+    OperatorsFull,
+    #[msg("Operator not found")]
+    OperatorNotFound,
+    #[msg("Swap rate is outside the alliance's governance bounds")]
+    SwapRateOutOfBounds,
+    #[msg("Alliance is paused")]
+    AlliancePaused,
+    #[msg("Value exceeds the allowed maximum")]
+    ValueTooLarge,
     #[msg("Offer is not active")]
     OfferInactive,
     #[msg("Offer supply is exhausted")]

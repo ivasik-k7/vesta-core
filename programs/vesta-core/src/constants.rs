@@ -15,6 +15,8 @@ pub const RECEIPT_SEED: &[u8] = b"receipt";
 #[constant]
 pub const CAMPAIGN_SEED: &[u8] = b"campaign";
 #[constant]
+pub const CAMPAIGN_PROGRESS_SEED: &[u8] = b"cprogress";
+#[constant]
 pub const ACHIEVE_SEED: &[u8] = b"achieve";
 #[constant]
 pub const KLEOS_SEED: &[u8] = b"kleos";
@@ -42,6 +44,25 @@ pub const STREAK_DAYS_CAP: u16 = 30;
 /// Per-campaign multiplier bound (2.0×).
 #[constant]
 pub const CAMPAIGN_MAX_BPS: u16 = 20_000;
+
+/// Bonus-point ceiling for a single flat-bonus / quest payout, raw units
+/// (= 10 000.00 pts). Bounds abuse of campaign bonuses.
+#[constant]
+pub const MAX_CAMPAIGN_BONUS: u64 = 1_000_000;
+
+/// Max quest length (qualifying visits).
+#[constant]
+pub const MAX_QUEST_TARGET: u16 = 1_000;
+
+/// Alliance swap spread ceiling (10%).
+#[constant]
+pub const MAX_ALLIANCE_FEE_BPS: u16 = 1_000;
+
+/// Merchant/alliance profile URI length bound.
+pub const MAX_METADATA_URI_LEN: usize = 128;
+
+/// Campaign display-name length bound.
+pub const MAX_CAMPAIGN_NAME_LEN: usize = 48;
 
 /// Joint cap over streak + campaign composition (2.4×).
 #[constant]

@@ -97,15 +97,74 @@ pub struct TransferGuardFinalized {
 pub struct CampaignCreated {
     pub merchant: Pubkey,
     pub id: u64,
+    pub kind: u8,
     pub multiplier_bps: u16,
     pub starts_at: i64,
     pub ends_at: i64,
 }
 
 #[event]
+pub struct CampaignUpdated {
+    pub merchant: Pubkey,
+    pub id: u64,
+    pub paused: bool,
+    pub points_budget: u64,
+    pub ends_at: i64,
+}
+
+#[event]
+pub struct CampaignBonusPaid {
+    pub merchant: Pubkey,
+    pub campaign: u64,
+    pub customer: Pubkey,
+    pub kind: u8,
+    pub bonus: u64,
+    pub quest_completed: bool,
+}
+
+#[event]
 pub struct CampaignClosed {
     pub merchant: Pubkey,
     pub id: u64,
+}
+
+#[event]
+pub struct MerchantOperatorSet {
+    pub merchant: Pubkey,
+    pub operator: Pubkey,
+    pub added: bool,
+}
+
+#[event]
+pub struct MerchantPausedSet {
+    pub merchant: Pubkey,
+    pub paused: bool,
+}
+
+#[event]
+pub struct MerchantVerifiedSet {
+    pub merchant: Pubkey,
+    pub verified: bool,
+}
+
+#[event]
+pub struct MerchantProfileUpdated {
+    pub merchant: Pubkey,
+    pub category: u8,
+}
+
+#[event]
+pub struct AlliancePausedSet {
+    pub alliance: Pubkey,
+    pub paused: bool,
+}
+
+#[event]
+pub struct AllianceParamsSet {
+    pub alliance: Pubkey,
+    pub fee_bps: u16,
+    pub min_rate_bps: u32,
+    pub max_rate_bps: u32,
 }
 
 #[event]

@@ -209,7 +209,6 @@ impl World {
                 point_mint: shop.mint,
                 customer_ata: ata,
                 config: self.config,
-                campaign: None,
                 token_program: TOKEN_2022_ID,
                 associated_token_program: ATA_PROGRAM_ID,
                 system_program: system_program::ID,
@@ -356,6 +355,49 @@ impl World {
             .unwrap()
             .data;
         AllianceMember::try_deserialize(&mut data.as_slice()).unwrap()
+    }
+
+    fn set_alliance_params(
+        &mut self,
+        authority: &Keypair,
+        alliance: Pubkey,
+        fee_bps: u16,
+        min_rate_bps: u32,
+        max_rate_bps: u32,
+    ) -> Result<(), String> {
+        let ix = Instruction {
+            program_id: vesta_core::id(),
+            accounts: vesta_core::accounts::AllianceAuthorityOnly {
+                authority: authority.pubkey(),
+                alliance,
+            }
+            .to_account_metas(None),
+            data: vesta_core::instruction::SetAllianceParams {
+                fee_bps,
+                min_rate_bps,
+                max_rate_bps,
+            }
+            .data(),
+        };
+        self.send(&[ix], &[authority], &authority.pubkey())
+    }
+
+    fn set_alliance_paused(
+        &mut self,
+        authority: &Keypair,
+        alliance: Pubkey,
+        paused: bool,
+    ) -> Result<(), String> {
+        let ix = Instruction {
+            program_id: vesta_core::id(),
+            accounts: vesta_core::accounts::AllianceAuthorityOnly {
+                authority: authority.pubkey(),
+                alliance,
+            }
+            .to_account_metas(None),
+            data: vesta_core::instruction::SetAlliancePaused { paused }.data(),
+        };
+        self.send(&[ix], &[authority], &authority.pubkey())
     }
 }
 
@@ -878,4 +920,55 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
         .is_err(),
         "over-balance clawback accepted"
     );
+}
+
+#[test]
+fn alliance_governance_bounds_and_pause() {
+    let mut w = World::new();
+    let kavarna = w.open_shop("Kavarna");
+    let litera = w.open_shop("Litera");
+    let customer = Keypair::new();
+    w.svm.airdrop(&customer.pubkey(), 10_000_000_000).unwrap();
+    let creator = kavarna.authority.insecure_clone();
+    let litera_auth = litera.authority.insecure_clone();
+    let alliance = w.create_alliance(&creator, 2);
+
+    // Governance: member rates must be within [5_000, 15_000].
+    w.set_alliance_params(&creator, alliance, 0, 5_000, 15_000).unwrap();
+    // Non-authority cannot set params.
+    assert!(
+        w.set_alliance_params(&litera_auth, alliance, 0, 1, 2).is_err(),
+        "non-authority set alliance params"
+    );
+
+    // Join below the min rate → rejected; in-bounds → accepted.
+    let bad = w.join_ix(&litera, alliance, creator.pubkey(), 3_000, 25_000);
+    assert!(
+        w.send(&[bad], &[&litera_auth, &creator], &litera_auth.pubkey())
+            .is_err(),
+        "out-of-bounds rate joined"
+    );
+    let join_litera = w.join_ix(&litera, alliance, creator.pubkey(), 10_000, 25_000);
+    w.send(&[join_litera], &[&litera_auth, &creator], &litera_auth.pubkey())
+        .unwrap();
+    let join_kavarna = w.join_ix(&kavarna, alliance, creator.pubkey(), 10_000, 25_000);
+    w.send(&[join_kavarna], &[&creator], &creator.pubkey())
+        .unwrap();
+
+    // Pause the alliance → swaps are frozen.
+    w.earn(&kavarna, customer.pubkey(), 5_000);
+    w.set_alliance_paused(&creator, alliance, true).unwrap();
+    let swap = w.swap_ix(customer.pubkey(), alliance, &kavarna, &litera, 10_000, 11_000, 9_000);
+    assert!(
+        w.send(&[cu_limit_ix(400_000), swap], &[&customer], &customer.pubkey())
+            .is_err(),
+        "paused alliance swapped"
+    );
+
+    // Resume → swap works and volume stats accrue.
+    w.set_alliance_paused(&creator, alliance, false).unwrap();
+    let swap = w.swap_ix(customer.pubkey(), alliance, &kavarna, &litera, 10_000, 11_000, 9_000);
+    w.send(&[cu_limit_ix(400_000), swap], &[&customer], &customer.pubkey())
+        .unwrap();
+    assert!(w.balance(litera.mint, customer.pubkey()) > 0);
 }

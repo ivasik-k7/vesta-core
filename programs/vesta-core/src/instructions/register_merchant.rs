@@ -290,6 +290,14 @@ pub fn handle_register_merchant(
     merchant.lifetime_points_issued = 0;
     merchant.customer_count = 0;
     merchant.joined_alliance = None;
+    merchant.operators = Default::default();
+    merchant.operator_count = 0;
+    merchant.paused = false;
+    merchant.verified = false;
+    merchant.category = 0;
+    merchant.metadata_uri = String::new();
+    merchant.lifetime_redemptions = 0;
+    merchant.badges_issued = 0;
     merchant.bump = ctx.bumps.merchant;
     merchant.mint_bump = ctx.bumps.mint;
 

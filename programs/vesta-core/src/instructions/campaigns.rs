@@ -1,11 +1,63 @@
 use anchor_lang::prelude::*;
 
 use crate::{
-    constants::{CAMPAIGN_MAX_BPS, CAMPAIGN_SEED, CONFIG_SEED, MERCHANT_SEED},
+    constants::{
+        CAMPAIGN_MAX_BPS, CAMPAIGN_SEED, CONFIG_SEED, MAX_CAMPAIGN_BONUS, MAX_CAMPAIGN_NAME_LEN,
+        MAX_QUEST_TARGET, MERCHANT_SEED,
+    },
     error::VestaError,
-    events::{CampaignClosed, CampaignCreated},
-    state::{Campaign, Config, Merchant},
+    events::{CampaignClosed, CampaignCreated, CampaignUpdated},
+    state::{campaign_kind, Campaign, Config, Merchant},
 };
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+pub struct CampaignArgs {
+    pub kind: u8,
+    pub multiplier_bps: u16,
+    pub flat_bonus: u64,
+    pub quest_target: u16,
+    pub quest_reward: u64,
+    pub min_spend_base: u64,
+    pub min_tier: u8,
+    pub points_budget: u64,
+    pub per_customer_cap: u64,
+    pub starts_at: i64,
+    pub ends_at: i64,
+    pub name: String,
+}
+
+fn validate(args: &CampaignArgs) -> Result<()> {
+    require!(
+        args.name.len() <= MAX_CAMPAIGN_NAME_LEN,
+        VestaError::StringTooLong
+    );
+    require!(
+        args.starts_at < args.ends_at,
+        VestaError::CampaignWindowInvalid
+    );
+    match args.kind {
+        campaign_kind::MULTIPLIER => require!(
+            args.multiplier_bps > 0 && args.multiplier_bps <= CAMPAIGN_MAX_BPS,
+            VestaError::CampaignWindowInvalid
+        ),
+        campaign_kind::FLAT_BONUS => require!(
+            args.flat_bonus > 0 && args.flat_bonus <= MAX_CAMPAIGN_BONUS,
+            VestaError::CampaignWindowInvalid
+        ),
+        campaign_kind::QUEST => {
+            require!(
+                args.quest_target > 0 && args.quest_target <= MAX_QUEST_TARGET,
+                VestaError::CampaignWindowInvalid
+            );
+            require!(
+                args.quest_reward > 0 && args.quest_reward <= MAX_CAMPAIGN_BONUS,
+                VestaError::CampaignWindowInvalid
+            );
+        }
+        _ => return err!(VestaError::CampaignWindowInvalid),
+    }
+    Ok(())
+}
 
 #[derive(Accounts)]
 #[instruction(id: u64)]
@@ -38,32 +90,97 @@ pub struct CreateCampaign<'info> {
 pub fn handle_create_campaign(
     ctx: Context<CreateCampaign>,
     id: u64,
-    multiplier_bps: u16,
-    starts_at: i64,
-    ends_at: i64,
+    args: CampaignArgs,
 ) -> Result<()> {
     require!(!ctx.accounts.config.paused, VestaError::ProtocolPaused);
-    require!(
-        multiplier_bps > 0 && multiplier_bps <= CAMPAIGN_MAX_BPS,
-        VestaError::CampaignWindowInvalid
-    );
-    require!(starts_at < ends_at, VestaError::CampaignWindowInvalid);
+    validate(&args)?;
 
-    let campaign = &mut ctx.accounts.campaign;
-    campaign.merchant = ctx.accounts.merchant.key();
-    campaign.id = id;
-    campaign.multiplier_bps = multiplier_bps;
-    campaign.starts_at = starts_at;
-    campaign.ends_at = ends_at;
-    campaign.active = true;
-    campaign.bump = ctx.bumps.campaign;
+    let c = &mut ctx.accounts.campaign;
+    c.merchant = ctx.accounts.merchant.key();
+    c.id = id;
+    c.kind = args.kind;
+    c.multiplier_bps = args.multiplier_bps;
+    c.flat_bonus = args.flat_bonus;
+    c.quest_target = args.quest_target;
+    c.quest_reward = args.quest_reward;
+    c.min_spend_base = args.min_spend_base;
+    c.min_tier = args.min_tier;
+    c.points_budget = args.points_budget;
+    c.points_spent = 0;
+    c.per_customer_cap = args.per_customer_cap;
+    c.starts_at = args.starts_at;
+    c.ends_at = args.ends_at;
+    c.participant_count = 0;
+    c.redemptions = 0;
+    c.name = args.name;
+    c.active = true;
+    c.paused = false;
+    c.bump = ctx.bumps.campaign;
 
     emit!(CampaignCreated {
-        merchant: campaign.merchant,
+        merchant: c.merchant,
         id,
-        multiplier_bps,
-        starts_at,
-        ends_at,
+        kind: c.kind,
+        multiplier_bps: c.multiplier_bps,
+        starts_at: c.starts_at,
+        ends_at: c.ends_at,
+    });
+    Ok(())
+}
+
+/// Partial in-flight retune. Owner may extend the window, grow the budget,
+/// adjust the per-customer cap, or pause/resume — not change the kind or its
+/// core payout params (those define the offer customers signed up for).
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, Default)]
+pub struct UpdateCampaignArgs {
+    pub ends_at: Option<i64>,
+    pub points_budget: Option<u64>,
+    pub per_customer_cap: Option<u64>,
+    pub paused: Option<bool>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateCampaign<'info> {
+    pub authority: Signer<'info>,
+
+    #[account(
+        seeds = [MERCHANT_SEED, authority.key().as_ref()],
+        bump = merchant.bump,
+        has_one = authority @ VestaError::Unauthorized,
+    )]
+    pub merchant: Account<'info, Merchant>,
+
+    #[account(mut, has_one = merchant @ VestaError::MerchantMismatch)]
+    pub campaign: Account<'info, Campaign>,
+}
+
+pub fn handle_update_campaign(ctx: Context<UpdateCampaign>, args: UpdateCampaignArgs) -> Result<()> {
+    let c = &mut ctx.accounts.campaign;
+    if let Some(ends_at) = args.ends_at {
+        require!(ends_at > c.starts_at, VestaError::CampaignWindowInvalid);
+        c.ends_at = ends_at;
+    }
+    if let Some(budget) = args.points_budget {
+        // Never below what has already been paid out.
+        require!(
+            budget == 0 || budget >= c.points_spent,
+            VestaError::CampaignWindowInvalid
+        );
+        c.points_budget = budget;
+    }
+    if let Some(cap) = args.per_customer_cap {
+        c.per_customer_cap = cap;
+    }
+    if let Some(paused) = args.paused {
+        c.paused = paused;
+    }
+
+    emit!(CampaignUpdated {
+        merchant: c.merchant,
+        id: c.id,
+        paused: c.paused,
+        points_budget: c.points_budget,
+        ends_at: c.ends_at,
     });
     Ok(())
 }

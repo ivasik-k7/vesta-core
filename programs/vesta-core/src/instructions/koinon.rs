@@ -7,13 +7,14 @@ use anchor_spl::{
 
 use crate::{
     constants::{
-        ALLIANCE_SEED, CONFIG_SEED, MAX_NAME_LEN, MEMBER_SEED, MERCHANT_SEED, MINT_SEED,
-        SECONDS_PER_DAY,
+        ALLIANCE_SEED, CONFIG_SEED, MAX_ALLIANCE_FEE_BPS, MAX_METADATA_URI_LEN, MAX_NAME_LEN,
+        MEMBER_SEED, MERCHANT_SEED, MINT_SEED, SECONDS_PER_DAY,
     },
     error::VestaError,
     events::{
         AllianceAuthorityChanged, AllianceAuthorityProposed, AllianceCreated, AllianceJoined,
-        AllianceLeft, PointsSwapped, SwapBudgetSet, SwapRateSet,
+        AllianceLeft, AllianceParamsSet, AlliancePausedSet, PointsSwapped, SwapBudgetSet,
+        SwapRateSet,
     },
     state::{Alliance, AllianceMember, Config, Merchant},
 };
@@ -49,6 +50,14 @@ pub fn handle_create_alliance(ctx: Context<CreateAlliance>, id: u64, name: Strin
     alliance.pending_authority = None;
     alliance.name = name;
     alliance.member_count = 0;
+    alliance.paused = false;
+    alliance.fee_bps = 0;
+    alliance.min_rate_bps = 0;
+    alliance.max_rate_bps = 0;
+    alliance.category = 0;
+    alliance.metadata_uri = String::new();
+    alliance.total_swaps = 0;
+    alliance.total_ui_volume = 0;
     alliance.bump = ctx.bumps.alliance;
 
     emit!(AllianceCreated {
@@ -109,6 +118,66 @@ pub fn handle_accept_alliance_authority(ctx: Context<AcceptAllianceAuthority>) -
     Ok(())
 }
 
+/// Enforce the alliance's member-rate governance bounds (0 = unbounded).
+fn check_rate_bounds(alliance: &Alliance, rate: u32) -> Result<()> {
+    if alliance.min_rate_bps > 0 {
+        require!(rate >= alliance.min_rate_bps, VestaError::SwapRateOutOfBounds);
+    }
+    if alliance.max_rate_bps > 0 {
+        require!(rate <= alliance.max_rate_bps, VestaError::SwapRateOutOfBounds);
+    }
+    Ok(())
+}
+
+pub fn handle_set_alliance_paused(ctx: Context<AllianceAuthorityOnly>, paused: bool) -> Result<()> {
+    let a = &mut ctx.accounts.alliance;
+    a.paused = paused;
+    emit!(AlliancePausedSet {
+        alliance: a.key(),
+        paused,
+    });
+    Ok(())
+}
+
+pub fn handle_set_alliance_params(
+    ctx: Context<AllianceAuthorityOnly>,
+    fee_bps: u16,
+    min_rate_bps: u32,
+    max_rate_bps: u32,
+) -> Result<()> {
+    require!(fee_bps <= MAX_ALLIANCE_FEE_BPS, VestaError::ValueTooLarge);
+    require!(
+        max_rate_bps == 0 || min_rate_bps <= max_rate_bps,
+        VestaError::InvalidSwapRate
+    );
+    let a = &mut ctx.accounts.alliance;
+    a.fee_bps = fee_bps;
+    a.min_rate_bps = min_rate_bps;
+    a.max_rate_bps = max_rate_bps;
+    emit!(AllianceParamsSet {
+        alliance: a.key(),
+        fee_bps,
+        min_rate_bps,
+        max_rate_bps,
+    });
+    Ok(())
+}
+
+pub fn handle_update_alliance_profile(
+    ctx: Context<AllianceAuthorityOnly>,
+    category: u8,
+    metadata_uri: String,
+) -> Result<()> {
+    require!(
+        metadata_uri.len() <= MAX_METADATA_URI_LEN,
+        VestaError::StringTooLong
+    );
+    let a = &mut ctx.accounts.alliance;
+    a.category = category;
+    a.metadata_uri = metadata_uri;
+    Ok(())
+}
+
 #[derive(Accounts)]
 pub struct JoinAlliance<'info> {
     #[account(mut)]
@@ -152,6 +221,7 @@ pub fn handle_join_alliance(
 ) -> Result<()> {
     require!(!ctx.accounts.config.paused, VestaError::ProtocolPaused);
     require!(rate_bps_to_alliance > 0, VestaError::InvalidSwapRate);
+    check_rate_bounds(&ctx.accounts.alliance, rate_bps_to_alliance)?;
     require!(
         ctx.accounts.merchant.joined_alliance.is_none(),
         VestaError::AlreadyInAlliance
@@ -165,6 +235,9 @@ pub fn handle_join_alliance(
     member.swapped_in_today = 0;
     member.budget_day = 0;
     member.active = true;
+    member.joined_at = Clock::get()?.unix_timestamp;
+    member.total_swapped_in = 0;
+    member.total_swapped_out = 0;
     member.bump = ctx.bumps.member;
 
     let alliance = &mut ctx.accounts.alliance;
@@ -245,6 +318,7 @@ pub struct SetSwapRate<'info> {
 
 pub fn handle_set_swap_rate(ctx: Context<SetSwapRate>, new_rate: u32) -> Result<()> {
     require!(new_rate > 0, VestaError::InvalidSwapRate);
+    check_rate_bounds(&ctx.accounts.alliance, new_rate)?;
     let member = &mut ctx.accounts.member;
     let old = member.rate_bps_to_alliance;
     member.rate_bps_to_alliance = new_rate;
@@ -296,9 +370,11 @@ pub struct SwapPoints<'info> {
     #[account(mut)]
     pub customer: Signer<'info>,
 
+    #[account(mut)]
     pub alliance: Box<Account<'info, Alliance>>,
 
     #[account(
+        mut,
         seeds = [MEMBER_SEED, alliance.key().as_ref(), merchant_a.key().as_ref()],
         bump = member_a.bump,
         constraint = member_a.active @ VestaError::MemberInactive,
@@ -362,6 +438,7 @@ pub fn handle_swap_points(
     min_raw_out: u64,
 ) -> Result<()> {
     require!(!ctx.accounts.config.paused, VestaError::ProtocolPaused);
+    require!(!ctx.accounts.alliance.paused, VestaError::AlliancePaused);
     require!(ui_amount > 0, VestaError::InvalidAmount);
 
     // Leg A: how much raw the customer burns for this UI value.
@@ -377,6 +454,13 @@ pub fn handle_swap_points(
     let ui_out = u128::from(ui_amount)
         .checked_mul(u128::from(ctx.accounts.member_a.rate_bps_to_alliance))
         .and_then(|v| v.checked_div(u128::from(ctx.accounts.member_b.rate_bps_to_alliance)))
+        .ok_or(VestaError::Overflow)?;
+    // Alliance spread: haircut the output UI value by `fee_bps` (anti-abuse /
+    // alliance monetization stub — the spread is simply not minted).
+    let fee_bps = u128::from(ctx.accounts.alliance.fee_bps);
+    let ui_out = ui_out
+        .checked_mul(10_000u128.checked_sub(fee_bps).ok_or(VestaError::Overflow)?)
+        .and_then(|v| v.checked_div(10_000))
         .ok_or(VestaError::Overflow)?;
     let ui_out = u64::try_from(ui_out).map_err(|_| VestaError::Overflow)?;
     require!(ui_out > 0, VestaError::InvalidAmount);
@@ -436,6 +520,15 @@ pub fn handle_swap_points(
         ),
         raw_out,
     )?;
+
+    // Volume stats (member + alliance).
+    let member_b = &mut ctx.accounts.member_b;
+    member_b.total_swapped_in = member_b.total_swapped_in.saturating_add(raw_out);
+    let member_a = &mut ctx.accounts.member_a;
+    member_a.total_swapped_out = member_a.total_swapped_out.saturating_add(raw_in);
+    let alliance = &mut ctx.accounts.alliance;
+    alliance.total_swaps = alliance.total_swaps.saturating_add(1);
+    alliance.total_ui_volume = alliance.total_ui_volume.saturating_add(u128::from(ui_amount));
 
     emit!(PointsSwapped {
         customer: ctx.accounts.customer.key(),

@@ -7,13 +7,83 @@ use anchor_spl::{
 
 use crate::{
     constants::{
-        CONFIG_SEED, CUSTOMER_SEED, MAX_EARN_PER_TX, MAX_TOTAL_MULTIPLIER_BPS, MERCHANT_SEED,
-        SECONDS_PER_DAY, STREAK_BPS_PER_DAY, STREAK_DAYS_CAP, TIER_THRESHOLDS,
+        CAMPAIGN_PROGRESS_SEED, CONFIG_SEED, CUSTOMER_SEED, MAX_EARN_PER_TX,
+        MAX_TOTAL_MULTIPLIER_BPS, MERCHANT_SEED, SECONDS_PER_DAY, STREAK_BPS_PER_DAY,
+        STREAK_DAYS_CAP, TIER_THRESHOLDS,
     },
     error::VestaError,
-    events::PointsEarned,
-    state::{Campaign, Config, CustomerProfile, Merchant},
+    events::{CampaignBonusPaid, PointsEarned},
+    state::{campaign_kind, Campaign, CampaignProgress, Config, CustomerProfile, Merchant},
 };
+
+/// Shared accrual core: rolls the streak, computes the streak-boosted base plus
+/// a pre-computed campaign `bonus_raw`, applies the per-tx cap, and updates
+/// customer/merchant stats + tier. Returns `(minted, streak_days, total_bps)`.
+/// The caller performs the mint CPI with the returned amount.
+fn accrue(
+    profile: &mut CustomerProfile,
+    merchant: &mut Merchant,
+    amount_base: u64,
+    unix_day: u32,
+    bonus_raw: u64,
+) -> Result<(u64, u16, u64)> {
+    // Streak: +1 on consecutive days, hold on same-day repeats, reset otherwise.
+    profile.streak_days = if profile.last_visit_day == unix_day {
+        profile.streak_days.max(1)
+    } else if profile.last_visit_day.checked_add(1) == Some(unix_day) {
+        profile.streak_days.saturating_add(1)
+    } else {
+        1
+    };
+    profile.last_visit_day = unix_day;
+
+    let streak_bps = u64::from(profile.streak_days.min(STREAK_DAYS_CAP))
+        .checked_mul(u64::from(STREAK_BPS_PER_DAY))
+        .ok_or(VestaError::MultiplierOverflow)?;
+    let total_bps = 10_000u64
+        .checked_add(streak_bps)
+        .ok_or(VestaError::MultiplierOverflow)?
+        .min(MAX_TOTAL_MULTIPLIER_BPS);
+
+    let base_minted = u128::from(amount_base)
+        .checked_mul(u128::from(merchant.base_earn_rate))
+        .and_then(|v| v.checked_mul(u128::from(total_bps)))
+        .and_then(|v| v.checked_div(10_000))
+        .ok_or(VestaError::MultiplierOverflow)?;
+    let minted = u64::try_from(base_minted)
+        .ok()
+        .and_then(|b| b.checked_add(bonus_raw))
+        .ok_or(VestaError::MultiplierOverflow)?;
+    require!(minted <= MAX_EARN_PER_TX, VestaError::EarnCapExceeded);
+
+    profile.lifetime_earned = profile
+        .lifetime_earned
+        .checked_add(minted)
+        .ok_or(VestaError::Overflow)?;
+    profile.lifetime_spend_base = profile.lifetime_spend_base.saturating_add(amount_base);
+    merchant.lifetime_points_issued = merchant
+        .lifetime_points_issued
+        .checked_add(u128::from(minted))
+        .ok_or(VestaError::Overflow)?;
+    profile.tier = u8::try_from(
+        TIER_THRESHOLDS
+            .iter()
+            .filter(|&&t| profile.lifetime_earned >= t)
+            .count()
+            .saturating_sub(1),
+    )
+    .unwrap_or(u8::MAX);
+
+    Ok((minted, profile.streak_days, total_bps))
+}
+
+/// The streak-boosted marginal bps a MULTIPLIER campaign may add, honoring the
+/// joint cap over streak + campaign composition.
+fn campaign_headroom_bps(total_bps: u64) -> u64 {
+    MAX_TOTAL_MULTIPLIER_BPS.saturating_sub(total_bps)
+}
+
+// ── plain earn (streak only) ─────────────────────────────────────────────────
 
 #[derive(Accounts)]
 pub struct EarnPoints<'info> {
@@ -22,14 +92,13 @@ pub struct EarnPoints<'info> {
 
     #[account(
         mut,
-        seeds = [MERCHANT_SEED, merchant_authority.key().as_ref()],
+        seeds = [MERCHANT_SEED, merchant.authority.as_ref()],
         bump = merchant.bump,
         has_one = point_mint @ VestaError::MintMismatch,
     )]
     pub merchant: Account<'info, Merchant>,
 
-    /// CHECK: identity only — receives no privileges; the profile and ATA PDAs
-    /// are derived from this key.
+    /// CHECK: identity only — the profile and ATA PDAs are derived from this key.
     pub customer: UncheckedAccount<'info>,
 
     #[account(
@@ -60,10 +129,6 @@ pub struct EarnPoints<'info> {
     #[account(seeds = [CONFIG_SEED], bump = config.bump)]
     pub config: Account<'info, Config>,
 
-    /// Optional earn-multiplier campaign; the program applies *the supplied*
-    /// campaign — it cannot claim "best" on-chain. Validated in the handler.
-    pub campaign: Option<Account<'info, Campaign>>,
-
     pub token_program: Program<'info, Token2022>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
@@ -75,111 +140,305 @@ pub fn handle_earn_points(
     visit_day: u32,
 ) -> Result<()> {
     require!(!ctx.accounts.config.paused, VestaError::ProtocolPaused);
+    require!(!ctx.accounts.merchant.paused, VestaError::MerchantPaused);
+    require!(
+        ctx.accounts
+            .merchant
+            .can_operate(&ctx.accounts.merchant_authority.key()),
+        VestaError::Unauthorized
+    );
     require!(amount_base > 0, VestaError::InvalidAmount);
 
-    let clock = Clock::get()?;
-    let unix_day =
-        u32::try_from(clock.unix_timestamp / SECONDS_PER_DAY).map_err(|_| VestaError::Overflow)?;
-    require!(visit_day == unix_day, VestaError::StaleVisitDay);
+    let unix_day = current_day(&visit_day)?;
+    init_profile_identity(
+        &mut ctx.accounts.customer_profile,
+        &mut ctx.accounts.merchant,
+        ctx.accounts.customer.key(),
+        ctx.bumps.customer_profile,
+    )?;
 
-    let profile = &mut ctx.accounts.customer_profile;
-    let merchant = &mut ctx.accounts.merchant;
+    let (minted, streak_days, total_bps) = accrue(
+        &mut ctx.accounts.customer_profile,
+        &mut ctx.accounts.merchant,
+        amount_base,
+        unix_day,
+        0,
+    )?;
+    mint_points(&ctx.accounts.token_program, &ctx.accounts.point_mint, &ctx.accounts.customer_ata, &ctx.accounts.merchant, minted)?;
 
-    // Fresh profile: wire identity fields and count the customer once.
+    emit!(PointsEarned {
+        merchant: ctx.accounts.merchant.key(),
+        customer: ctx.accounts.customer.key(),
+        base: amount_base,
+        minted,
+        multiplier_bps: total_bps,
+        streak_days,
+    });
+    Ok(())
+}
+
+// ── governed campaign earn (multiplier / flat bonus / quest) ─────────────────
+
+#[derive(Accounts)]
+pub struct EarnPointsCampaign<'info> {
+    #[account(mut)]
+    pub merchant_authority: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [MERCHANT_SEED, merchant.authority.as_ref()],
+        bump = merchant.bump,
+        has_one = point_mint @ VestaError::MintMismatch,
+    )]
+    pub merchant: Account<'info, Merchant>,
+
+    /// CHECK: identity only.
+    pub customer: UncheckedAccount<'info>,
+
+    #[account(
+        init_if_needed,
+        payer = merchant_authority,
+        space = 8 + CustomerProfile::INIT_SPACE,
+        seeds = [CUSTOMER_SEED, merchant.key().as_ref(), customer.key().as_ref()],
+        bump,
+    )]
+    pub customer_profile: Account<'info, CustomerProfile>,
+
+    #[account(
+        mut,
+        has_one = merchant @ VestaError::MerchantMismatch,
+    )]
+    pub campaign: Account<'info, Campaign>,
+
+    #[account(
+        init_if_needed,
+        payer = merchant_authority,
+        space = 8 + CampaignProgress::INIT_SPACE,
+        seeds = [CAMPAIGN_PROGRESS_SEED, campaign.key().as_ref(), customer.key().as_ref()],
+        bump,
+    )]
+    pub campaign_progress: Account<'info, CampaignProgress>,
+
+    #[account(
+        mut,
+        seeds = [crate::constants::MINT_SEED, merchant.key().as_ref()],
+        bump = merchant.mint_bump,
+    )]
+    pub point_mint: InterfaceAccount<'info, Mint>,
+
+    #[account(
+        init_if_needed,
+        payer = merchant_authority,
+        associated_token::mint = point_mint,
+        associated_token::authority = customer,
+        associated_token::token_program = token_program,
+    )]
+    pub customer_ata: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Account<'info, Config>,
+
+    pub token_program: Program<'info, Token2022>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
+}
+
+pub fn handle_earn_points_campaign(
+    ctx: Context<EarnPointsCampaign>,
+    amount_base: u64,
+    visit_day: u32,
+) -> Result<()> {
+    require!(!ctx.accounts.config.paused, VestaError::ProtocolPaused);
+    require!(!ctx.accounts.merchant.paused, VestaError::MerchantPaused);
+    require!(
+        ctx.accounts
+            .merchant
+            .can_operate(&ctx.accounts.merchant_authority.key()),
+        VestaError::Unauthorized
+    );
+    require!(amount_base > 0, VestaError::InvalidAmount);
+
+    let now = Clock::get()?.unix_timestamp;
+    let unix_day = current_day(&visit_day)?;
+    init_profile_identity(
+        &mut ctx.accounts.customer_profile,
+        &mut ctx.accounts.merchant,
+        ctx.accounts.customer.key(),
+        ctx.bumps.customer_profile,
+    )?;
+
+    // Campaign eligibility.
+    let campaign = &ctx.accounts.campaign;
+    require!(campaign.is_live(now), VestaError::CampaignInactive);
+    require!(
+        amount_base >= campaign.min_spend_base,
+        VestaError::CampaignNotEligible
+    );
+    require!(
+        ctx.accounts.customer_profile.tier >= campaign.min_tier,
+        VestaError::CampaignNotEligible
+    );
+
+    // Fresh progress → count a participant.
+    let progress = &mut ctx.accounts.campaign_progress;
+    let fresh_progress = progress.campaign == Pubkey::default();
+    if fresh_progress {
+        progress.campaign = campaign.key();
+        progress.customer = ctx.accounts.customer.key();
+        progress.bump = ctx.bumps.campaign_progress;
+    }
+
+    // Streak-only base to know multiplier headroom, before adding the bonus.
+    // (accrue with bonus 0 first would double-mint; instead compute base bps here.)
+    let streak_preview = preview_total_bps(&ctx.accounts.customer_profile, unix_day)?;
+
+    // Gross bonus by kind.
+    let mut quest_completed = false;
+    let gross_bonus: u64 = match campaign.kind {
+        campaign_kind::MULTIPLIER => {
+            let eff_bps = u64::from(campaign.multiplier_bps).min(campaign_headroom_bps(streak_preview));
+            u128::from(amount_base)
+                .checked_mul(u128::from(ctx.accounts.merchant.base_earn_rate))
+                .and_then(|v| v.checked_mul(u128::from(eff_bps)))
+                .and_then(|v| v.checked_div(10_000))
+                .and_then(|v| u64::try_from(v).ok())
+                .ok_or(VestaError::MultiplierOverflow)?
+        }
+        campaign_kind::FLAT_BONUS => campaign.flat_bonus,
+        campaign_kind::QUEST => {
+            let visits = progress.visits.saturating_add(1);
+            progress.visits = visits;
+            if !progress.completed && visits >= campaign.quest_target {
+                progress.completed = true;
+                quest_completed = true;
+                campaign.quest_reward
+            } else {
+                0
+            }
+        }
+        _ => 0,
+    };
+
+    // Clamp by per-customer cap, then by remaining budget.
+    let mut bonus = gross_bonus;
+    if campaign.per_customer_cap > 0 {
+        let room = campaign.per_customer_cap.saturating_sub(progress.bonus_drawn);
+        bonus = bonus.min(room);
+    }
+    if campaign.points_budget > 0 {
+        let room = campaign.points_budget.saturating_sub(campaign.points_spent);
+        bonus = bonus.min(room);
+    }
+
+    let (minted, streak_days, total_bps) = accrue(
+        &mut ctx.accounts.customer_profile,
+        &mut ctx.accounts.merchant,
+        amount_base,
+        unix_day,
+        bonus,
+    )?;
+    mint_points(&ctx.accounts.token_program, &ctx.accounts.point_mint, &ctx.accounts.customer_ata, &ctx.accounts.merchant, minted)?;
+
+    // Campaign bookkeeping.
+    let campaign = &mut ctx.accounts.campaign;
+    if fresh_progress {
+        campaign.participant_count = campaign.participant_count.saturating_add(1);
+    }
+    campaign.points_spent = campaign.points_spent.saturating_add(bonus);
+    campaign.redemptions = campaign.redemptions.saturating_add(1);
+    let progress = &mut ctx.accounts.campaign_progress;
+    progress.bonus_drawn = progress.bonus_drawn.saturating_add(bonus);
+    if quest_completed {
+        ctx.accounts.customer_profile.campaigns_completed = ctx
+            .accounts
+            .customer_profile
+            .campaigns_completed
+            .saturating_add(1);
+    }
+
+    emit!(PointsEarned {
+        merchant: ctx.accounts.merchant.key(),
+        customer: ctx.accounts.customer.key(),
+        base: amount_base,
+        minted,
+        multiplier_bps: total_bps,
+        streak_days,
+    });
+    emit!(CampaignBonusPaid {
+        merchant: ctx.accounts.merchant.key(),
+        campaign: ctx.accounts.campaign.id,
+        customer: ctx.accounts.customer.key(),
+        kind: ctx.accounts.campaign.kind,
+        bonus,
+        quest_completed,
+    });
+    Ok(())
+}
+
+// ── shared helpers ───────────────────────────────────────────────────────────
+
+fn current_day(visit_day: &u32) -> Result<u32> {
+    let unix_day = u32::try_from(Clock::get()?.unix_timestamp / SECONDS_PER_DAY)
+        .map_err(|_| VestaError::Overflow)?;
+    require!(*visit_day == unix_day, VestaError::StaleVisitDay);
+    Ok(unix_day)
+}
+
+fn init_profile_identity(
+    profile: &mut CustomerProfile,
+    merchant: &mut Account<Merchant>,
+    customer: Pubkey,
+    bump: u8,
+) -> Result<()> {
     if profile.wallet == Pubkey::default() {
-        profile.wallet = ctx.accounts.customer.key();
+        profile.wallet = customer;
         profile.merchant = merchant.key();
-        profile.bump = ctx.bumps.customer_profile;
+        profile.bump = bump;
         merchant.customer_count = merchant
             .customer_count
             .checked_add(1)
             .ok_or(VestaError::Overflow)?;
     }
+    Ok(())
+}
 
-    // Streak: +1 on consecutive days, keep on same-day repeats, reset otherwise.
-    profile.streak_days = if profile.last_visit_day == unix_day {
+/// The streak bps this earn WILL use (without mutating state) — for headroom.
+fn preview_total_bps(profile: &CustomerProfile, unix_day: u32) -> Result<u64> {
+    let next_streak = if profile.last_visit_day == unix_day {
         profile.streak_days.max(1)
     } else if profile.last_visit_day.checked_add(1) == Some(unix_day) {
         profile.streak_days.saturating_add(1)
     } else {
         1
     };
-    profile.last_visit_day = unix_day;
-
-    let streak_bps = u64::from(profile.streak_days.min(STREAK_DAYS_CAP))
+    let streak_bps = u64::from(next_streak.min(STREAK_DAYS_CAP))
         .checked_mul(u64::from(STREAK_BPS_PER_DAY))
         .ok_or(VestaError::MultiplierOverflow)?;
-    let campaign_bps = match ctx.accounts.campaign.as_ref() {
-        Some(campaign) => {
-            require_keys_eq!(
-                campaign.merchant,
-                merchant.key(),
-                VestaError::MerchantMismatch
-            );
-            require!(campaign.active, VestaError::CampaignInactive);
-            let now = clock.unix_timestamp;
-            require!(
-                campaign.starts_at <= now && now < campaign.ends_at,
-                VestaError::CampaignInactive
-            );
-            u64::from(campaign.multiplier_bps)
-        }
-        None => 0,
-    };
-    let total_bps = 10_000u64
+    Ok(10_000u64
         .checked_add(streak_bps)
-        .and_then(|v| v.checked_add(campaign_bps))
         .ok_or(VestaError::MultiplierOverflow)?
-        .min(MAX_TOTAL_MULTIPLIER_BPS);
+        .min(MAX_TOTAL_MULTIPLIER_BPS))
+}
 
-    let minted_wide = u128::from(amount_base)
-        .checked_mul(u128::from(merchant.base_earn_rate))
-        .and_then(|v| v.checked_mul(u128::from(total_bps)))
-        .and_then(|v| v.checked_div(10_000))
-        .ok_or(VestaError::MultiplierOverflow)?;
-    let minted = u64::try_from(minted_wide).map_err(|_| VestaError::MultiplierOverflow)?;
-    require!(minted <= MAX_EARN_PER_TX, VestaError::EarnCapExceeded);
-
+fn mint_points<'info>(
+    token_program: &Program<'info, Token2022>,
+    point_mint: &InterfaceAccount<'info, Mint>,
+    customer_ata: &InterfaceAccount<'info, TokenAccount>,
+    merchant: &Account<'info, Merchant>,
+    amount: u64,
+) -> Result<()> {
     let authority_key = merchant.authority;
     let merchant_seeds: &[&[u8]] = &[MERCHANT_SEED, authority_key.as_ref(), &[merchant.bump]];
     mint_to(
         CpiContext::new_with_signer(
-            ctx.accounts.token_program.key(),
+            token_program.key(),
             MintTo {
-                mint: ctx.accounts.point_mint.to_account_info(),
-                to: ctx.accounts.customer_ata.to_account_info(),
+                mint: point_mint.to_account_info(),
+                to: customer_ata.to_account_info(),
                 authority: merchant.to_account_info(),
             },
             &[merchant_seeds],
         ),
-        minted,
-    )?;
-
-    profile.lifetime_earned = profile
-        .lifetime_earned
-        .checked_add(minted)
-        .ok_or(VestaError::Overflow)?;
-    merchant.lifetime_points_issued = merchant
-        .lifetime_points_issued
-        .checked_add(u128::from(minted))
-        .ok_or(VestaError::Overflow)?;
-
-    profile.tier = u8::try_from(
-        TIER_THRESHOLDS
-            .iter()
-            .filter(|&&t| profile.lifetime_earned >= t)
-            .count()
-            .saturating_sub(1),
+        amount,
     )
-    .unwrap_or(u8::MAX);
-
-    emit!(PointsEarned {
-        merchant: merchant.key(),
-        customer: ctx.accounts.customer.key(),
-        base: amount_base,
-        minted,
-        multiplier_bps: total_bps,
-        streak_days: profile.streak_days,
-    });
-    Ok(())
 }

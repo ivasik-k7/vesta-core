@@ -1,5 +1,9 @@
 use anchor_lang::prelude::*;
 
+/// Max operational delegate keys a merchant may authorize (hot POS/back-office
+/// keys distinct from the cold owner authority).
+pub const MAX_OPERATORS: usize = 4;
+
 /// Global protocol config. Singleton PDA.
 #[account]
 #[derive(InitSpace)]
@@ -11,6 +15,12 @@ pub struct Config {
 }
 
 /// One per merchant; authority is baked into the seeds (no key rotation in-scope).
+///
+/// Enterprise surface: a cold `authority` (owner, in the seeds) plus up to
+/// `MAX_OPERATORS` hot delegate keys that may run day-to-day operations
+/// (earn, campaigns, achievements) without the owner key; a merchant-level
+/// pause; an admin-set `verified` trust flag; a display category + metadata
+/// URI; and lifetime operational stats.
 #[account]
 #[derive(InitSpace)]
 pub struct Merchant {
@@ -24,8 +34,31 @@ pub struct Merchant {
     pub lifetime_points_issued: u128,
     pub customer_count: u64,
     pub joined_alliance: Option<Pubkey>,
+    // ── enterprise fields ──────────────────────────────────────────────────
+    /// Hot operational keys (earn/campaigns/achievements). Owner is implicit.
+    pub operators: [Pubkey; MAX_OPERATORS],
+    pub operator_count: u8,
+    /// Merchant-scoped freeze of earn/redeem, independent of the global pause.
+    pub paused: bool,
+    /// Protocol-admin-set trust badge (e.g. KYB-verified brand).
+    pub verified: bool,
+    /// Display category (free-form enum; UI maps to a label).
+    pub category: u8,
+    /// Off-chain profile JSON (logo, links, description).
+    #[max_len(128)]
+    pub metadata_uri: String,
+    pub lifetime_redemptions: u64,
+    pub badges_issued: u64,
     pub bump: u8,
     pub mint_bump: u8,
+}
+
+impl Merchant {
+    /// Owner authority or any authorized operator.
+    pub fn can_operate(&self, signer: &Pubkey) -> bool {
+        *signer == self.authority
+            || self.operators[..usize::from(self.operator_count)].contains(signer)
+    }
 }
 
 /// Per merchant-customer pair.
@@ -39,6 +72,10 @@ pub struct CustomerProfile {
     pub lifetime_earned: u64,
     pub lifetime_redemptions: u32,
     pub tier: u8,
+    /// Total qualifying spend (base minor units) seen across earns.
+    pub lifetime_spend_base: u64,
+    /// Count of quest-style campaigns completed.
+    pub campaigns_completed: u16,
     pub bump: u8,
 }
 
@@ -66,16 +103,79 @@ pub struct Receipt {
     pub bump: u8,
 }
 
-/// Earn multiplier campaign (phase 3). `merchant` first for memcmp catalogs.
+/// Campaign flavors (gamification). Stored as `Campaign.kind`.
+pub mod campaign_kind {
+    /// Percentage earn boost (`multiplier_bps`) while the window is open.
+    pub const MULTIPLIER: u8 = 0;
+    /// Fixed `flat_bonus` raw points added to each qualifying earn.
+    pub const FLAT_BONUS: u8 = 1;
+    /// Visit-goal quest: complete `quest_target` qualifying earns → one-time
+    /// `quest_reward` raw-point payout.
+    pub const QUEST: u8 = 2;
+}
+
+/// A merchant engagement campaign (phase 3, enterprise/gamified). `merchant`
+/// first for memcmp catalogs.
 #[account]
 #[derive(InitSpace)]
 pub struct Campaign {
     pub merchant: Pubkey,
     pub id: u64,
+    /// `campaign_kind::*`.
+    pub kind: u8,
+    /// MULTIPLIER: additive earn boost, bps (stacks with streak, jointly capped).
     pub multiplier_bps: u16,
+    /// FLAT_BONUS: raw points added per qualifying earn.
+    pub flat_bonus: u64,
+    /// QUEST: qualifying earns required to complete.
+    pub quest_target: u16,
+    /// QUEST: raw-point reward on completion.
+    pub quest_reward: u64,
+    /// Minimum qualifying spend (base minor units) for the campaign to apply.
+    pub min_spend_base: u64,
+    /// Minimum customer tier (VIP targeting).
+    pub min_tier: u8,
+    /// Total bonus-point budget; 0 = unlimited. Campaign stops paying when hit.
+    pub points_budget: u64,
+    pub points_spent: u64,
+    /// Max bonus a single customer may draw; 0 = unlimited.
+    pub per_customer_cap: u64,
     pub starts_at: i64,
     pub ends_at: i64,
+    pub participant_count: u32,
+    /// Count of qualifying applications (payouts).
+    pub redemptions: u64,
+    #[max_len(48)]
+    pub name: String,
     pub active: bool,
+    pub paused: bool,
+    pub bump: u8,
+}
+
+impl Campaign {
+    /// Live = active, not paused, within window, budget not exhausted.
+    pub fn is_live(&self, now: i64) -> bool {
+        self.active
+            && !self.paused
+            && self.starts_at <= now
+            && now < self.ends_at
+            && (self.points_budget == 0 || self.points_spent < self.points_budget)
+    }
+}
+
+/// Per-(campaign, customer) participation state — enforces per-customer caps
+/// and tracks quest progress. Created on first qualifying earn.
+#[account]
+#[derive(InitSpace)]
+pub struct CampaignProgress {
+    pub campaign: Pubkey,
+    pub customer: Pubkey,
+    /// Qualifying earns applied (quest counter).
+    pub visits: u16,
+    /// Bonus raw points drawn by this customer under the campaign.
+    pub bonus_drawn: u64,
+    /// Quest completed (reward already paid).
+    pub completed: bool,
     pub bump: u8,
 }
 
@@ -103,6 +203,10 @@ pub struct KleosReceipt {
 }
 
 /// Koinon alliance root; creator in the seeds kills permissionless id squatting.
+///
+/// Enterprise surface: alliance-level pause, member swap-rate governance bounds,
+/// a swap spread (`fee_bps`, an anti-abuse haircut on cross-swaps), a display
+/// category + metadata URI, and aggregate swap stats.
 #[account]
 #[derive(InitSpace)]
 pub struct Alliance {
@@ -112,10 +216,23 @@ pub struct Alliance {
     #[max_len(32)]
     pub name: String,
     pub member_count: u16,
+    // ── enterprise fields ──────────────────────────────────────────────────
+    /// Freeze all cross-swaps in the alliance.
+    pub paused: bool,
+    /// Spread applied to each swap's output UI value (anti-abuse / spread), bps.
+    pub fee_bps: u16,
+    /// Governance bounds on member `rate_bps_to_alliance` (0 = unbounded).
+    pub min_rate_bps: u32,
+    pub max_rate_bps: u32,
+    pub category: u8,
+    #[max_len(128)]
+    pub metadata_uri: String,
+    pub total_swaps: u64,
+    pub total_ui_volume: u128,
     pub bump: u8,
 }
 
-/// Alliance membership: normalized swap rate + inbound-swap risk budget.
+/// Alliance membership: normalized swap rate + inbound-swap risk budget + stats.
 #[account]
 #[derive(InitSpace)]
 pub struct AllianceMember {
@@ -126,5 +243,8 @@ pub struct AllianceMember {
     pub swapped_in_today: u64,
     pub budget_day: u32,
     pub active: bool,
+    pub joined_at: i64,
+    pub total_swapped_in: u64,
+    pub total_swapped_out: u64,
     pub bump: u8,
 }
