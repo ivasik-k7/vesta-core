@@ -603,6 +603,38 @@ fn offer_lifecycle_redeem_decay_and_slippage() {
         "decay did not increase raw_needed: {burned}"
     );
 
+    // Merchant-level redemption stat is wired (two successful redeems).
+    let m: Merchant = h.account(&merchant);
+    assert_eq!(m.lifetime_redemptions, 2);
+
+    // A paused merchant cannot be redeemed against.
+    let pause = h.ix(
+        vesta_core::accounts::MerchantOwnerOnly {
+            authority: authority.pubkey(),
+            merchant,
+        }
+        .to_account_metas(None),
+        vesta_core::instruction::SetMerchantPaused { paused: true }.data(),
+    );
+    h.send(&[pause], &[&authority.insecure_clone()], &authority.pubkey())
+        .unwrap();
+    let (ix, _) = redeem_ix(&h, 2, 20_000);
+    assert!(
+        h.send(&[ix], &[&customer], &customer.pubkey()).is_err(),
+        "redeem on a paused merchant accepted"
+    );
+    // Unpause for the remaining assertions.
+    let unpause = h.ix(
+        vesta_core::accounts::MerchantOwnerOnly {
+            authority: authority.pubkey(),
+            merchant,
+        }
+        .to_account_metas(None),
+        vesta_core::instruction::SetMerchantPaused { paused: false }.data(),
+    );
+    h.send(&[unpause], &[&authority.insecure_clone()], &authority.pubkey())
+        .unwrap();
+
     // Supply exhausted now.
     let (ix, _) = redeem_ix(&h, 2, 20_000);
     assert!(
@@ -738,4 +770,61 @@ fn admin_two_step_transfer_and_migration() {
 
     // One-shot: a second run must fail.
     assert!(h2.send(&[migrate], &[&admin], &admin.pubkey()).is_err());
+}
+
+#[test]
+fn metadata_and_decay_are_mutable() {
+    use spl_token_2022_interface::extension::BaseStateWithExtensions;
+    use spl_token_metadata_interface::state::TokenMetadata;
+
+    let mut h = Harness::new();
+    let authority = Keypair::new();
+    let (merchant, mint, _) = h.register_merchant(&authority, "Kavarna");
+    let auth = authority.insecure_clone();
+
+    let meta_ix = |kind: u8, value: &str| Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::SetTokenAttribute {
+            authority: authority.pubkey(),
+            merchant,
+            point_mint: mint,
+            token_program: TOKEN_2022_ID,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::UpdateTokenMetadata {
+            field_kind: kind,
+            value: value.to_string(),
+        }
+        .data(),
+    };
+    // Rebrand the token name.
+    h.send(&[meta_ix(0, "Kavarna Rewards")], &[&auth], &authority.pubkey())
+        .unwrap();
+    let mint_data = h.svm.get_account(&mint).unwrap().data;
+    let state = StateWithExtensions::<MintState>::unpack(&mint_data).unwrap();
+    let md = state.get_variable_len_extension::<TokenMetadata>().unwrap();
+    assert_eq!(md.name, "Kavarna Rewards");
+
+    // Update the decay rate; merchant mirror updates and bounds are enforced.
+    let decay_ix = |bps: i16| Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::SetTokenAttribute {
+            authority: authority.pubkey(),
+            merchant,
+            point_mint: mint,
+            token_program: TOKEN_2022_ID,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::UpdateDecayRate { new_rate_bps: bps }.data(),
+    };
+    h.send(&[decay_ix(-500)], &[&auth], &authority.pubkey()).unwrap();
+    let m: Merchant = h.account(&merchant);
+    assert_eq!(m.decay_rate_bps, -500);
+    // Positive (inflationary) rate is rejected.
+    assert!(
+        h.send(&[decay_ix(500)], &[&auth], &authority.pubkey()).is_err(),
+        "positive decay rate accepted"
+    );
 }

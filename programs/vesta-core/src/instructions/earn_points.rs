@@ -306,11 +306,10 @@ pub fn handle_earn_points_campaign(
         }
         campaign_kind::FLAT_BONUS => campaign.flat_bonus,
         campaign_kind::QUEST => {
-            let visits = progress.visits.saturating_add(1);
-            progress.visits = visits;
-            if !progress.completed && visits >= campaign.quest_target {
-                progress.completed = true;
-                quest_completed = true;
+            progress.visits = progress.visits.saturating_add(1);
+            // Tentative — the quest only *completes* if the full reward is
+            // actually paid after the clamps below; otherwise it stays open.
+            if !progress.completed && progress.visits >= campaign.quest_target {
                 campaign.quest_reward
             } else {
                 0
@@ -328,6 +327,12 @@ pub fn handle_earn_points_campaign(
     if campaign.points_budget > 0 {
         let room = campaign.points_budget.saturating_sub(campaign.points_spent);
         bonus = bonus.min(room);
+    }
+
+    // A quest completes only when its full reward clears the caps — a clamped
+    // payout leaves it open to retry rather than burning the completion.
+    if campaign.kind == campaign_kind::QUEST && gross_bonus > 0 && bonus == gross_bonus {
+        quest_completed = true;
     }
 
     let (minted, streak_days, total_bps) = accrue(
@@ -349,6 +354,7 @@ pub fn handle_earn_points_campaign(
     let progress = &mut ctx.accounts.campaign_progress;
     progress.bonus_drawn = progress.bonus_drawn.saturating_add(bonus);
     if quest_completed {
+        progress.completed = true;
         ctx.accounts.customer_profile.campaigns_completed = ctx
             .accounts
             .customer_profile

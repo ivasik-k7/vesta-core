@@ -13,8 +13,8 @@ use crate::{
     error::VestaError,
     events::{
         AllianceAuthorityChanged, AllianceAuthorityProposed, AllianceCreated, AllianceJoined,
-        AllianceLeft, AllianceParamsSet, AlliancePausedSet, PointsSwapped, SwapBudgetSet,
-        SwapRateSet,
+        AllianceLeft, AllianceParamsSet, AlliancePausedSet, MemberActiveSet, PointsSwapped,
+        SwapBudgetSet, SwapRateSet,
     },
     state::{Alliance, AllianceMember, Config, Merchant},
 };
@@ -175,6 +175,34 @@ pub fn handle_update_alliance_profile(
     let a = &mut ctx.accounts.alliance;
     a.category = category;
     a.metadata_uri = metadata_uri;
+    Ok(())
+}
+
+/// Alliance authority suspends / reactivates a member without forcing a full
+/// leave — an inactive member cannot be a swap leg (checked in `swap_points`).
+#[derive(Accounts)]
+pub struct SetMemberActive<'info> {
+    pub authority: Signer<'info>,
+
+    #[account(has_one = authority @ VestaError::Unauthorized)]
+    pub alliance: Account<'info, Alliance>,
+
+    #[account(
+        mut,
+        seeds = [MEMBER_SEED, alliance.key().as_ref(), member.merchant.as_ref()],
+        bump = member.bump,
+    )]
+    pub member: Account<'info, AllianceMember>,
+}
+
+pub fn handle_set_member_active(ctx: Context<SetMemberActive>, active: bool) -> Result<()> {
+    let member = &mut ctx.accounts.member;
+    member.active = active;
+    emit!(MemberActiveSet {
+        alliance: ctx.accounts.alliance.key(),
+        merchant: member.merchant,
+        active,
+    });
     Ok(())
 }
 

@@ -1388,6 +1388,94 @@ fn aegis_valid_from_gates_until_active() {
     assert_eq!(w.state_of(alice.pubkey()).sent_today, 1_000);
 }
 
+/// Revocation is terminal: an update cannot silently reinstate a revoked credential.
+#[test]
+fn aegis_revocation_is_sticky() {
+    let mut w = setup();
+    let authority = Keypair::new();
+    let subject = Keypair::new().pubkey();
+    w.svm.airdrop(&authority.pubkey(), 5_000_000_000).unwrap();
+    let issuer =
+        Pubkey::find_program_address(&[b"issuer", authority.pubkey().as_ref()], &aegis::id()).0;
+    let attestation = Pubkey::find_program_address(
+        &[b"attestation", issuer.as_ref(), subject.as_ref()],
+        &aegis::id(),
+    )
+    .0;
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::InitIssuer {
+                authority: authority.pubkey(),
+                issuer,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::InitIssuer { name: "Oracle".into() }.data(),
+        }],
+        &[&authority],
+        &authority.pubkey(),
+    )
+    .unwrap();
+    let data = aegis::instructions::attestation::AttestationData {
+        schema: aegis::constants::schema::REGION,
+        value: 0b0001,
+        valid_from: 0,
+        expires_at: 0,
+    };
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::IssueAttestation {
+                signer: authority.pubkey(),
+                issuer,
+                attestation,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::IssueAttestation { subject, data: data.clone() }.data(),
+        }],
+        &[&authority],
+        &authority.pubkey(),
+    )
+    .unwrap();
+    // Revoke.
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::ManageAttestation {
+                signer: authority.pubkey(),
+                issuer,
+                attestation,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::RevokeAttestation { reason_code: 1 }.data(),
+        }],
+        &[&authority],
+        &authority.pubkey(),
+    )
+    .unwrap();
+    // An update must NOT un-revoke it.
+    assert!(
+        w.send(
+            &[Instruction {
+                program_id: aegis::id(),
+                accounts: aegis::accounts::ManageAttestation {
+                    signer: authority.pubkey(),
+                    issuer,
+                    attestation,
+                }
+                .to_account_metas(None),
+                data: aegis::instruction::UpdateAttestation { data }.data(),
+            }],
+            &[&authority],
+            &authority.pubkey()
+        )
+        .is_err(),
+        "update reinstated a revoked attestation"
+    );
+}
+
 #[test]
 fn argus_hardcoded_constants_match_dependencies() {
     use anchor_lang::Discriminator;

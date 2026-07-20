@@ -84,6 +84,36 @@ pub fn handle_create_achievement(
     Ok(())
 }
 
+/// Retire an achievement definition and reclaim its rent. Already-minted
+/// soulbound badges are independent mints and are unaffected.
+#[derive(Accounts)]
+pub struct CloseAchievement<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(
+        seeds = [MERCHANT_SEED, authority.key().as_ref()],
+        bump = merchant.bump,
+        has_one = authority @ VestaError::Unauthorized,
+    )]
+    pub merchant: Account<'info, Merchant>,
+
+    #[account(
+        mut,
+        close = authority,
+        has_one = merchant @ VestaError::MerchantMismatch,
+    )]
+    pub achievement: Account<'info, Achievement>,
+}
+
+pub fn handle_close_achievement(ctx: Context<CloseAchievement>) -> Result<()> {
+    emit!(crate::events::AchievementClosed {
+        merchant: ctx.accounts.merchant.key(),
+        id: ctx.accounts.achievement.id,
+    });
+    Ok(())
+}
+
 #[derive(Accounts)]
 pub struct GrantAchievement<'info> {
     #[account(mut)]
@@ -91,6 +121,7 @@ pub struct GrantAchievement<'info> {
 
     // Seeds bind the PDA to the signer — the derivation IS the authorization.
     #[account(
+        mut,
         seeds = [MERCHANT_SEED, merchant_authority.key().as_ref()],
         bump = merchant.bump,
     )]
@@ -343,6 +374,9 @@ pub fn handle_grant_achievement(ctx: Context<GrantAchievement>) -> Result<()> {
         .badge_count
         .checked_add(1)
         .ok_or(VestaError::Overflow)?;
+
+    let merchant = &mut ctx.accounts.merchant;
+    merchant.badges_issued = merchant.badges_issued.saturating_add(1);
 
     emit!(AchievementGranted {
         achievement: achievement_key,

@@ -1038,3 +1038,50 @@ fn alliance_governance_bounds_and_pause() {
         .unwrap();
     assert!(w.balance(litera.mint, customer.pubkey()) > 0);
 }
+
+#[test]
+fn alliance_can_suspend_a_member() {
+    let mut w = World::new();
+    let kavarna = w.open_shop("Kavarna");
+    let litera = w.open_shop("Litera");
+    let customer = Keypair::new();
+    w.svm.airdrop(&customer.pubkey(), 10_000_000_000).unwrap();
+    let creator = kavarna.authority.insecure_clone();
+    let litera_auth = litera.authority.insecure_clone();
+    let alliance = w.create_alliance(&creator, 3);
+
+    let join_litera = w.join_ix(&litera, alliance, creator.pubkey(), 10_000, 25_000);
+    w.send(&[join_litera], &[&litera_auth, &creator], &litera_auth.pubkey())
+        .unwrap();
+    let join_kavarna = w.join_ix(&kavarna, alliance, creator.pubkey(), 10_000, 25_000);
+    w.send(&[join_kavarna], &[&creator], &creator.pubkey()).unwrap();
+    w.earn(&kavarna, customer.pubkey(), 5_000);
+
+    let litera_member = w.member_pda(alliance, litera.merchant);
+    let set_active = |active: bool| Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::SetMemberActive {
+            authority: creator.pubkey(),
+            alliance,
+            member: litera_member,
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::SetMemberActive { active }.data(),
+    };
+
+    // Suspend Litera → swaps into it are frozen.
+    w.send(&[set_active(false)], &[&creator], &creator.pubkey()).unwrap();
+    let swap = w.swap_ix(customer.pubkey(), alliance, &kavarna, &litera, 10_000, 11_000, 9_000);
+    assert!(
+        w.send(&[cu_limit_ix(400_000), swap], &[&customer], &customer.pubkey())
+            .is_err(),
+        "swap into a suspended member succeeded"
+    );
+
+    // Reactivate → swap works.
+    w.send(&[set_active(true)], &[&creator], &creator.pubkey()).unwrap();
+    let swap = w.swap_ix(customer.pubkey(), alliance, &kavarna, &litera, 10_000, 11_000, 9_000);
+    w.send(&[cu_limit_ix(400_000), swap], &[&customer], &customer.pubkey())
+        .unwrap();
+    assert!(w.balance(litera.mint, customer.pubkey()) > 0);
+}

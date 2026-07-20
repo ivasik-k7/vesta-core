@@ -228,6 +228,61 @@
       ]
     },
     {
+      "name": "close_achievement",
+      "discriminator": [
+        59,
+        242,
+        249,
+        147,
+        136,
+        47,
+        113,
+        33
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "merchant",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          },
+          "relations": [
+            "achievement"
+          ]
+        },
+        {
+          "name": "achievement",
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "close_campaign",
       "discriminator": [
         65,
@@ -1339,6 +1394,7 @@
         },
         {
           "name": "merchant",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -1798,6 +1854,7 @@
         },
         {
           "name": "merchant",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -2301,6 +2358,68 @@
       ]
     },
     {
+      "name": "set_member_active",
+      "docs": [
+        "Alliance authority suspends / reactivates a member."
+      ],
+      "discriminator": [
+        54,
+        245,
+        234,
+        225,
+        86,
+        173,
+        116,
+        40
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "alliance"
+          ]
+        },
+        {
+          "name": "alliance"
+        },
+        {
+          "name": "member",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  109,
+                  98,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "alliance"
+              },
+              {
+                "kind": "account",
+                "path": "member.merchant",
+                "account": "AllianceMember"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "active",
+          "type": "bool"
+        }
+      ]
+    },
+    {
       "name": "set_merchant_operator",
       "discriminator": [
         172,
@@ -2646,6 +2765,7 @@
         },
         {
           "name": "merchant",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -3128,6 +3248,95 @@
       ]
     },
     {
+      "name": "update_decay_rate",
+      "docs": [
+        "Update the point token's interest-bearing (decay) rate."
+      ],
+      "discriminator": [
+        139,
+        6,
+        223,
+        224,
+        97,
+        0,
+        205,
+        16
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "point_mint",
+          "docs": [
+            "is the merchant PDA. Written by the Token-2022 metadata update."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "new_rate_bps",
+          "type": "i16"
+        }
+      ]
+    },
+    {
       "name": "update_merchant",
       "discriminator": [
         192,
@@ -3253,6 +3462,99 @@
         },
         {
           "name": "metadata_uri",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "update_token_metadata",
+      "docs": [
+        "Update a core token metadata field (0=name, 1=symbol, 2=uri)."
+      ],
+      "discriminator": [
+        243,
+        6,
+        8,
+        23,
+        126,
+        181,
+        251,
+        158
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "point_mint",
+          "docs": [
+            "is the merchant PDA. Written by the Token-2022 metadata update."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "field_kind",
+          "type": "u8"
+        },
+        {
+          "name": "value",
           "type": "string"
         }
       ]
@@ -3454,6 +3756,19 @@
     }
   ],
   "events": [
+    {
+      "name": "AchievementClosed",
+      "discriminator": [
+        128,
+        43,
+        60,
+        162,
+        153,
+        159,
+        34,
+        75
+      ]
+    },
     {
       "name": "AchievementCreated",
       "discriminator": [
@@ -3702,6 +4017,32 @@
       ]
     },
     {
+      "name": "DecayRateUpdated",
+      "discriminator": [
+        95,
+        67,
+        27,
+        55,
+        112,
+        213,
+        192,
+        234
+      ]
+    },
+    {
+      "name": "MemberActiveSet",
+      "discriminator": [
+        133,
+        120,
+        228,
+        57,
+        7,
+        90,
+        86,
+        129
+      ]
+    },
+    {
       "name": "MerchantOperatorSet",
       "discriminator": [
         92,
@@ -3907,6 +4248,19 @@
         137,
         43,
         216
+      ]
+    },
+    {
+      "name": "TokenMetadataUpdated",
+      "discriminator": [
+        61,
+        64,
+        22,
+        85,
+        194,
+        80,
+        154,
+        40
       ]
     },
     {
@@ -4166,6 +4520,22 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AchievementClosed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "id",
+            "type": "u64"
           }
         ]
       }
@@ -5033,6 +5403,22 @@
       }
     },
     {
+      "name": "DecayRateUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "new_rate_bps",
+            "type": "i16"
+          }
+        ]
+      }
+    },
+    {
       "name": "KleosReceipt",
       "docs": [
         "Double-grant guard that survives a holder-side badge burn."
@@ -5047,6 +5433,26 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MemberActiveSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "alliance",
+            "type": "pubkey"
+          },
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "active",
+            "type": "bool"
           }
         ]
       }
@@ -5615,6 +6021,26 @@
           {
             "name": "value",
             "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TokenMetadataUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "field_kind",
+            "type": "u8"
           }
         ]
       }

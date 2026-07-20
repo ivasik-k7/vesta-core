@@ -76,6 +76,20 @@ pub mod vesta_core {
         instructions::set_token_attribute::handle_set_token_attribute(ctx, key, value)
     }
 
+    /// Update a core token metadata field (0=name, 1=symbol, 2=uri).
+    pub fn update_token_metadata(
+        ctx: Context<SetTokenAttribute>,
+        field_kind: u8,
+        value: String,
+    ) -> Result<()> {
+        instructions::set_token_attribute::handle_update_token_metadata(ctx, field_kind, value)
+    }
+
+    /// Update the point token's interest-bearing (decay) rate.
+    pub fn update_decay_rate(ctx: Context<SetTokenAttribute>, new_rate_bps: i16) -> Result<()> {
+        instructions::set_token_attribute::handle_update_decay_rate(ctx, new_rate_bps)
+    }
+
     pub fn earn_points(ctx: Context<EarnPoints>, amount_base: u64, visit_day: u32) -> Result<()> {
         instructions::earn_points::handle_earn_points(ctx, amount_base, visit_day)
     }
@@ -151,6 +165,10 @@ pub mod vesta_core {
         instructions::achievements::handle_grant_achievement(ctx)
     }
 
+    pub fn close_achievement(ctx: Context<CloseAchievement>) -> Result<()> {
+        instructions::achievements::handle_close_achievement(ctx)
+    }
+
     pub fn create_offer(
         ctx: Context<CreateOffer>,
         id: u64,
@@ -202,6 +220,11 @@ pub mod vesta_core {
         metadata_uri: String,
     ) -> Result<()> {
         instructions::koinon::handle_update_alliance_profile(ctx, category, metadata_uri)
+    }
+
+    /// Alliance authority suspends / reactivates a member.
+    pub fn set_member_active(ctx: Context<SetMemberActive>, active: bool) -> Result<()> {
+        instructions::koinon::handle_set_member_active(ctx, active)
     }
 
     pub fn join_alliance(

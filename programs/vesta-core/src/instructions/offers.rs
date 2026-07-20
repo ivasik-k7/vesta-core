@@ -101,6 +101,7 @@ pub struct RedeemOffer<'info> {
     pub customer: Signer<'info>,
 
     #[account(
+        mut,
         seeds = [MERCHANT_SEED, merchant.authority.as_ref()],
         bump = merchant.bump,
         has_one = point_mint @ VestaError::MintMismatch,
@@ -160,6 +161,7 @@ pub struct RedeemOffer<'info> {
 
 pub fn handle_redeem_offer(ctx: Context<RedeemOffer>, max_raw_amount: u64) -> Result<()> {
     require!(!ctx.accounts.config.paused, VestaError::ProtocolPaused);
+    require!(!ctx.accounts.merchant.paused, VestaError::MerchantPaused);
 
     let offer = &mut ctx.accounts.offer;
     require!(offer.active, VestaError::OfferInactive);
@@ -200,6 +202,9 @@ pub fn handle_redeem_offer(ctx: Context<RedeemOffer>, max_raw_amount: u64) -> Re
         .lifetime_redemptions
         .checked_add(1)
         .ok_or(VestaError::Overflow)?;
+
+    let merchant = &mut ctx.accounts.merchant;
+    merchant.lifetime_redemptions = merchant.lifetime_redemptions.saturating_add(1);
 
     let receipt = &mut ctx.accounts.receipt;
     receipt.offer = offer.key();

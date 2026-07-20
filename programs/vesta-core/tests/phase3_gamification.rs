@@ -27,7 +27,7 @@ use {
             ACHIEVE_SEED, BADGE_SEED, CAMPAIGN_SEED, CONFIG_SEED, CUSTOMER_SEED, KLEOS_SEED,
             MERCHANT_SEED, MINT_SEED,
         },
-        state::{Achievement, CustomerProfile},
+        state::{Achievement, CustomerProfile, Merchant},
         RegisterMerchantArgs,
     },
 };
@@ -629,6 +629,10 @@ fn kleos_badge_full_lifecycle_and_burn_proof_guard() {
     let achievement_data = w.svm.get_account(&achievement).unwrap().data;
     let a = Achievement::try_deserialize(&mut achievement_data.as_slice()).unwrap();
     assert_eq!(a.badge_count, 1);
+    // Merchant-level badge stat is wired.
+    let m_data = w.svm.get_account(&w.merchant).unwrap().data;
+    let m = Merchant::try_deserialize(&mut m_data.as_slice()).unwrap();
+    assert_eq!(m.badges_issued, 1);
 
     // Soulbound: transferring the badge fails even to a fresh ATA.
     let friend = Keypair::new();
@@ -864,4 +868,68 @@ fn merchant_operator_earns_and_pause_blocks() {
         w.earn(alice, 100).is_err(),
         "paused merchant still earned"
     );
+}
+
+#[test]
+fn quest_stays_open_when_budget_clamps_the_reward() {
+    let mut w = setup();
+    let auth = w.merchant_authority.insecure_clone();
+    let alice = Keypair::new().pubkey();
+    let now = w.now();
+    // QUEST: 1 visit → 5_000 reward, but total budget only 3_000.
+    let c = w
+        .create_campaign_args(30, args(2, 0, 0, 1, 5_000, 0, 0, 3_000, 0, now - 60, now + 40 * 86_400))
+        .unwrap();
+
+    // First (target-reaching) visit: reward clamped to 3_000 → quest NOT completed.
+    w.earn_campaign(alice, 100, c, &auth).unwrap();
+    let prog = Pubkey::find_program_address(
+        &[b"cprogress", c.as_ref(), alice.as_ref()],
+        &vesta_core::id(),
+    )
+    .0;
+    let data = w.svm.get_account(&prog).unwrap().data;
+    let p = vesta_core::state::CampaignProgress::try_deserialize(&mut data.as_slice()).unwrap();
+    assert!(!p.completed, "quest completed on a clamped (partial) payout");
+    assert_eq!(p.bonus_drawn, 3_000);
+}
+
+#[test]
+fn close_achievement_reclaims_and_removes_definition() {
+    let mut w = setup();
+    let authority = w.merchant_authority.insecure_clone();
+    let (achievement, _, _, _) = w.achievement_pdas(9, Keypair::new().pubkey());
+    let create = Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::CreateAchievement {
+            authority: authority.pubkey(),
+            merchant: w.merchant,
+            achievement,
+            config: w.config,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::CreateAchievement {
+            id: 9,
+            name: "Legacy".into(),
+            uri: "https://vesta.example/legacy.json".into(),
+            threshold_lifetime: 100,
+        }
+        .data(),
+    };
+    w.send(&[create], &[&authority], &authority.pubkey()).unwrap();
+    assert!(w.svm.get_account(&achievement).is_some());
+
+    let close = Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::CloseAchievement {
+            authority: authority.pubkey(),
+            merchant: w.merchant,
+            achievement,
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::CloseAchievement {}.data(),
+    };
+    w.send(&[close], &[&authority], &authority.pubkey()).unwrap();
+    assert!(w.svm.get_account(&achievement).is_none_or(|a| a.lamports == 0));
 }

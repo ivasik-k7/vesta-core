@@ -259,3 +259,29 @@ pub struct ClawbackCapSet {
     pub merchant: Pubkey,
     pub daily_cap_raw: u64,
 }
+
+#[event]
+pub struct TokenMetadataUpdated {
+    pub merchant: Pubkey,
+    pub mint: Pubkey,
+    pub field_kind: u8,
+}
+
+#[event]
+pub struct DecayRateUpdated {
+    pub merchant: Pubkey,
+    pub new_rate_bps: i16,
+}
+
+#[event]
+pub struct AchievementClosed {
+    pub merchant: Pubkey,
+    pub id: u64,
+}
+
+#[event]
+pub struct MemberActiveSet {
+    pub alliance: Pubkey,
+    pub merchant: Pubkey,
+    pub active: bool,
+}
