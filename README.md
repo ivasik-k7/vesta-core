@@ -2,6 +2,8 @@
 
 Loyalty points that behave like Vesta's sacred flame: they stay alive while the customer keeps engaging and cool down when left untended. Built for the "On-Chain Loyalty Rewards System" challenge.
 
+**Live client:** https://dev-vesta.netlify.app/ · **Devnet:** [vesta_core](https://explorer.solana.com/address/gaMq6BpH1aqC8ZCYtAxwZBjTa9AnfdWvYwURG6L4LDz?cluster=devnet) · [argus](https://explorer.solana.com/address/9zJEWrk47z1ACT3ySMwzmUrMsQzFC8afBSFcsCzsz3rx?cluster=devnet)
+
 ## Why
 
 Traditional loyalty programs are siloed, restrictive, and static. VESTA turns points into a living, composable primitive:
@@ -25,6 +27,29 @@ Deployed programs (all four phases live):
 - [`vesta_core`: `gaMq6BpH1aqC8ZCYtAxwZBjTa9AnfdWvYwURG6L4LDz`](https://explorer.solana.com/address/gaMq6BpH1aqC8ZCYtAxwZBjTa9AnfdWvYwURG6L4LDz?cluster=devnet)
 - [`argus`: `9zJEWrk47z1ACT3ySMwzmUrMsQzFC8afBSFcsCzsz3rx`](https://explorer.solana.com/address/9zJEWrk47z1ACT3ySMwzmUrMsQzFC8afBSFcsCzsz3rx?cluster=devnet)
 - [`init_config`](https://explorer.solana.com/tx/G3CKMtqSkNx1F9GMPZtQiJxiwcSFG65gsVMHhK91QybWGucweMnLXX7PhrATdejyf9DdvPMisTge8S9Z3DM9urc?cluster=devnet) — Config PDA `4aeV5JNqBXBa1M1gxch7b2h36hHBoobAR8Ajqax6J5Nr`
+- argus IDL published on-chain; vesta_core IDL committed under [`idl/`](idl/) (SDK-canonical)
+
+### Live demo transactions
+
+Every mechanic, run end-to-end on devnet by [`scripts/seed-demo.ts`](scripts/seed-demo.ts)
+(café **Kavarna** + bookstore **Litera** in one **Koinon** alliance, one demo customer).
+The gift-over-cap **rejection** is the differentiator — the guard refusing a real transfer:
+
+| Mechanic | Transaction |
+|---|---|
+| Register merchant (Token-2022 mint: metadata + decay + hook + delegate) | [Kavarna](https://explorer.solana.com/tx/5AW9ZVgsHCWoYBN3ykJn9p6sQkBBRh4f1nUzvq8LMu54MP4fTpnahMpvkNnKnjC9AxcC1dJXTsAE7LPJsNqNif8W?cluster=devnet) · [Litera](https://explorer.solana.com/tx/4KUMHBpiez8oCaYa7NSwnGrL5VvWnjqz5RgbhaDYyZYytQFR4R3jGc9127ot6K3ZeYiEDbFe9hRwtAHzb4tGt8RQ?cluster=devnet) |
+| Initialize transfer guard (argus EAML) | [Kavarna](https://explorer.solana.com/tx/2b8iR6tVMw2azTycg3scrYFhFAQnSG6uJsqgkbqSCaHs74myxy5TsTn9txWzbHHpJh4aB9nddwBbiV9BzSH4xyCX?cluster=devnet) · [Litera](https://explorer.solana.com/tx/5UZaPobGHmiUMKVmpFFX1bGemNxDuwvPJFLVcmByafmUAKNhFRiRZB6sFfQptGABgiGFX5kwNdQxa4t3reFXqDsf?cluster=devnet) |
+| Finalize guard (hook authority burned) | [Kavarna](https://explorer.solana.com/tx/35MZ1HFEmd4RTscEWyAKkLYnYc3kptW6neBgzbHjcSEQMBD3XZQSkcgD9ZGHuNzThYsYvva4WPow2D8bYKuLWxvL?cluster=devnet) |
+| Earn points (merchant-signed, customer gasless, streak-boosted) | [Kavarna](https://explorer.solana.com/tx/4To7xWA7CZcfqdkG3REcLBaWqtRVLVQgPt3nzyqbAE5DLGUngaZZQhuHeLWo2YMdu7g4f1XpNYyE6Tgm5nmGRwzS?cluster=devnet) · [Litera](https://explorer.solana.com/tx/4eSvaDuxaRVXbBQ5dQkFJdp474c1NTE3M8SZ8xebgfwcRBV5BjuDMLmnYxmCmn5YadXWKybF99vLk7PtbirBCkWu?cluster=devnet) |
+| Gift within cap (hooked transfer, 300 pts) | [tx](https://explorer.solana.com/tx/5gBE7KAho23R7n4fwgx4cDn1tApjPCxPcNYa5ojT1EBJbCCvDS5rNUYZbCWyEjc4o95Z7mqxZeEg5T5osqZF4Fju?cluster=devnet) |
+| **Gift over cap → rejected by argus** (`GiftCapExceeded`) | enforced live; reproduce by re-running past the daily cap |
+| Create alliance (Koinon) | [tx](https://explorer.solana.com/tx/4u5cCkvwmjN565z1kh38zZz9zAwhf6rQBm2nxZzg6dmxReHUmQr4SGDFnBikmg2SKwz7dqhWVC7AqD91Es3BjoEr?cluster=devnet) |
+| Join alliance (handshake co-sign) | [Kavarna](https://explorer.solana.com/tx/34QJe4TXtES6ueENe3jSpB59BvkH9iXD1cqNUGs5ct6TGdog8mjBdy2QA3sp1FNKqEWKfTmF8moZDaiKtC9UMLhz?cluster=devnet) · [Litera](https://explorer.solana.com/tx/bc1XActzPxhNM7dkpMT8NzYE36zQLErZVFxC3YCRh5ef9voiQbb6AEFD4kqT4HZjPjeU3h5gmy1HjNu9ZqRY4Kq?cluster=devnet) |
+| Swap points (Kavarna → Litera, UI-denominated) | [tx](https://explorer.solana.com/tx/4Nn5PymTqG17kGW456ZkGS7fApaJ72qN8c1N1G5k3i6iHvNsEeNFxuWGBuuDqWcBsN6qGFAVsrgrri74L3nhGs1?cluster=devnet) |
+| Create offer | [tx](https://explorer.solana.com/tx/4XYHY78UWxtCFzYTemqHWHaE2Ns2LMvokxvUtPYdqPMxZUDUCwh7526kBh3jqd9JeWYCwszTc1vpTYs7Bv7ADu6a?cluster=devnet) |
+| Redeem offer (on-chain UI→raw conversion + burn) | [tx](https://explorer.solana.com/tx/M75qxoEYZLnjLnzxPoVrDBxPE2pnFgR2VhY1oxq35nkF5u2SGU9jQ4bNDwrZZzhMGRCXtFUbrrid9oBdyeqvBAv?cluster=devnet) |
+
+Demo actors: Kavarna `BGGZRPCrX7NjA77ywEpUCDLhBhae89Vaz6fqZcVAV4AB` · Litera `BrxTJzr1b9Ge75ZAyer1ZMBB8LkP6uNwdFNh91eqYALN` · customer `AdcZSvdJM4qY8Szi7uu4s4mtMFAwkWWJrszbhNz7becX`.
 
 Program ids were rotated when the full protocol shipped: the phase-0 deployment's
 upgrade authority had already been handed to the owner wallet, so development
