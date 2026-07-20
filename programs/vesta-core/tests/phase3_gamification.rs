@@ -264,7 +264,7 @@ impl World {
         Instruction {
             program_id: vesta_core::id(),
             accounts: vesta_core::accounts::GrantAchievement {
-                merchant_authority: signer,
+                payer: signer,
                 merchant: self.merchant,
                 achievement,
                 customer,
@@ -592,7 +592,7 @@ fn kleos_badge_full_lifecycle_and_burn_proof_guard() {
         "granted below threshold"
     );
 
-    // Unauthorized signer → rejected (their merchant PDA does not exist).
+    // Below threshold, no caller can grant (permissionless, but threshold-gated).
     let rando = Keypair::new();
     w.svm.airdrop(&rando.pubkey(), 5_000_000_000).unwrap();
     let forged = w.grant_ix(1, customer.pubkey(), rando.pubkey());
@@ -932,4 +932,47 @@ fn close_achievement_reclaims_and_removes_definition() {
     };
     w.send(&[close], &[&authority], &authority.pubkey()).unwrap();
     assert!(w.svm.get_account(&achievement).is_none_or(|a| a.lamports == 0));
+}
+
+#[test]
+fn achievement_grant_is_permissionless_for_earned_badges() {
+    use spl_token_2022_interface::state::Mint as MintState2;
+    let mut w = setup();
+    let authority = w.merchant_authority.insecure_clone();
+    let customer = Keypair::new();
+    w.svm.airdrop(&customer.pubkey(), 5_000_000_000).unwrap();
+    let keeper = Keypair::new(); // not the merchant, not the customer
+    w.svm.airdrop(&keeper.pubkey(), 5_000_000_000).unwrap();
+
+    let (achievement, badge_mint, _kleos, _ata) = w.achievement_pdas(5, customer.pubkey());
+    let create = Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::CreateAchievement {
+            authority: authority.pubkey(),
+            merchant: w.merchant,
+            achievement,
+            config: w.config,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::CreateAchievement {
+            id: 5,
+            name: "Regular".into(),
+            uri: "https://vesta.example/regular.json".into(),
+            threshold_lifetime: 100_000,
+        }
+        .data(),
+    };
+    w.send(&[create], &[&authority], &authority.pubkey()).unwrap();
+
+    // Customer crosses the threshold.
+    w.earn(customer.pubkey(), 5_000).unwrap();
+
+    // A keeper (neither merchant nor customer) grants the earned badge.
+    let grant = w.grant_ix(5, customer.pubkey(), keeper.pubkey());
+    w.send(&[grant], &[&keeper], &keeper.pubkey()).unwrap();
+
+    let mint_data = w.svm.get_account(&badge_mint).unwrap().data;
+    let state = StateWithExtensions::<MintState2>::unpack(&mint_data).unwrap();
+    assert_eq!(state.base.supply, 1, "keeper failed to grant an earned badge");
 }

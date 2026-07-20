@@ -11,6 +11,7 @@ use crate::{
 };
 
 #[derive(Accounts)]
+#[instruction(id: u64)]
 pub struct InitIssuer<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
@@ -19,7 +20,7 @@ pub struct InitIssuer<'info> {
         init,
         payer = authority,
         space = 8 + Issuer::INIT_SPACE,
-        seeds = [ISSUER_SEED, authority.key().as_ref()],
+        seeds = [ISSUER_SEED, authority.key().as_ref(), &id.to_le_bytes()],
         bump,
     )]
     pub issuer: Account<'info, Issuer>,
@@ -27,12 +28,13 @@ pub struct InitIssuer<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handle_init_issuer(ctx: Context<InitIssuer>, name: String) -> Result<()> {
+pub fn handle_init_issuer(ctx: Context<InitIssuer>, id: u64, name: String) -> Result<()> {
     require!(
         !name.is_empty() && name.len() <= MAX_NAME_LEN,
         AegisError::InvalidName
     );
     let issuer = &mut ctx.accounts.issuer;
+    issuer.id = id;
     issuer.authority = ctx.accounts.authority.key();
     issuer.pending_authority = None;
     issuer.operator = None;

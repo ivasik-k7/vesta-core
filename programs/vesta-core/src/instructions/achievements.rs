@@ -116,13 +116,16 @@ pub fn handle_close_achievement(ctx: Context<CloseAchievement>) -> Result<()> {
 
 #[derive(Accounts)]
 pub struct GrantAchievement<'info> {
+    /// Permissionless: anyone (the customer, a keeper, or the merchant) may
+    /// grant an *earned* badge. It always goes to the customer, is threshold-
+    /// gated, and the KleosReceipt prevents duplicates — so the only thing an
+    /// arbitrary caller can do is pay to distribute a badge the customer earned.
     #[account(mut)]
-    pub merchant_authority: Signer<'info>,
+    pub payer: Signer<'info>,
 
-    // Seeds bind the PDA to the signer — the derivation IS the authorization.
     #[account(
         mut,
-        seeds = [MERCHANT_SEED, merchant_authority.key().as_ref(), &merchant.id.to_le_bytes()],
+        seeds = [MERCHANT_SEED, merchant.authority.as_ref(), &merchant.id.to_le_bytes()],
         bump = merchant.bump,
     )]
     pub merchant: Account<'info, Merchant>,
@@ -152,7 +155,7 @@ pub struct GrantAchievement<'info> {
     /// survives a holder-side badge burn.
     #[account(
         init,
-        payer = merchant_authority,
+        payer = payer,
         space = 8 + KleosReceipt::INIT_SPACE,
         seeds = [KLEOS_SEED, achievement.key().as_ref(), customer.key().as_ref()],
         bump,
@@ -223,7 +226,7 @@ pub fn handle_grant_achievement(ctx: Context<GrantAchievement>) -> Result<()> {
             CpiContext::new_with_signer(
                 ctx.accounts.system_program.key(),
                 CreateAccount {
-                    from: ctx.accounts.merchant_authority.to_account_info(),
+                    from: ctx.accounts.payer.to_account_info(),
                     to: badge_info.clone(),
                 },
                 &[badge_seeds],
@@ -239,7 +242,7 @@ pub fn handle_grant_achievement(ctx: Context<GrantAchievement>) -> Result<()> {
                 CpiContext::new(
                     ctx.accounts.system_program.key(),
                     Transfer {
-                        from: ctx.accounts.merchant_authority.to_account_info(),
+                        from: ctx.accounts.payer.to_account_info(),
                         to: badge_info.clone(),
                     },
                 ),
@@ -333,7 +336,7 @@ pub fn handle_grant_achievement(ctx: Context<GrantAchievement>) -> Result<()> {
     associated_token::create(CpiContext::new(
         ctx.accounts.associated_token_program.key(),
         Create {
-            payer: ctx.accounts.merchant_authority.to_account_info(),
+            payer: ctx.accounts.payer.to_account_info(),
             associated_token: ctx.accounts.badge_ata.to_account_info(),
             authority: ctx.accounts.customer.to_account_info(),
             mint: badge_info.clone(),

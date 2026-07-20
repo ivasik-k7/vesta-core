@@ -13,6 +13,8 @@ use crate::constants::MAX_NAME_LEN;
 #[account]
 #[derive(InitSpace)]
 pub struct Issuer {
+    /// Per-(authority, id) — a wallet may run many issuers.
+    pub id: u64,
     pub authority: Pubkey,
     pub pending_authority: Option<Pubkey>,
     /// Optional hot signing key for day-to-day issuance (None = authority only).

@@ -869,7 +869,7 @@ fn two_step_authority_rotation() {
 fn attestation_gating_composes_with_aegis() {
     let issuer_authority = Keypair::new();
     let issuer = Pubkey::find_program_address(
-        &[b"issuer", issuer_authority.pubkey().as_ref()],
+        &[b"issuer", issuer_authority.pubkey().as_ref(), &0u64.to_le_bytes()],
         &aegis::id(),
     )
     .0;
@@ -899,7 +899,7 @@ fn attestation_gating_composes_with_aegis() {
                 system_program: system_program::ID,
             }
             .to_account_metas(None),
-            data: aegis::instruction::InitIssuer {
+            data: aegis::instruction::InitIssuer { id: 0,
                 name: "GeoOracle".into(),
             }
             .data(),
@@ -1011,7 +1011,7 @@ fn aegis_issuer_authority_pause_and_expiry() {
     w.svm.airdrop(&stranger.pubkey(), 5_000_000_000).unwrap();
 
     let issuer =
-        Pubkey::find_program_address(&[b"issuer", authority.pubkey().as_ref()], &aegis::id()).0;
+        Pubkey::find_program_address(&[b"issuer", authority.pubkey().as_ref(), &0u64.to_le_bytes()], &aegis::id()).0;
     w.send(
         &[Instruction {
             program_id: aegis::id(),
@@ -1021,7 +1021,7 @@ fn aegis_issuer_authority_pause_and_expiry() {
                 system_program: system_program::ID,
             }
             .to_account_metas(None),
-            data: aegis::instruction::InitIssuer {
+            data: aegis::instruction::InitIssuer { id: 0,
                 name: "Oracle".into(),
             }
             .data(),
@@ -1134,7 +1134,7 @@ fn aegis_operator_issues_but_cannot_administer() {
     w.svm.airdrop(&operator.pubkey(), 5_000_000_000).unwrap();
 
     let issuer =
-        Pubkey::find_program_address(&[b"issuer", authority.pubkey().as_ref()], &aegis::id()).0;
+        Pubkey::find_program_address(&[b"issuer", authority.pubkey().as_ref(), &0u64.to_le_bytes()], &aegis::id()).0;
     w.send(
         &[Instruction {
             program_id: aegis::id(),
@@ -1144,7 +1144,7 @@ fn aegis_operator_issues_but_cannot_administer() {
                 system_program: system_program::ID,
             }
             .to_account_metas(None),
-            data: aegis::instruction::InitIssuer { name: "Oracle".into() }.data(),
+            data: aegis::instruction::InitIssuer { id: 0, name: "Oracle".into() }.data(),
         }],
         &[&authority],
         &authority.pubkey(),
@@ -1231,7 +1231,7 @@ fn aegis_close_reclaims_rent() {
     w.svm.airdrop(&authority.pubkey(), 5_000_000_000).unwrap();
 
     let issuer =
-        Pubkey::find_program_address(&[b"issuer", authority.pubkey().as_ref()], &aegis::id()).0;
+        Pubkey::find_program_address(&[b"issuer", authority.pubkey().as_ref(), &0u64.to_le_bytes()], &aegis::id()).0;
     w.send(
         &[Instruction {
             program_id: aegis::id(),
@@ -1241,7 +1241,7 @@ fn aegis_close_reclaims_rent() {
                 system_program: system_program::ID,
             }
             .to_account_metas(None),
-            data: aegis::instruction::InitIssuer { name: "Oracle".into() }.data(),
+            data: aegis::instruction::InitIssuer { id: 0, name: "Oracle".into() }.data(),
         }],
         &[&authority],
         &authority.pubkey(),
@@ -1308,7 +1308,7 @@ fn aegis_close_reclaims_rent() {
 fn aegis_valid_from_gates_until_active() {
     let issuer_authority = Keypair::new();
     let issuer = Pubkey::find_program_address(
-        &[b"issuer", issuer_authority.pubkey().as_ref()],
+        &[b"issuer", issuer_authority.pubkey().as_ref(), &0u64.to_le_bytes()],
         &aegis::id(),
     )
     .0;
@@ -1334,7 +1334,7 @@ fn aegis_valid_from_gates_until_active() {
                 system_program: system_program::ID,
             }
             .to_account_metas(None),
-            data: aegis::instruction::InitIssuer { name: "Geo".into() }.data(),
+            data: aegis::instruction::InitIssuer { id: 0, name: "Geo".into() }.data(),
         }],
         &[&issuer_authority],
         &issuer_authority.pubkey(),
@@ -1396,7 +1396,7 @@ fn aegis_revocation_is_sticky() {
     let subject = Keypair::new().pubkey();
     w.svm.airdrop(&authority.pubkey(), 5_000_000_000).unwrap();
     let issuer =
-        Pubkey::find_program_address(&[b"issuer", authority.pubkey().as_ref()], &aegis::id()).0;
+        Pubkey::find_program_address(&[b"issuer", authority.pubkey().as_ref(), &0u64.to_le_bytes()], &aegis::id()).0;
     let attestation = Pubkey::find_program_address(
         &[b"attestation", issuer.as_ref(), subject.as_ref()],
         &aegis::id(),
@@ -1411,7 +1411,7 @@ fn aegis_revocation_is_sticky() {
                 system_program: system_program::ID,
             }
             .to_account_metas(None),
-            data: aegis::instruction::InitIssuer { name: "Oracle".into() }.data(),
+            data: aegis::instruction::InitIssuer { id: 0, name: "Oracle".into() }.data(),
         }],
         &[&authority],
         &authority.pubkey(),

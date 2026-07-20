@@ -30,7 +30,7 @@ const acct = (a: PublicKey) =>
   `https://explorer.solana.com/address/${a.toBase58()}?cluster=devnet`;
 
 const [issuer] = PublicKey.findProgramAddressSync(
-  [Buffer.from("issuer"), payer.publicKey.toBuffer()],
+  [Buffer.from("issuer"), payer.publicKey.toBuffer(), Buffer.alloc(8)],
   pid,
 );
 const [attestation] = PublicKey.findProgramAddressSync(
@@ -47,7 +47,7 @@ async function main() {
   const existing = await connection.getAccountInfo(issuer);
   if (!existing) {
     const sig = await program.methods
-      .initIssuer("VESTA Geo Oracle")
+      .initIssuer(new BN(0), "VESTA Geo Oracle")
       .accounts({ authority: payer.publicKey, issuer })
       .rpc();
     console.log("\ninit_issuer   :", link(sig));

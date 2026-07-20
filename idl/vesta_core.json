@@ -1523,7 +1523,13 @@
       ],
       "accounts": [
         {
-          "name": "merchant_authority",
+          "name": "payer",
+          "docs": [
+            "Permissionless: anyone (the customer, a keeper, or the merchant) may",
+            "grant an *earned* badge. It always goes to the customer, is threshold-",
+            "gated, and the KleosReceipt prevents duplicates — so the only thing an",
+            "arbitrary caller can do is pay to distribute a badge the customer earned."
+          ],
           "writable": true,
           "signer": true
         },
@@ -1547,7 +1553,8 @@
               },
               {
                 "kind": "account",
-                "path": "merchant_authority"
+                "path": "merchant.authority",
+                "account": "Merchant"
               },
               {
                 "kind": "account",

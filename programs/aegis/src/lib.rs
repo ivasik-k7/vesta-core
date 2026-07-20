@@ -38,8 +38,8 @@ pub mod aegis {
     use super::*;
 
     /// Create an attestation authority (one per creator wallet).
-    pub fn init_issuer(ctx: Context<InitIssuer>, name: String) -> Result<()> {
-        instructions::issuer::handle_init_issuer(ctx, name)
+    pub fn init_issuer(ctx: Context<InitIssuer>, id: u64, name: String) -> Result<()> {
+        instructions::issuer::handle_init_issuer(ctx, id, name)
     }
 
     /// Pause / resume issuance for this issuer (authority only).
