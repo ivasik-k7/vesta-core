@@ -1,27 +1,49 @@
-skip_local_validator = true
+# ── VESTA · Anchor workspace ─────────────────────────────────────────────────
+# Three on-chain programs:
+#   vesta_core — the living-loyalty protocol (merchants, points, alliances)
+#   argus      — Token-2022 transfer-hook policy engine
+#   aegis      — attestation issuer (argus/vesta_core gate on it)
+#
+# Tests run under LiteSVM via `cargo test` (it bundles Token-2022 + the ATA
+# program), so no local validator is required — `anchor test` just shells out
+# to the `test` script below.
 
+# Pin the toolchain so IDL layout and (later) verifiable builds are
+# reproducible across machines and CI. Managed by avm / agave-install.
 [toolchain]
 anchor_version = "1.1.2"
+solana_version = "3.1.10"
 
+# IDL / client-generation features.
+#   resolution — clients auto-resolve known PDAs & related accounts from the IDL
+#   skip-lint  — keep `anchor build` account/constraint lints ON (false)
 [features]
 resolution = true
 skip-lint = false
+
+# Program ids per cluster. Keep these in sync with each `declare_id!` via
+# `anchor keys sync` after any keypair rotation.
+[programs.localnet]
+aegis = "AcCdMQC1rj4KukjhFzf4S8metEAXpnt9gzvMThsu15e1"
+argus = "9zJEWrk47z1ACT3ySMwzmUrMsQzFC8afBSFcsCzsz3rx"
+vesta_core = "gaMq6BpH1aqC8ZCYtAxwZBjTa9AnfdWvYwURG6L4LDz"
 
 [programs.devnet]
 aegis = "AcCdMQC1rj4KukjhFzf4S8metEAXpnt9gzvMThsu15e1"
 argus = "9zJEWrk47z1ACT3ySMwzmUrMsQzFC8afBSFcsCzsz3rx"
 vesta_core = "gaMq6BpH1aqC8ZCYtAxwZBjTa9AnfdWvYwURG6L4LDz"
 
-[programs.localnet]
-aegis = "AcCdMQC1rj4KukjhFzf4S8metEAXpnt9gzvMThsu15e1"
-argus = "9zJEWrk47z1ACT3ySMwzmUrMsQzFC8afBSFcsCzsz3rx"
-vesta_core = "gaMq6BpH1aqC8ZCYtAxwZBjTa9AnfdWvYwURG6L4LDz"
+# On-chain IDL / program-metadata registry used by `anchor idl` & `anchor publish`.
+[registry]
+url = "https://api.apr.dev"
 
 [provider]
 cluster = "devnet"
 wallet = "~/.config/solana/id.json"
 
+# Workspace scripts. The canonical CI gate is `test`; `lint` mirrors the
+# workspace clippy policy; `build` produces the deployable SBF artifacts.
 [scripts]
 test = "cargo test"
-
-[hooks]
+lint = "cargo clippy --workspace --all-targets -- -D warnings"
+build = "cargo build-sbf"
