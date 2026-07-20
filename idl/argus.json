@@ -1,0 +1,447 @@
+{
+  "address": "9zJEWrk47z1ACT3ySMwzmUrMsQzFC8afBSFcsCzsz3rx",
+  "metadata": {
+    "name": "argus",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "VESTA transfer hook guard: validates point transfers (whitelisted flows, gift limits)",
+    "repository": "https://github.com/ivasik-k7/vesta-core"
+  },
+  "instructions": [
+    {
+      "name": "execute",
+      "discriminator": [
+        105,
+        37,
+        101,
+        197,
+        75,
+        251,
+        102,
+        26
+      ],
+      "accounts": [
+        {
+          "name": "source"
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "destination"
+        },
+        {
+          "name": "authority"
+        },
+        {
+          "name": "extra_account_meta_list",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  120,
+                  116,
+                  114,
+                  97,
+                  45,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116,
+                  45,
+                  109,
+                  101,
+                  116,
+                  97,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "gift_ledger",
+          "writable": true
+        },
+        {
+          "name": "destination_owner"
+        },
+        {
+          "name": "treasury"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "initialize_transfer_guard",
+      "discriminator": [
+        186,
+        208,
+        237,
+        122,
+        155,
+        179,
+        101,
+        215
+      ],
+      "accounts": [
+        {
+          "name": "merchant_authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "merchant"
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "extra_account_meta_list",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  120,
+                  116,
+                  114,
+                  97,
+                  45,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116,
+                  45,
+                  109,
+                  101,
+                  116,
+                  97,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "open_gift_ledger",
+      "discriminator": [
+        211,
+        177,
+        35,
+        34,
+        28,
+        248,
+        76,
+        104
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "gift_ledger",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "GiftLedger",
+      "discriminator": [
+        152,
+        158,
+        255,
+        49,
+        81,
+        146,
+        184,
+        229
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "ClawbackObserved",
+      "discriminator": [
+        228,
+        85,
+        117,
+        199,
+        211,
+        183,
+        57,
+        157
+      ]
+    },
+    {
+      "name": "GiftLedgerOpened",
+      "discriminator": [
+        139,
+        138,
+        33,
+        28,
+        72,
+        11,
+        13,
+        45
+      ]
+    },
+    {
+      "name": "PointsGifted",
+      "discriminator": [
+        72,
+        164,
+        13,
+        253,
+        200,
+        253,
+        181,
+        104
+      ]
+    },
+    {
+      "name": "TransferGuardInitialized",
+      "discriminator": [
+        4,
+        65,
+        58,
+        233,
+        33,
+        94,
+        180,
+        2
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "UnauthorizedGuardInit",
+      "msg": "Guard initialization not authorized for this merchant/mint"
+    },
+    {
+      "code": 6001,
+      "name": "GuardAlreadyInitialized",
+      "msg": "Transfer guard already initialized for this mint"
+    },
+    {
+      "code": 6002,
+      "name": "MintMismatch",
+      "msg": "Mint does not match the merchant point mint"
+    },
+    {
+      "code": 6003,
+      "name": "LedgerNotOpened",
+      "msg": "Gift ledger not opened — run open_gift_ledger first"
+    },
+    {
+      "code": 6004,
+      "name": "GiftCapExceeded",
+      "msg": "Daily gift cap exceeded"
+    },
+    {
+      "code": 6005,
+      "name": "ProgramOwnedDestination",
+      "msg": "Destination wallet is program-owned — not a loyalty flow"
+    },
+    {
+      "code": 6006,
+      "name": "MetaListMismatch",
+      "msg": "Provided extra account does not match the meta list derivation"
+    },
+    {
+      "code": 6007,
+      "name": "FlowNotAllowed",
+      "msg": "Transfer flow not allowed"
+    },
+    {
+      "code": 6008,
+      "name": "Overflow",
+      "msg": "Arithmetic overflow"
+    }
+  ],
+  "types": [
+    {
+      "name": "ClawbackObserved",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "source_owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GiftLedger",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "day",
+            "type": "u32"
+          },
+          {
+            "name": "gifted_today",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GiftLedgerOpened",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PointsGifted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "source_owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "destination",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "gifted_today",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TransferGuardInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          }
+        ]
+      }
+    }
+  ],
+  "constants": [
+    {
+      "name": "DAILY_GIFT_CAP_RAW",
+      "type": "u64",
+      "value": "50000"
+    },
+    {
+      "name": "EXTRA_ACCOUNT_METAS_SEED",
+      "type": "bytes",
+      "value": "[101, 120, 116, 114, 97, 45, 97, 99, 99, 111, 117, 110, 116, 45, 109, 101, 116, 97, 115]"
+    },
+    {
+      "name": "LEDGER_SEED",
+      "type": "bytes",
+      "value": "[108, 101, 100, 103, 101, 114]"
+    }
+  ]
+}
