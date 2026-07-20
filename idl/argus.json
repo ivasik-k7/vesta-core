@@ -9,7 +9,193 @@
   },
   "instructions": [
     {
+      "name": "accept_guard_authority",
+      "docs": [
+        "Accept a proposed guard authority (two-step, spec §3.4)."
+      ],
+      "discriminator": [
+        203,
+        114,
+        230,
+        104,
+        221,
+        167,
+        152,
+        61
+      ],
+      "accounts": [
+        {
+          "name": "pending_authority",
+          "signer": true
+        },
+        {
+          "name": "guard_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard_config.mint",
+                "account": "GuardConfig"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "add_list_entry",
+      "docs": [
+        "Add an allow/deny list member — guard authority only (spec §3.5)."
+      ],
+      "discriminator": [
+        243,
+        17,
+        116,
+        216,
+        43,
+        0,
+        137,
+        30
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "guard_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard_config.mint",
+                "account": "GuardConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "entry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  110,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard_config.mint",
+                "account": "GuardConfig"
+              },
+              {
+                "kind": "arg",
+                "path": "target"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "target",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "configure_policy",
+      "docs": [
+        "Retune the per-mint policy — guard authority only (spec §3.2)."
+      ],
+      "discriminator": [
+        217,
+        104,
+        18,
+        229,
+        147,
+        34,
+        32,
+        64
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "guard_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard_config.mint",
+                "account": "GuardConfig"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "update",
+          "type": {
+            "defined": {
+              "name": "PolicyUpdate"
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "execute",
+      "docs": [
+        "Invoked by Token-2022 on every transfer of a hooked mint (spec §5)."
+      ],
       "discriminator": [
         105,
         37,
@@ -69,14 +255,47 @@
           }
         },
         {
-          "name": "gift_ledger",
+          "name": "guard_config",
+          "docs": [
+            "Per-mint policy (spec §2.1). Deserialization failure fails closed."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "wallet_state",
           "writable": true
         },
         {
           "name": "destination_owner"
         },
         {
-          "name": "treasury"
+          "name": "list_entry"
+        },
+        {
+          "name": "aegis_program"
+        },
+        {
+          "name": "aegis_issuer"
+        },
+        {
+          "name": "attestation"
         }
       ],
       "args": [
@@ -88,6 +307,10 @@
     },
     {
       "name": "initialize_transfer_guard",
+      "docs": [
+        "Permissioned creation of the GuardConfig + ExtraAccountMetaList,",
+        "seeded with an initial policy (spec §3.1)."
+      ],
       "discriminator": [
         186,
         208,
@@ -105,13 +328,44 @@
           "signer": true
         },
         {
-          "name": "merchant"
+          "name": "merchant",
+          "docs": [
+            "owner program, discriminator, PDA derivation, and field bindings."
+          ]
         },
         {
           "name": "mint"
         },
         {
+          "name": "guard_config",
+          "docs": [
+            "Per-mint policy account (spec §2.1)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
           "name": "extra_account_meta_list",
+          "docs": [
+            "TLV-initialized in the handler (defensively — the address is predictable)."
+          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -151,19 +405,32 @@
           "address": "11111111111111111111111111111111"
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "policy",
+          "type": {
+            "defined": {
+              "name": "InitialPolicy"
+            }
+          }
+        }
+      ]
     },
     {
-      "name": "open_gift_ledger",
+      "name": "open_wallet_state",
+      "docs": [
+        "One-time, customer-signed velocity-state creation — in-hook creation is",
+        "impossible (privilege de-escalation leaves no rent payer, spec §3.6)."
+      ],
       "discriminator": [
-        211,
-        177,
-        35,
-        34,
-        28,
-        248,
-        76,
-        104
+        139,
+        105,
+        41,
+        196,
+        77,
+        5,
+        105,
+        130
       ],
       "accounts": [
         {
@@ -175,19 +442,19 @@
           "name": "mint"
         },
         {
-          "name": "gift_ledger",
+          "name": "wallet_state",
           "writable": true,
           "pda": {
             "seeds": [
               {
                 "kind": "const",
                 "value": [
-                  108,
-                  101,
-                  100,
-                  103,
-                  101,
-                  114
+                  119,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
                 ]
               },
               {
@@ -207,61 +474,306 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "remove_list_entry",
+      "docs": [
+        "Remove an allow/deny list member — guard authority only (spec §3.5)."
+      ],
+      "discriminator": [
+        94,
+        42,
+        185,
+        24,
+        94,
+        237,
+        2,
+        91
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "guard_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard_config.mint",
+                "account": "GuardConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "entry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  110,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard_config.mint",
+                "account": "GuardConfig"
+              },
+              {
+                "kind": "arg",
+                "path": "target"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "target",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_guard_paused",
+      "docs": [
+        "Per-mint peer-transfer circuit breaker — guard authority only (spec §3.3)."
+      ],
+      "discriminator": [
+        124,
+        190,
+        24,
+        212,
+        71,
+        184,
+        73,
+        113
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "guard_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard_config.mint",
+                "account": "GuardConfig"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "paused",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "transfer_guard_authority",
+      "docs": [
+        "Propose a new guard authority (two-step, spec §3.4)."
+      ],
+      "discriminator": [
+        146,
+        13,
+        69,
+        171,
+        34,
+        89,
+        188,
+        199
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "guard_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard_config.mint",
+                "account": "GuardConfig"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_authority",
+          "type": "pubkey"
+        }
+      ]
     }
   ],
   "accounts": [
     {
-      "name": "GiftLedger",
+      "name": "GuardConfig",
       "discriminator": [
-        152,
-        158,
-        255,
-        49,
-        81,
-        146,
-        184,
-        229
+        95,
+        175,
+        118,
+        50,
+        193,
+        113,
+        37,
+        250
+      ]
+    },
+    {
+      "name": "PolicyListEntry",
+      "discriminator": [
+        122,
+        42,
+        23,
+        216,
+        232,
+        50,
+        115,
+        29
+      ]
+    },
+    {
+      "name": "WalletPolicyState",
+      "discriminator": [
+        32,
+        168,
+        136,
+        176,
+        106,
+        7,
+        193,
+        196
       ]
     }
   ],
   "events": [
     {
-      "name": "ClawbackObserved",
+      "name": "GuardAuthorityChanged",
       "discriminator": [
-        228,
-        85,
+        8,
+        96,
+        136,
+        39,
         117,
-        199,
-        211,
-        183,
-        57,
-        157
+        152,
+        134,
+        202
       ]
     },
     {
-      "name": "GiftLedgerOpened",
+      "name": "GuardAuthorityProposed",
       "discriminator": [
-        139,
-        138,
-        33,
+        47,
+        162,
+        78,
+        73,
+        142,
+        6,
+        187,
+        198
+      ]
+    },
+    {
+      "name": "GuardPausedSet",
+      "discriminator": [
+        172,
+        156,
+        63,
+        213,
+        163,
+        180,
+        126,
+        53
+      ]
+    },
+    {
+      "name": "ListEntryChanged",
+      "discriminator": [
+        244,
+        168,
+        8,
+        217,
+        135,
+        208,
+        239,
+        175
+      ]
+    },
+    {
+      "name": "PolicyConfigured",
+      "discriminator": [
+        94,
+        37,
+        210,
+        212,
+        234,
+        9,
+        18,
+        101
+      ]
+    },
+    {
+      "name": "TransferDecision",
+      "discriminator": [
         28,
-        72,
-        11,
-        13,
-        45
-      ]
-    },
-    {
-      "name": "PointsGifted",
-      "discriminator": [
-        72,
-        164,
-        13,
-        253,
-        200,
-        253,
-        181,
-        104
+        106,
+        243,
+        103,
+        79,
+        75,
+        241,
+        241
       ]
     },
     {
@@ -275,6 +787,19 @@
         94,
         180,
         2
+      ]
+    },
+    {
+      "name": "WalletStateOpened",
+      "discriminator": [
+        186,
+        34,
+        230,
+        47,
+        3,
+        146,
+        66,
+        59
       ]
     }
   ],
@@ -296,38 +821,98 @@
     },
     {
       "code": 6003,
-      "name": "LedgerNotOpened",
-      "msg": "Gift ledger not opened — run open_gift_ledger first"
+      "name": "StateNotOpened",
+      "msg": "Wallet policy state not opened — run open_wallet_state first"
     },
     {
       "code": 6004,
+      "name": "Unauthorized",
+      "msg": "Not the guard authority"
+    },
+    {
+      "code": 6005,
+      "name": "PendingAuthorityMismatch",
+      "msg": "Pending authority does not match the signer"
+    },
+    {
+      "code": 6006,
+      "name": "InvalidPolicy",
+      "msg": "Policy values are inconsistent (e.g. per-tx cap above daily cap)"
+    },
+    {
+      "code": 6007,
+      "name": "UnknownFlag",
+      "msg": "Unknown policy flag bit set"
+    },
+    {
+      "code": 6008,
+      "name": "MintPaused",
+      "msg": "Per-mint transfers are paused"
+    },
+    {
+      "code": 6009,
+      "name": "GiftingDisabled",
+      "msg": "Peer gifting is disabled for this mint"
+    },
+    {
+      "code": 6010,
+      "name": "PerTxExceeded",
+      "msg": "Per-transfer cap exceeded"
+    },
+    {
+      "code": 6011,
+      "name": "BalanceCapExceeded",
+      "msg": "Destination balance cap would be exceeded"
+    },
+    {
+      "code": 6012,
+      "name": "CooldownActive",
+      "msg": "Transfer cooldown has not elapsed"
+    },
+    {
+      "code": 6013,
+      "name": "TransferCountExceeded",
+      "msg": "Daily transfer count cap reached"
+    },
+    {
+      "code": 6014,
       "name": "GiftCapExceeded",
       "msg": "Daily gift cap exceeded"
     },
     {
-      "code": 6005,
+      "code": 6015,
+      "name": "NotAllowlisted",
+      "msg": "Destination is not in the allow list"
+    },
+    {
+      "code": 6016,
+      "name": "DenyListed",
+      "msg": "Destination is in the deny list"
+    },
+    {
+      "code": 6017,
+      "name": "AttestationFailed",
+      "msg": "Attestation missing, expired, revoked, or does not satisfy policy"
+    },
+    {
+      "code": 6018,
       "name": "ProgramOwnedDestination",
       "msg": "Destination wallet is program-owned — not a loyalty flow"
     },
     {
-      "code": 6006,
+      "code": 6019,
       "name": "MetaListMismatch",
       "msg": "Provided extra account does not match the meta list derivation"
     },
     {
-      "code": 6007,
-      "name": "FlowNotAllowed",
-      "msg": "Transfer flow not allowed"
-    },
-    {
-      "code": 6008,
+      "code": 6020,
       "name": "Overflow",
       "msg": "Arithmetic overflow"
     }
   ],
   "types": [
     {
-      "name": "ClawbackObserved",
+      "name": "GuardAuthorityChanged",
       "type": {
         "kind": "struct",
         "fields": [
@@ -336,27 +921,148 @@
             "type": "pubkey"
           },
           {
-            "name": "source_owner",
+            "name": "old",
             "type": "pubkey"
           },
           {
-            "name": "amount",
-            "type": "u64"
+            "name": "new",
+            "type": "pubkey"
           }
         ]
       }
     },
     {
-      "name": "GiftLedger",
+      "name": "GuardAuthorityProposed",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "day",
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "old",
+            "type": "pubkey"
+          },
+          {
+            "name": "new",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GuardConfig",
+      "docs": [
+        "Per-mint transfer policy — the tunable heart of the guard (spec §2.1).",
+        "",
+        "One account, read once in `execute`, holds the whole policy. The guard",
+        "authority (the merchant PDA) may retune every field except the attestation",
+        "issuer/program, which are baked into the ExtraAccountMetaList at init and",
+        "therefore fixed for the life of the guard (spec §7, §16)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "docs": [
+              "The hooked mint this config governs."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "docs": [
+              "Who may retune policy — the vesta_core Merchant PDA."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "pending_authority",
+            "docs": [
+              "Two-step authority rotation target."
+            ],
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "treasury",
+            "docs": [
+              "Always-allowed destination (rule 2): the merchant treasury ATA."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "attestation_issuer",
+            "docs": [
+              "aegis issuer whose attestations this guard trusts (spec §7). Baked into",
+              "the meta list at init; `Pubkey::default()` when attestation is unused."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "paused",
+            "docs": [
+              "Per-mint peer-transfer freeze (rules 1–2 stay open — clawback/refunds)."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "flags",
+            "docs": [
+              "Policy bitset — see `crate::constants::flags`."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "daily_gift_cap",
+            "docs": [
+              "Raw units a wallet may send per UTC day (0 = gifting off)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "per_tx_cap",
+            "docs": [
+              "Max raw units in a single peer transfer (0 = no per-tx limit)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "max_wallet_balance",
+            "docs": [
+              "Reject transfers that would push the destination over this (0 = off)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "transfers_per_day_cap",
+            "docs": [
+              "Max peer transfers a wallet may make per UTC day (0 = no count limit)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "cooldown_secs",
+            "docs": [
+              "Minimum seconds between a wallet's peer transfers (0 = no cooldown)."
+            ],
             "type": "u32"
           },
           {
-            "name": "gifted_today",
+            "name": "attestation_schema",
+            "docs": [
+              "Required attestation schema id (meaningful only with REQUIRE_ATTESTATION)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "attestation_mask",
+            "docs": [
+              "Required attestation value bitmask; allow iff `value & mask != 0`."
+            ],
             "type": "u64"
           },
           {
@@ -367,7 +1073,7 @@
       }
     },
     {
-      "name": "GiftLedgerOpened",
+      "name": "GuardPausedSet",
       "type": {
         "kind": "struct",
         "fields": [
@@ -376,14 +1082,219 @@
             "type": "pubkey"
           },
           {
-            "name": "owner",
-            "type": "pubkey"
+            "name": "paused",
+            "type": "bool"
           }
         ]
       }
     },
     {
-      "name": "PointsGifted",
+      "name": "InitialPolicy",
+      "docs": [
+        "Full policy supplied at guard init. The attestation issuer/program are",
+        "fixed here for the life of the guard (baked into the meta list); everything",
+        "else is retunable via `configure_policy`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "flags",
+            "type": "u16"
+          },
+          {
+            "name": "daily_gift_cap",
+            "type": "u64"
+          },
+          {
+            "name": "per_tx_cap",
+            "type": "u64"
+          },
+          {
+            "name": "max_wallet_balance",
+            "type": "u64"
+          },
+          {
+            "name": "transfers_per_day_cap",
+            "type": "u16"
+          },
+          {
+            "name": "cooldown_secs",
+            "type": "u32"
+          },
+          {
+            "name": "attestation_issuer",
+            "docs": [
+              "aegis issuer to trust; `Pubkey::default()` when attestation is unused."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "attestation_schema",
+            "type": "u16"
+          },
+          {
+            "name": "attestation_mask",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ListEntryChanged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "target",
+            "type": "pubkey"
+          },
+          {
+            "name": "added",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyConfigured",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "flags",
+            "type": "u16"
+          },
+          {
+            "name": "daily_gift_cap",
+            "type": "u64"
+          },
+          {
+            "name": "per_tx_cap",
+            "type": "u64"
+          },
+          {
+            "name": "max_wallet_balance",
+            "type": "u64"
+          },
+          {
+            "name": "transfers_per_day_cap",
+            "type": "u16"
+          },
+          {
+            "name": "cooldown_secs",
+            "type": "u32"
+          },
+          {
+            "name": "attestation_schema",
+            "type": "u16"
+          },
+          {
+            "name": "attestation_mask",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyListEntry",
+      "docs": [
+        "Allow/deny list membership marker (spec §2.4). Existence under the argus",
+        "program == membership; the account carries no payload beyond identity, so",
+        "`execute` never scans — a single PDA derivation answers the question."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "target",
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyUpdate",
+      "docs": [
+        "Partial retune. Every field is optional; `None` leaves the value untouched.",
+        "The attestation issuer is intentionally absent — it is immutable post-init."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "flags",
+            "type": {
+              "option": "u16"
+            }
+          },
+          {
+            "name": "daily_gift_cap",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "per_tx_cap",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "max_wallet_balance",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "transfers_per_day_cap",
+            "type": {
+              "option": "u16"
+            }
+          },
+          {
+            "name": "cooldown_secs",
+            "type": {
+              "option": "u32"
+            }
+          },
+          {
+            "name": "attestation_schema",
+            "type": {
+              "option": "u16"
+            }
+          },
+          {
+            "name": "attestation_mask",
+            "type": {
+              "option": "u64"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "TransferDecision",
+      "docs": [
+        "One event per `execute` call, carrying a stable reason code",
+        "(`crate::constants::reason`). The complete allow/deny audit trail."
+      ],
       "type": {
         "kind": "struct",
         "fields": [
@@ -396,7 +1307,7 @@
             "type": "pubkey"
           },
           {
-            "name": "destination",
+            "name": "destination_owner",
             "type": "pubkey"
           },
           {
@@ -404,8 +1315,12 @@
             "type": "u64"
           },
           {
-            "name": "gifted_today",
-            "type": "u64"
+            "name": "allowed",
+            "type": "bool"
+          },
+          {
+            "name": "reason",
+            "type": "u16"
           }
         ]
       }
@@ -422,6 +1337,71 @@
           {
             "name": "merchant",
             "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "WalletPolicyState",
+      "docs": [
+        "Per-(mint, source-owner) velocity counters (spec §2.2). Supersedes v1's",
+        "`GiftLedger`. Deliberately non-closable: closing and reopening would reset",
+        "the daily counters, so the locked rent is the anti-reset bond."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "day",
+            "docs": [
+              "UTC day the counters below belong to."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "sent_today",
+            "docs": [
+              "Raw units sent as peer transfers today."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "transfers_today",
+            "docs": [
+              "Peer-transfer count today."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "last_transfer_at",
+            "docs": [
+              "Unix ts of the wallet's last peer transfer (cooldown reference)."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "WalletStateOpened",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
           }
         ]
       }
@@ -429,19 +1409,53 @@
   ],
   "constants": [
     {
-      "name": "DAILY_GIFT_CAP_RAW",
+      "name": "ATTESTATION_SEED",
+      "docs": [
+        "aegis attestation PDA seed (spec §7). Kept in sync with the aegis program."
+      ],
+      "type": "bytes",
+      "value": "[97, 116, 116, 101, 115, 116, 97, 116, 105, 111, 110]"
+    },
+    {
+      "name": "DEFAULT_DAILY_GIFT_CAP_RAW",
+      "docs": [
+        "Default daily gift velocity cap seeded at guard init, raw units",
+        "(= 500.00 pts at issue). Retunable via `configure_policy` thereafter."
+      ],
       "type": "u64",
       "value": "50000"
     },
     {
       "name": "EXTRA_ACCOUNT_METAS_SEED",
+      "docs": [
+        "Interface-mandated seed for the ExtraAccountMetaList PDA."
+      ],
       "type": "bytes",
       "value": "[101, 120, 116, 114, 97, 45, 97, 99, 99, 111, 117, 110, 116, 45, 109, 101, 116, 97, 115]"
     },
     {
-      "name": "LEDGER_SEED",
+      "name": "GUARD_SEED",
+      "docs": [
+        "Per-mint policy account (spec §2.1)."
+      ],
       "type": "bytes",
-      "value": "[108, 101, 100, 103, 101, 114]"
+      "value": "[103, 117, 97, 114, 100]"
+    },
+    {
+      "name": "LIST_ENTRY_SEED",
+      "docs": [
+        "Allow/deny list membership marker (spec §2.4)."
+      ],
+      "type": "bytes",
+      "value": "[101, 110, 116, 114, 121]"
+    },
+    {
+      "name": "WALLET_STATE_SEED",
+      "docs": [
+        "Per-(mint, source-owner) velocity counters (spec §2.2)."
+      ],
+      "type": "bytes",
+      "value": "[119, 115, 116, 97, 116, 101]"
     }
   ]
 }

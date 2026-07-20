@@ -9,7 +9,10 @@
 use {
     anchor_lang::{
         prelude::{Clock, Pubkey},
-        solana_program::{instruction::Instruction, system_program},
+        solana_program::{
+            instruction::{AccountMeta, Instruction},
+            system_program,
+        },
         AccountDeserialize, InstructionData, ToAccountMetas,
     },
     anchor_spl::associated_token::get_associated_token_address_with_program_id,
@@ -41,6 +44,9 @@ fn core_bytes() -> &'static [u8] {
 fn argus_bytes() -> &'static [u8] {
     include_bytes!(concat!(env!("CARGO_TARGET_TMPDIR"), "/../deploy/argus.so"))
 }
+fn aegis_bytes() -> &'static [u8] {
+    include_bytes!(concat!(env!("CARGO_TARGET_TMPDIR"), "/../deploy/aegis.so"))
+}
 
 /// SetComputeUnitLimit (discriminant 2) — the swap's two UiAmountToAmount
 /// CPIs run float exp math and need more than the 200k default (spec §7.3).
@@ -71,6 +77,7 @@ impl World {
         let mut svm = LiteSVM::new();
         svm.add_program(vesta_core::id(), core_bytes()).unwrap();
         svm.add_program(argus::id(), argus_bytes()).unwrap();
+        svm.add_program(aegis::id(), aegis_bytes()).unwrap();
         let mut clock = svm.get_sysvar::<Clock>();
         clock.unix_timestamp = 1_760_000_000;
         svm.set_sysvar::<Clock>(&clock);
@@ -745,17 +752,33 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
         &argus::id(),
     )
     .0;
+    let guard_config =
+        Pubkey::find_program_address(&[b"guard", kavarna.mint.as_ref()], &argus::id()).0;
     let guard_init = Instruction {
         program_id: argus::id(),
         accounts: argus::accounts::InitializeTransferGuard {
             merchant_authority: authority.pubkey(),
             merchant: kavarna.merchant,
             mint: kavarna.mint,
+            guard_config,
             extra_account_meta_list: eaml,
             system_program: system_program::ID,
         }
         .to_account_metas(None),
-        data: argus::instruction::InitializeTransferGuard {}.data(),
+        data: argus::instruction::InitializeTransferGuard {
+            policy: argus::instructions::policy::InitialPolicy {
+                flags: argus::constants::flags::BLOCK_PROGRAM_OWNED,
+                daily_gift_cap: argus::constants::DEFAULT_DAILY_GIFT_CAP_RAW,
+                per_tx_cap: 0,
+                max_wallet_balance: 0,
+                transfers_per_day_cap: 0,
+                cooldown_secs: 0,
+                attestation_issuer: Pubkey::default(),
+                attestation_schema: 0,
+                attestation_mask: 0,
+            },
+        }
+        .data(),
     };
     w.send(&[guard_init], &[&authority], &authority.pubkey())
         .unwrap();
@@ -765,40 +788,61 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
         &kavarna.mint,
         &TOKEN_2022_ID,
     );
-    let ledger = Pubkey::find_program_address(
-        &[b"ledger", kavarna.mint.as_ref(), customer.pubkey().as_ref()],
-        &argus::id(),
-    )
-    .0;
     let config = w.config;
-    let clawback_ix = |amount: u64, destination: Pubkey| Instruction {
-        program_id: vesta_core::id(),
-        accounts: vesta_core::accounts::ClawbackPoints {
+    // argus hook extras for a clawback (source owner = customer, destination
+    // owner = merchant authority who owns the treasury), then argus program +
+    // eaml — passed as remaining_accounts in meta-list order.
+    let g = |seeds: &[&[u8]]| Pubkey::find_program_address(seeds, &argus::id()).0;
+    let clawback_ix = |amount: u64, destination: Pubkey, dest_owner: Pubkey| {
+        let attestation = Pubkey::find_program_address(
+            &[
+                b"attestation",
+                Pubkey::default().as_ref(),
+                dest_owner.as_ref(),
+            ],
+            &aegis::id(),
+        )
+        .0;
+        let mut accounts = vesta_core::accounts::ClawbackPoints {
             merchant_authority: authority.pubkey(),
             merchant: kavarna.merchant,
             customer: customer.pubkey(),
             customer_ata,
             treasury: destination,
             point_mint: kavarna.mint,
-            extra_account_meta_list: eaml,
-            gift_ledger: ledger,
-            destination_owner: authority.pubkey(),
-            argus_program: argus::id(),
             config,
             token_program: TOKEN_2022_ID,
         }
-        .to_account_metas(None),
-        data: vesta_core::instruction::Clawback {
-            amount_raw: amount,
-            reason_code: 7,
+        .to_account_metas(None);
+        accounts.extend([
+            AccountMeta::new_readonly(guard_config, false),
+            AccountMeta::new(
+                g(&[b"wstate", kavarna.mint.as_ref(), customer.pubkey().as_ref()]),
+                false,
+            ),
+            AccountMeta::new_readonly(dest_owner, false),
+            AccountMeta::new_readonly(g(&[b"entry", kavarna.mint.as_ref(), dest_owner.as_ref()]), false),
+            AccountMeta::new_readonly(aegis::id(), false),
+            AccountMeta::new_readonly(Pubkey::default(), false),
+            AccountMeta::new_readonly(attestation, false),
+            AccountMeta::new_readonly(argus::id(), false),
+            AccountMeta::new_readonly(eaml, false),
+        ]);
+        Instruction {
+            program_id: vesta_core::id(),
+            accounts,
+            data: vesta_core::instruction::Clawback {
+                amount_raw: amount,
+                reason_code: 7,
+            }
+            .data(),
         }
-        .data(),
     };
 
     // Works with NO gift ledger opened (argus rule 1 short-circuits).
     let before = w.balance(kavarna.mint, customer.pubkey());
     w.send(
-        &[clawback_ix(100_000, kavarna.treasury)],
+        &[clawback_ix(100_000, kavarna.treasury, authority.pubkey())],
         &[&authority],
         &authority.pubkey(),
     )
@@ -816,7 +860,7 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
     );
     assert!(
         w.send(
-            &[clawback_ix(1_000, elsewhere)],
+            &[clawback_ix(1_000, elsewhere, customer.pubkey())],
             &[&authority],
             &authority.pubkey()
         )
@@ -827,7 +871,7 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
     // Cannot claw more than the balance.
     assert!(
         w.send(
-            &[clawback_ix(10_000_000, kavarna.treasury)],
+            &[clawback_ix(10_000_000, kavarna.treasury, authority.pubkey())],
             &[&authority],
             &authority.pubkey()
         )

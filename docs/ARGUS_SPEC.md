@@ -7,10 +7,17 @@
 > Companion to `TECHNICAL_SPEC.md` (the vesta_core protocol). Where the two
 > overlap, the argus-specific detail here governs.
 
-- Status: **v2 design** — extends the deployed v1 (three instructions) into a
-  configurable policy engine. Sections tagged `[v1]` describe shipped behavior;
-  `[v2]` is the target; `[VERIFY]` marks claims for the fact-check pass.
+- Status: **v2 implemented** — the configurable policy engine is built and
+  green under LiteSVM (17 guard tests, incl. the aegis attestation-gating
+  synergy). Sections tagged `[v1]` describe the prior behavior; `[v2]` is the
+  shipped v2. The `[VERIFY]` items below were confirmed in LiteSVM (which
+  bundles real Token-2022): the fixed EAML with an external-PDA attestation
+  meta resolves correctly, and the balance cap is measured post-transfer
+  (the hook fires after Token-2022 applies the transfer, so the destination
+  balance already includes the incoming amount — §5 rule 10).
 - Deployed (devnet): `argus` `9zJEWrk47z1ACT3ySMwzmUrMsQzFC8afBSFcsCzsz3rx`
+  (v1 on-chain; v2 awaits redeploy) · `aegis`
+  `AcCdMQC1rj4KukjhFzf4S8metEAXpnt9gzvMThsu15e1` (built, awaits first deploy)
 - Interface: `spl-transfer-hook-interface` 2.1.0 · `spl-tlv-account-resolution`
   0.11.1 · Token-2022 (`spl-token-2022-interface` 2.1.0) · Anchor 1.1.2
 
@@ -223,8 +230,8 @@ Every branch emits an event carrying a `reason_code` (§10).
 7. flags.REQUIRE_ATTESTATION and attestation
    missing/expired/wrong-subject?                   → REJECT (attestation_failed)
 8. per_tx_cap set and amount > per_tx_cap?          → REJECT (per_tx_exceeded)
-9. max_wallet_balance set and dest_balance + amount
-   > max_wallet_balance?                            → REJECT (balance_cap)
+9. max_wallet_balance set and dest_balance (already
+   includes amount post-transfer) > cap?           → REJECT (balance_cap)
 10. cooldown_secs set and now - state.last < cd?    → REJECT (cooldown)
 11. roll WalletPolicyState by day; sent_today +
     amount > daily_gift_cap?                        → REJECT (daily_cap)

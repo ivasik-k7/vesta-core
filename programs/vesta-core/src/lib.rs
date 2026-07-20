@@ -154,7 +154,11 @@ pub mod vesta_core {
         instructions::koinon::handle_swap_points(ctx, ui_amount, max_raw_in, min_raw_out)
     }
 
-    pub fn clawback(ctx: Context<ClawbackPoints>, amount_raw: u64, reason_code: u16) -> Result<()> {
+    pub fn clawback<'info>(
+        ctx: Context<'info, ClawbackPoints<'info>>,
+        amount_raw: u64,
+        reason_code: u16,
+    ) -> Result<()> {
         instructions::clawback::handle_clawback(ctx, amount_raw, reason_code)
     }
 

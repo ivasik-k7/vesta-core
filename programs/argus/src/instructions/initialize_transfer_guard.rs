@@ -10,9 +10,14 @@ use spl_tlv_account_resolution::{
 use spl_transfer_hook_interface::instruction::ExecuteInstruction;
 
 use crate::{
-    constants::{EXTRA_ACCOUNT_METAS_SEED, LEDGER_SEED},
+    constants::{
+        AEGIS_ID, ATTESTATION_SEED, EXTRA_ACCOUNT_METAS_SEED, GUARD_SEED, LIST_ENTRY_SEED,
+        WALLET_STATE_SEED,
+    },
     error::GuardError,
     events::TransferGuardInitialized,
+    instructions::policy::{validate_policy, InitialPolicy},
+    state::GuardConfig,
 };
 
 #[derive(Accounts)]
@@ -27,6 +32,16 @@ pub struct InitializeTransferGuard<'info> {
     /// CHECK: only used as a PDA seed and for binding against merchant.point_mint.
     pub mint: UncheckedAccount<'info>,
 
+    /// Per-mint policy account (spec §2.1).
+    #[account(
+        init,
+        payer = merchant_authority,
+        space = 8 + GuardConfig::INIT_SPACE,
+        seeds = [GUARD_SEED, mint.key().as_ref()],
+        bump,
+    )]
+    pub guard_config: Account<'info, GuardConfig>,
+
     /// CHECK: the interface-defined ExtraAccountMetaList PDA; created and
     /// TLV-initialized in the handler (defensively — the address is predictable).
     #[account(mut, seeds = [EXTRA_ACCOUNT_METAS_SEED, mint.key().as_ref()], bump)]
@@ -35,8 +50,11 @@ pub struct InitializeTransferGuard<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handle_initialize_transfer_guard(ctx: Context<InitializeTransferGuard>) -> Result<()> {
-    // Authorization chain (spec §4.1): the Merchant account is owned by
+pub fn handle_initialize_transfer_guard(
+    ctx: Context<InitializeTransferGuard>,
+    policy: InitialPolicy,
+) -> Result<()> {
+    // Authorization chain (spec §3.1): the Merchant account is owned by
     // vesta_core, carries the Merchant discriminator, re-derives as
     // ["merchant", authority] under vesta_core, the signer IS that authority,
     // and the mint matches merchant.point_mint. Layout (fields are fixed-size
@@ -80,6 +98,33 @@ pub fn handle_initialize_transfer_guard(ctx: Context<InitializeTransferGuard>) -
         GuardError::MintMismatch
     );
 
+    validate_policy(
+        policy.flags,
+        policy.daily_gift_cap,
+        policy.per_tx_cap,
+        policy.attestation_issuer,
+    )?;
+
+    let mint_key = ctx.accounts.mint.key();
+
+    // Persist the policy.
+    let config = &mut ctx.accounts.guard_config;
+    config.mint = mint_key;
+    config.authority = ctx.accounts.merchant_authority.key();
+    config.pending_authority = None;
+    config.treasury = merchant_treasury;
+    config.attestation_issuer = policy.attestation_issuer;
+    config.paused = false;
+    config.flags = policy.flags;
+    config.daily_gift_cap = policy.daily_gift_cap;
+    config.per_tx_cap = policy.per_tx_cap;
+    config.max_wallet_balance = policy.max_wallet_balance;
+    config.transfers_per_day_cap = policy.transfers_per_day_cap;
+    config.cooldown_secs = policy.cooldown_secs;
+    config.attestation_schema = policy.attestation_schema;
+    config.attestation_mask = policy.attestation_mask;
+    config.bump = ctx.bumps.guard_config;
+
     let eaml_info = ctx.accounts.extra_account_meta_list.to_account_info();
     require_keys_eq!(
         *eaml_info.owner,
@@ -87,15 +132,27 @@ pub fn handle_initialize_transfer_guard(ctx: Context<InitializeTransferGuard>) -
         GuardError::GuardAlreadyInitialized
     );
 
-    // Execute account order: 0 source · 1 mint · 2 destination · 3 authority ·
-    // 4 meta-list · then extras in this exact order.
+    // Execute account order (spec §5): 0 source · 1 mint · 2 destination ·
+    // 3 authority · 4 meta-list · then these extras, indices 5..12.
     let metas = [
-        // GiftLedger: seeds ["ledger", mint (account #1), source token account's
-        // owner field (account #0, offset 32)] — delegation-proof by construction.
+        // 5 GuardConfig — self PDA ["guard", mint], read.
         ExtraAccountMeta::new_with_seeds(
             &[
                 Seed::Literal {
-                    bytes: LEDGER_SEED.to_vec(),
+                    bytes: GUARD_SEED.to_vec(),
+                },
+                Seed::AccountKey { index: 1 },
+            ],
+            false,
+            false,
+        )
+        .map_err(|_| GuardError::MetaListMismatch)?,
+        // 6 WalletPolicyState — ["wstate", mint, source token account owner
+        // (account 0, offset 32)]; writable, delegation-proof by construction.
+        ExtraAccountMeta::new_with_seeds(
+            &[
+                Seed::Literal {
+                    bytes: WALLET_STATE_SEED.to_vec(),
                 },
                 Seed::AccountKey { index: 1 },
                 Seed::AccountData {
@@ -108,7 +165,7 @@ pub fn handle_initialize_transfer_guard(ctx: Context<InitializeTransferGuard>) -
             true,
         )
         .map_err(|_| GuardError::MetaListMismatch)?,
-        // Destination owner wallet, dereferenced from the destination token
+        // 7 destination owner wallet, dereferenced from the destination token
         // account's owner field — lets the hook inspect its owning program.
         ExtraAccountMeta::new_with_pubkey_data(
             &PubkeyData::AccountData {
@@ -119,14 +176,54 @@ pub fn handle_initialize_transfer_guard(ctx: Context<InitializeTransferGuard>) -
             false,
         )
         .map_err(|_| GuardError::MetaListMismatch)?,
-        // Merchant treasury ATA, pinned as a literal at guard init.
-        ExtraAccountMeta::new_with_pubkey(&merchant_treasury, false, false)
+        // 8 list entry — self PDA ["entry", mint, destination owner], read.
+        // Existence == membership; used only when a list flag is set.
+        ExtraAccountMeta::new_with_seeds(
+            &[
+                Seed::Literal {
+                    bytes: LIST_ENTRY_SEED.to_vec(),
+                },
+                Seed::AccountKey { index: 1 },
+                Seed::AccountData {
+                    account_index: 2,
+                    data_index: 32,
+                    length: 32,
+                },
+            ],
+            false,
+            false,
+        )
+        .map_err(|_| GuardError::MetaListMismatch)?,
+        // 9 aegis program id, pinned as a literal so the attestation meta can
+        // derive a PDA under it (spec §7).
+        ExtraAccountMeta::new_with_pubkey(&AEGIS_ID, false, false)
             .map_err(|_| GuardError::MetaListMismatch)?,
+        // 10 aegis issuer this guard trusts, pinned at init (immutable).
+        ExtraAccountMeta::new_with_pubkey(&policy.attestation_issuer, false, false)
+            .map_err(|_| GuardError::MetaListMismatch)?,
+        // 11 attestation — external PDA under aegis (account 9):
+        // ["attestation", issuer (account 10), destination owner], read.
+        ExtraAccountMeta::new_external_pda_with_seeds(
+            9,
+            &[
+                Seed::Literal {
+                    bytes: ATTESTATION_SEED.to_vec(),
+                },
+                Seed::AccountKey { index: 10 },
+                Seed::AccountData {
+                    account_index: 2,
+                    data_index: 32,
+                    length: 32,
+                },
+            ],
+            false,
+            false,
+        )
+        .map_err(|_| GuardError::MetaListMismatch)?,
     ];
 
     let space = ExtraAccountMetaList::size_of(metas.len()).map_err(|_| GuardError::Overflow)?;
     let rent_target = Rent::get()?.minimum_balance(space);
-    let mint_key = ctx.accounts.mint.key();
     let eaml_seeds: &[&[u8]] = &[
         EXTRA_ACCOUNT_METAS_SEED,
         mint_key.as_ref(),
@@ -192,6 +289,7 @@ pub fn handle_initialize_transfer_guard(ctx: Context<InitializeTransferGuard>) -
     emit!(TransferGuardInitialized {
         mint: mint_key,
         merchant: ctx.accounts.merchant.key(),
+        authority: ctx.accounts.merchant_authority.key(),
     });
     Ok(())
 }

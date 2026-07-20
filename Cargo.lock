@@ -13,6 +13,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "aegis"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+]
+
+[[package]]
 name = "aes"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4280,6 +4287,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 name = "vesta-core"
 version = "0.1.0"
 dependencies = [
+ "aegis",
  "anchor-lang",
  "anchor-spl",
  "argus",

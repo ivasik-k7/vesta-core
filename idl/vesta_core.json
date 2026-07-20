@@ -117,6 +117,9 @@
         },
         {
           "name": "customer_ata",
+          "docs": [
+            "during the transfer (owner/mint bindings)."
+          ],
           "writable": true
         },
         {
@@ -149,20 +152,6 @@
           "relations": [
             "merchant"
           ]
-        },
-        {
-          "name": "extra_account_meta_list"
-        },
-        {
-          "name": "gift_ledger",
-          "writable": true
-        },
-        {
-          "name": "destination_owner"
-        },
-        {
-          "name": "argus_program",
-          "address": "9zJEWrk47z1ACT3ySMwzmUrMsQzFC8afBSFcsCzsz3rx"
         },
         {
           "name": "config",
@@ -801,7 +790,10 @@
           }
         },
         {
-          "name": "customer"
+          "name": "customer",
+          "docs": [
+            "are derived from this key."
+          ]
         },
         {
           "name": "customer_profile",
@@ -933,6 +925,10 @@
         },
         {
           "name": "campaign",
+          "docs": [
+            "Optional earn-multiplier campaign; the program applies *the supplied*",
+            "campaign — it cannot claim \"best\" on-chain. Validated in the handler."
+          ],
           "optional": true
         },
         {
@@ -1028,7 +1024,10 @@
           ]
         },
         {
-          "name": "extra_account_meta_list"
+          "name": "extra_account_meta_list",
+          "docs": [
+            "owned by argus before the hook authority is burned (spec §3.2)."
+          ]
         },
         {
           "name": "config",
@@ -1163,10 +1162,17 @@
         },
         {
           "name": "badge_ata",
+          "docs": [
+            "does not exist when Anchor constraints run)."
+          ],
           "writable": true
         },
         {
           "name": "kleos_receipt",
+          "docs": [
+            "The double-grant guard: init fails if it already exists — and it",
+            "survives a holder-side badge burn."
+          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -1288,6 +1294,9 @@
         },
         {
           "name": "alliance_authority",
+          "docs": [
+            "Handshake: unilateral joins cannot spoof rates (spec §3.6)."
+          ],
           "signer": true
         },
         {
@@ -1477,6 +1486,9 @@
         },
         {
           "name": "config",
+          "docs": [
+            "(PDA seeds, discriminator, stored admin, and v1 length)."
+          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -1777,6 +1789,9 @@
         },
         {
           "name": "mint",
+          "docs": [
+            "address is enforced by the PDA seeds."
+          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -1798,6 +1813,9 @@
         },
         {
           "name": "treasury",
+          "docs": [
+            "does not exist yet when Anchor constraints run); address verified there."
+          ],
           "writable": true
         },
         {
@@ -2032,6 +2050,9 @@
         },
         {
           "name": "alliance_authority",
+          "docs": [
+            "Anti-manipulation: rate changes need the alliance authority too."
+          ],
           "signer": true
         },
         {
@@ -3116,6 +3137,9 @@
   "types": [
     {
       "name": "Achievement",
+      "docs": [
+        "Kleos badge definition (phase 3). `merchant` first for memcmp catalogs."
+      ],
       "type": {
         "kind": "struct",
         "fields": [
@@ -3224,6 +3248,9 @@
     },
     {
       "name": "Alliance",
+      "docs": [
+        "Koinon alliance root; creator in the seeds kills permissionless id squatting."
+      ],
       "type": {
         "kind": "struct",
         "fields": [
@@ -3358,6 +3385,9 @@
     },
     {
       "name": "AllianceMember",
+      "docs": [
+        "Alliance membership: normalized swap rate + inbound-swap risk budget."
+      ],
       "type": {
         "kind": "struct",
         "fields": [
@@ -3398,6 +3428,9 @@
     },
     {
       "name": "Campaign",
+      "docs": [
+        "Earn multiplier campaign (phase 3). `merchant` first for memcmp catalogs."
+      ],
       "type": {
         "kind": "struct",
         "fields": [
@@ -3502,6 +3535,9 @@
     },
     {
       "name": "Config",
+      "docs": [
+        "Global protocol config. Singleton PDA."
+      ],
       "type": {
         "kind": "struct",
         "fields": [
@@ -3552,6 +3588,9 @@
     },
     {
       "name": "CustomerProfile",
+      "docs": [
+        "Per merchant-customer pair."
+      ],
       "type": {
         "kind": "struct",
         "fields": [
@@ -3592,6 +3631,9 @@
     },
     {
       "name": "KleosReceipt",
+      "docs": [
+        "Double-grant guard that survives a holder-side badge burn."
+      ],
       "type": {
         "kind": "struct",
         "fields": [
@@ -3608,6 +3650,9 @@
     },
     {
       "name": "Merchant",
+      "docs": [
+        "One per merchant; authority is baked into the seeds (no key rotation in-scope)."
+      ],
       "type": {
         "kind": "struct",
         "fields": [
@@ -3702,6 +3747,10 @@
     },
     {
       "name": "Offer",
+      "docs": [
+        "Redemption catalog entry. `merchant` is deliberately the first field so",
+        "getProgramAccounts can memcmp on it at offset 8."
+      ],
       "type": {
         "kind": "struct",
         "fields": [
@@ -3715,6 +3764,9 @@
           },
           {
             "name": "price_points",
+            "docs": [
+              "Denominated in UI points ×10² (post-decay purchasing power)."
+            ],
             "type": "u64"
           },
           {
@@ -3874,6 +3926,9 @@
     },
     {
       "name": "Receipt",
+      "docs": [
+        "Voucher for a redemption; indexed by the profile's on-chain counter."
+      ],
       "type": {
         "kind": "struct",
         "fields": [
@@ -4019,6 +4074,9 @@
     },
     {
       "name": "CAMPAIGN_MAX_BPS",
+      "docs": [
+        "Per-campaign multiplier bound (2.0×)."
+      ],
       "type": "u16",
       "value": "20000"
     },
@@ -4039,6 +4097,9 @@
     },
     {
       "name": "DECIMALS",
+      "docs": [
+        "UI points carry two implied decimals; all mints."
+      ],
       "type": "u8",
       "value": "2"
     },
@@ -4054,11 +4115,17 @@
     },
     {
       "name": "MAX_EARN_PER_TX",
+      "docs": [
+        "Earn cap per transaction, raw units (= 10 000.00 pts)."
+      ],
       "type": "u64",
       "value": "1000000"
     },
     {
       "name": "MAX_TOTAL_MULTIPLIER_BPS",
+      "docs": [
+        "Joint cap over streak + campaign composition (2.4×)."
+      ],
       "type": "u64",
       "value": "24000"
     },
@@ -4079,6 +4146,9 @@
     },
     {
       "name": "MIN_BASE_EARN_RATE",
+      "docs": [
+        "`base_earn_rate` bounds: raw points per fiat minor unit (cent)."
+      ],
       "type": "u64",
       "value": "1"
     },
@@ -4094,6 +4164,9 @@
     },
     {
       "name": "STREAK_BPS_PER_DAY",
+      "docs": [
+        "+2%/day of streak, capped at 30 days (≤ +6 000 bps)."
+      ],
       "type": "u16",
       "value": "200"
     },

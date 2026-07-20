@@ -1,0 +1,828 @@
+{
+  "address": "AcCdMQC1rj4KukjhFzf4S8metEAXpnt9gzvMThsu15e1",
+  "metadata": {
+    "name": "aegis",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "VESTA attestation issuer: signed region/tier/KYC credentials that argus and vesta_core gate on",
+    "repository": "https://github.com/ivasik-k7/vesta-core"
+  },
+  "instructions": [
+    {
+      "name": "accept_issuer_authority",
+      "docs": [
+        "Accept a proposed issuer authority (two-step)."
+      ],
+      "discriminator": [
+        68,
+        51,
+        39,
+        79,
+        55,
+        177,
+        220,
+        214
+      ],
+      "accounts": [
+        {
+          "name": "pending_authority",
+          "signer": true
+        },
+        {
+          "name": "issuer",
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "init_issuer",
+      "docs": [
+        "Create an attestation authority (one per creator wallet)."
+      ],
+      "discriminator": [
+        186,
+        77,
+        49,
+        118,
+        203,
+        47,
+        30,
+        79
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "issuer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  115,
+                  115,
+                  117,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "issue_attestation",
+      "docs": [
+        "Issue a fresh attestation for a subject wallet."
+      ],
+      "discriminator": [
+        18,
+        115,
+        85,
+        100,
+        231,
+        31,
+        242,
+        143
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "issuer"
+          ]
+        },
+        {
+          "name": "issuer",
+          "writable": true
+        },
+        {
+          "name": "attestation",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  116,
+                  116,
+                  101,
+                  115,
+                  116,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "issuer"
+              },
+              {
+                "kind": "arg",
+                "path": "subject"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "subject",
+          "type": "pubkey"
+        },
+        {
+          "name": "data",
+          "type": {
+            "defined": {
+              "name": "AttestationData"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "revoke_attestation",
+      "docs": [
+        "Revoke an attestation — downstream guards fail closed immediately."
+      ],
+      "discriminator": [
+        12,
+        156,
+        103,
+        161,
+        194,
+        246,
+        211,
+        179
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "issuer"
+          ]
+        },
+        {
+          "name": "issuer",
+          "relations": [
+            "attestation"
+          ]
+        },
+        {
+          "name": "attestation",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  116,
+                  116,
+                  101,
+                  115,
+                  116,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "issuer"
+              },
+              {
+                "kind": "account",
+                "path": "attestation.subject",
+                "account": "Attestation"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "set_issuer_paused",
+      "docs": [
+        "Pause / resume issuance for this issuer."
+      ],
+      "discriminator": [
+        207,
+        63,
+        17,
+        199,
+        12,
+        185,
+        38,
+        203
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "issuer"
+          ]
+        },
+        {
+          "name": "issuer",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "paused",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "transfer_issuer_authority",
+      "docs": [
+        "Propose a new issuer authority (two-step)."
+      ],
+      "discriminator": [
+        37,
+        24,
+        50,
+        71,
+        198,
+        24,
+        102,
+        229
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "issuer"
+          ]
+        },
+        {
+          "name": "issuer",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "new_authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "update_attestation",
+      "docs": [
+        "Retune an existing attestation (also un-revokes)."
+      ],
+      "discriminator": [
+        251,
+        244,
+        74,
+        129,
+        95,
+        36,
+        57,
+        101
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "issuer"
+          ]
+        },
+        {
+          "name": "issuer",
+          "relations": [
+            "attestation"
+          ]
+        },
+        {
+          "name": "attestation",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  116,
+                  116,
+                  101,
+                  115,
+                  116,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "issuer"
+              },
+              {
+                "kind": "account",
+                "path": "attestation.subject",
+                "account": "Attestation"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "data",
+          "type": {
+            "defined": {
+              "name": "AttestationData"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Attestation",
+      "discriminator": [
+        152,
+        125,
+        183,
+        86,
+        36,
+        146,
+        121,
+        73
+      ]
+    },
+    {
+      "name": "Issuer",
+      "discriminator": [
+        216,
+        19,
+        83,
+        230,
+        108,
+        53,
+        80,
+        14
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "AttestationIssued",
+      "discriminator": [
+        173,
+        237,
+        90,
+        123,
+        155,
+        224,
+        231,
+        242
+      ]
+    },
+    {
+      "name": "AttestationRevoked",
+      "discriminator": [
+        47,
+        106,
+        65,
+        238,
+        200,
+        127,
+        163,
+        50
+      ]
+    },
+    {
+      "name": "AttestationUpdated",
+      "discriminator": [
+        144,
+        39,
+        96,
+        142,
+        34,
+        173,
+        37,
+        75
+      ]
+    },
+    {
+      "name": "IssuerAuthorityChanged",
+      "discriminator": [
+        26,
+        127,
+        49,
+        9,
+        50,
+        234,
+        135,
+        197
+      ]
+    },
+    {
+      "name": "IssuerAuthorityProposed",
+      "discriminator": [
+        215,
+        101,
+        142,
+        231,
+        24,
+        242,
+        59,
+        44
+      ]
+    },
+    {
+      "name": "IssuerInitialized",
+      "discriminator": [
+        130,
+        46,
+        97,
+        66,
+        58,
+        159,
+        113,
+        106
+      ]
+    },
+    {
+      "name": "IssuerPausedSet",
+      "discriminator": [
+        93,
+        41,
+        97,
+        248,
+        28,
+        67,
+        224,
+        239
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "NameTooLong",
+      "msg": "Issuer name exceeds the maximum length"
+    },
+    {
+      "code": 6001,
+      "name": "Unauthorized",
+      "msg": "Not the issuer authority"
+    },
+    {
+      "code": 6002,
+      "name": "PendingAuthorityMismatch",
+      "msg": "Pending authority does not match the signer"
+    },
+    {
+      "code": 6003,
+      "name": "IssuerPaused",
+      "msg": "Issuer is paused — issuance disabled"
+    },
+    {
+      "code": 6004,
+      "name": "InvalidExpiry",
+      "msg": "Expiry must be in the future or zero (never)"
+    },
+    {
+      "code": 6005,
+      "name": "AlreadyRevoked",
+      "msg": "Attestation already revoked"
+    }
+  ],
+  "types": [
+    {
+      "name": "Attestation",
+      "docs": [
+        "A signed credential binding a subject wallet to a value under a schema.",
+        "",
+        "FIELD ORDER IS AN ABI. argus reads this account by fixed byte offset",
+        "(`argus::constants::attestation_offset`) rather than linking the aegis",
+        "crate. The layout below MUST stay: disc(8) · issuer(32) · subject(32) ·",
+        "schema(u16) · value(u64) · issued_at(i64) · expires_at(i64) · revoked(bool)",
+        "· bump(u8). Reordering breaks every guard that gates on attestation."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "issuer",
+            "type": "pubkey"
+          },
+          {
+            "name": "subject",
+            "type": "pubkey"
+          },
+          {
+            "name": "schema",
+            "type": "u16"
+          },
+          {
+            "name": "value",
+            "docs": [
+              "Schema-defined payload — typically a bitmask (regions, tiers)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "issued_at",
+            "type": "i64"
+          },
+          {
+            "name": "expires_at",
+            "docs": [
+              "Unix expiry; 0 means never expires."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "revoked",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AttestationData",
+      "docs": [
+        "Payload shared by issue/update — one struct, one validation path."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "schema",
+            "type": "u16"
+          },
+          {
+            "name": "value",
+            "type": "u64"
+          },
+          {
+            "name": "expires_at",
+            "docs": [
+              "Unix expiry; 0 = never."
+            ],
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AttestationIssued",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "issuer",
+            "type": "pubkey"
+          },
+          {
+            "name": "subject",
+            "type": "pubkey"
+          },
+          {
+            "name": "schema",
+            "type": "u16"
+          },
+          {
+            "name": "value",
+            "type": "u64"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AttestationRevoked",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "issuer",
+            "type": "pubkey"
+          },
+          {
+            "name": "subject",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AttestationUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "issuer",
+            "type": "pubkey"
+          },
+          {
+            "name": "subject",
+            "type": "pubkey"
+          },
+          {
+            "name": "schema",
+            "type": "u16"
+          },
+          {
+            "name": "value",
+            "type": "u64"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Issuer",
+      "docs": [
+        "An attestation authority. Issues credentials for subjects that downstream",
+        "programs (argus, vesta_core campaigns) gate on."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "pending_authority",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "issued",
+            "docs": [
+              "Lifetime count of attestations issued (monotonic; audit metric)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "paused",
+            "docs": [
+              "When true, no new attestations may be issued or updated."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "IssuerAuthorityChanged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "issuer",
+            "type": "pubkey"
+          },
+          {
+            "name": "old",
+            "type": "pubkey"
+          },
+          {
+            "name": "new",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "IssuerAuthorityProposed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "issuer",
+            "type": "pubkey"
+          },
+          {
+            "name": "old",
+            "type": "pubkey"
+          },
+          {
+            "name": "new",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "IssuerInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "issuer",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "IssuerPausedSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "issuer",
+            "type": "pubkey"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          }
+        ]
+      }
+    }
+  ],
+  "constants": [
+    {
+      "name": "ATTESTATION_SEED",
+      "docs": [
+        "Per-(issuer, subject) credential. Seeds [\"attestation\", issuer, subject].",
+        "The layout is read cross-program by argus at fixed offsets — do not reorder",
+        "the `Attestation` fields without updating argus::constants::attestation_offset."
+      ],
+      "type": "bytes",
+      "value": "[97, 116, 116, 101, 115, 116, 97, 116, 105, 111, 110]"
+    },
+    {
+      "name": "ISSUER_SEED",
+      "docs": [
+        "Issuer authority account (spec §13). Seeds [\"issuer\", authority]."
+      ],
+      "type": "bytes",
+      "value": "[105, 115, 115, 117, 101, 114]"
+    }
+  ]
+}

@@ -8,13 +8,17 @@ use crate::{
     constants::{CONFIG_SEED, DECIMALS, MERCHANT_SEED, MINT_SEED},
     error::VestaError,
     events::Clawback as ClawbackEvent,
-    instructions::register_merchant::ARGUS_ID,
     state::{Config, Merchant},
 };
 
 /// Issuer clawback via PermanentDelegate — implemented exclusively as
 /// transfer_checked so argus observes and audits every one (spec §3.7).
 /// The permanent delegate's burn capability is never exercised.
+///
+/// The argus transfer-hook extras (resolved from the ExtraAccountMetaList by
+/// the caller), the hook program, and the meta list itself are passed as
+/// `remaining_accounts` in interface order, so this instruction stays agnostic
+/// to the guard's policy shape as argus evolves.
 #[derive(Accounts)]
 pub struct ClawbackPoints<'info> {
     pub merchant_authority: Signer<'info>,
@@ -47,39 +51,25 @@ pub struct ClawbackPoints<'info> {
     )]
     pub point_mint: UncheckedAccount<'info>,
 
-    /// CHECK: argus ExtraAccountMetaList — required so the hooked transfer
-    /// resolves (fail-closed otherwise).
-    pub extra_account_meta_list: UncheckedAccount<'info>,
-
-    /// CHECK: the customer's gift ledger slot; may not exist — argus rule 1
-    /// short-circuits before deserializing it.
-    #[account(mut)]
-    pub gift_ledger: UncheckedAccount<'info>,
-
-    /// CHECK: destination owner wallet (the merchant authority) — resolved
-    /// extra for argus's pubkey-data meta.
-    pub destination_owner: UncheckedAccount<'info>,
-
-    /// CHECK: the argus program, invoked by Token-2022.
-    #[account(address = ARGUS_ID)]
-    pub argus_program: UncheckedAccount<'info>,
-
     #[account(seeds = [CONFIG_SEED], bump = config.bump)]
     pub config: Account<'info, Config>,
 
     pub token_program: Program<'info, Token2022>,
+    // remaining_accounts: argus hook extras (meta-list order), then the argus
+    // program, then the ExtraAccountMetaList — exactly what Token-2022 expects
+    // appended to a hooked transfer_checked.
 }
 
-pub fn handle_clawback(
-    ctx: Context<ClawbackPoints>,
+pub fn handle_clawback<'info>(
+    ctx: Context<'info, ClawbackPoints<'info>>,
     amount_raw: u64,
     reason_code: u16,
 ) -> Result<()> {
     require!(!ctx.accounts.config.paused, VestaError::ProtocolPaused);
     require!(amount_raw > 0, VestaError::InvalidAmount);
 
-    // Build the hooked transfer manually: base accounts + the argus extras in
-    // meta-list order, then the hook program and the meta list itself.
+    // Base hooked transfer: customer ATA → treasury, signed by the merchant PDA
+    // acting as the mint's permanent delegate.
     let mut ix = spl_token_2022_interface::instruction::transfer_checked(
         &ctx.accounts.token_program.key(),
         &ctx.accounts.customer_ata.key(),
@@ -91,21 +81,23 @@ pub fn handle_clawback(
         DECIMALS,
     )
     .map_err(|_| VestaError::ConversionFailed)?;
-    ix.accounts
-        .push(AccountMeta::new(ctx.accounts.gift_ledger.key(), false));
-    ix.accounts.push(AccountMeta::new_readonly(
-        ctx.accounts.destination_owner.key(),
-        false,
-    ));
-    ix.accounts.push(AccountMeta::new_readonly(
-        ctx.accounts.treasury.key(),
-        false,
-    ));
-    ix.accounts.push(AccountMeta::new_readonly(ARGUS_ID, false));
-    ix.accounts.push(AccountMeta::new_readonly(
-        ctx.accounts.extra_account_meta_list.key(),
-        false,
-    ));
+
+    // Append the caller-resolved hook extras verbatim, preserving writability.
+    for acc in ctx.remaining_accounts {
+        ix.accounts.push(AccountMeta {
+            pubkey: acc.key(),
+            is_signer: false,
+            is_writable: acc.is_writable,
+        });
+    }
+
+    let mut infos = vec![
+        ctx.accounts.customer_ata.to_account_info(),
+        ctx.accounts.point_mint.to_account_info(),
+        ctx.accounts.treasury.to_account_info(),
+        ctx.accounts.merchant.to_account_info(),
+    ];
+    infos.extend(ctx.remaining_accounts.iter().cloned());
 
     let authority_key = ctx.accounts.merchant.authority;
     let merchant_seeds: &[&[u8]] = &[
@@ -113,20 +105,7 @@ pub fn handle_clawback(
         authority_key.as_ref(),
         &[ctx.accounts.merchant.bump],
     ];
-    invoke_signed(
-        &ix,
-        &[
-            ctx.accounts.customer_ata.to_account_info(),
-            ctx.accounts.point_mint.to_account_info(),
-            ctx.accounts.treasury.to_account_info(),
-            ctx.accounts.merchant.to_account_info(),
-            ctx.accounts.gift_ledger.to_account_info(),
-            ctx.accounts.destination_owner.to_account_info(),
-            ctx.accounts.argus_program.to_account_info(),
-            ctx.accounts.extra_account_meta_list.to_account_info(),
-        ],
-        &[merchant_seeds],
-    )?;
+    invoke_signed(&ix, &infos, &[merchant_seeds])?;
 
     emit!(ClawbackEvent {
         merchant: ctx.accounts.merchant.key(),

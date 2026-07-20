@@ -1,0 +1,28 @@
+[package]
+name = "aegis"
+version = "0.1.0"
+description = "VESTA attestation issuer: signed region/tier/KYC credentials that argus and vesta_core gate on"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "aegis"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build"]
+anchor-debug = []
+custom-heap = []
+custom-panic = []
+
+[dependencies]
+anchor-lang = "1.1.2"
+
+[lints]
+workspace = true

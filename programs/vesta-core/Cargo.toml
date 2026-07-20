@@ -36,6 +36,7 @@ solana-keypair = "3.0.1"
 solana-account = "3.4.0"
 spl-associated-token-account-interface = "2.0.0"
 argus = { path = "../argus", default-features = false, features = ["no-entrypoint"] }
+aegis = { path = "../aegis", default-features = false, features = ["no-entrypoint"] }
 
 [lints]
 workspace = true

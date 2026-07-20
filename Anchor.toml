@@ -8,10 +8,12 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
+aegis = "AcCdMQC1rj4KukjhFzf4S8metEAXpnt9gzvMThsu15e1"
 argus = "9zJEWrk47z1ACT3ySMwzmUrMsQzFC8afBSFcsCzsz3rx"
 vesta_core = "gaMq6BpH1aqC8ZCYtAxwZBjTa9AnfdWvYwURG6L4LDz"
 
 [programs.localnet]
+aegis = "AcCdMQC1rj4KukjhFzf4S8metEAXpnt9gzvMThsu15e1"
 argus = "9zJEWrk47z1ACT3ySMwzmUrMsQzFC8afBSFcsCzsz3rx"
 vesta_core = "gaMq6BpH1aqC8ZCYtAxwZBjTa9AnfdWvYwURG6L4LDz"
 

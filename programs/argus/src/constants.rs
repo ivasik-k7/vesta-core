@@ -1,15 +1,29 @@
 use anchor_lang::prelude::*;
 
+/// Per-mint policy account (spec §2.1).
 #[constant]
-pub const LEDGER_SEED: &[u8] = b"ledger";
+pub const GUARD_SEED: &[u8] = b"guard";
+
+/// Per-(mint, source-owner) velocity counters (spec §2.2).
+#[constant]
+pub const WALLET_STATE_SEED: &[u8] = b"wstate";
+
+/// Allow/deny list membership marker (spec §2.4).
+#[constant]
+pub const LIST_ENTRY_SEED: &[u8] = b"entry";
 
 /// Interface-mandated seed for the ExtraAccountMetaList PDA.
 #[constant]
 pub const EXTRA_ACCOUNT_METAS_SEED: &[u8] = b"extra-account-metas";
 
-/// Daily gift velocity cap per (mint, source-owner), raw units (= 500.00 pts at issue).
+/// aegis attestation PDA seed (spec §7). Kept in sync with the aegis program.
 #[constant]
-pub const DAILY_GIFT_CAP_RAW: u64 = 50_000;
+pub const ATTESTATION_SEED: &[u8] = b"attestation";
+
+/// Default daily gift velocity cap seeded at guard init, raw units
+/// (= 500.00 pts at issue). Retunable via `configure_policy` thereafter.
+#[constant]
+pub const DEFAULT_DAILY_GIFT_CAP_RAW: u64 = 50_000;
 
 pub const SECONDS_PER_DAY: i64 = 86_400;
 
@@ -21,3 +35,68 @@ pub const VESTA_CORE_ID: Pubkey = pubkey!("gaMq6BpH1aqC8ZCYtAxwZBjTa9AnfdWvYwURG
 /// Anchor discriminator of vesta_core's Merchant account
 /// (sha256("account:Merchant")[..8]); equality is asserted in tests.
 pub const MERCHANT_DISCRIMINATOR: [u8; 8] = [71, 235, 30, 40, 231, 21, 32, 64];
+
+/// aegis program id — the canonical attestation issuer argus composes with
+/// (spec §7, §13). argus does NOT link the aegis crate for the same
+/// feature-unification reason; the Attestation layout below is verified by an
+/// integration test. Rotated via `anchor keys sync` at deploy time.
+pub const AEGIS_ID: Pubkey = pubkey!("AcCdMQC1rj4KukjhFzf4S8metEAXpnt9gzvMThsu15e1");
+
+/// Anchor discriminator of aegis's Attestation account
+/// (sha256("account:Attestation")[..8]); asserted in tests.
+pub const ATTESTATION_DISCRIMINATOR: [u8; 8] = [152, 125, 183, 86, 36, 146, 121, 73];
+
+/// Byte offsets into an aegis Attestation account (verified in tests):
+/// disc(8) · issuer(32) · subject(32) · schema(u16) · value(u64) ·
+/// issued_at(i64) · expires_at(i64) · revoked(bool) · bump(u8).
+pub mod attestation_offset {
+    pub const ISSUER: core::ops::Range<usize> = 8..40;
+    pub const SUBJECT: core::ops::Range<usize> = 40..72;
+    pub const SCHEMA: core::ops::Range<usize> = 72..74;
+    pub const VALUE: core::ops::Range<usize> = 74..82;
+    pub const EXPIRES_AT: core::ops::Range<usize> = 90..98;
+    pub const REVOKED: usize = 98;
+    pub const MIN_LEN: usize = 100;
+}
+
+/// Policy bitset stored in `GuardConfig.flags` (spec §2.1, §5).
+pub mod flags {
+    /// Reject destinations owned by a program (best-effort; spec §5 rule 5).
+    pub const BLOCK_PROGRAM_OWNED: u16 = 1 << 0;
+    /// Peer transfers require the destination to be in the allow list.
+    pub const ALLOWLIST_ONLY: u16 = 1 << 1;
+    /// Peer transfers are rejected if the destination is in the deny list.
+    pub const DENYLIST: u16 = 1 << 2;
+    /// Peer transfers require a valid aegis attestation on the destination.
+    pub const REQUIRE_ATTESTATION: u16 = 1 << 3;
+    /// Hard-disable peer transfers regardless of caps (issuer/treasury only).
+    pub const GIFTING_DISABLED: u16 = 1 << 4;
+
+    /// Bits with defined meaning; anything else is rejected at configure time.
+    pub const KNOWN: u16 = BLOCK_PROGRAM_OWNED
+        | ALLOWLIST_ONLY
+        | DENYLIST
+        | REQUIRE_ATTESTATION
+        | GIFTING_DISABLED;
+}
+
+/// Stable reason codes emitted with every `execute` decision (spec §10).
+pub mod reason {
+    pub const ISSUER_FLOW: u16 = 0;
+    pub const TREASURY_FLOW: u16 = 1;
+    pub const GIFT: u16 = 2;
+    pub const NOOP: u16 = 3;
+    pub const MINT_PAUSED: u16 = 10;
+    pub const GIFTING_DISABLED: u16 = 11;
+    pub const PROGRAM_OWNED_DEST: u16 = 12;
+    pub const NOT_ALLOWLISTED: u16 = 13;
+    pub const DENY_LISTED: u16 = 14;
+    pub const ATTESTATION_FAILED: u16 = 15;
+    pub const PER_TX_EXCEEDED: u16 = 16;
+    pub const BALANCE_CAP: u16 = 17;
+    pub const COOLDOWN: u16 = 18;
+    pub const TRANSFER_COUNT: u16 = 19;
+    pub const DAILY_CAP: u16 = 20;
+    pub const CONFIG_ERROR: u16 = 21;
+    pub const STATE_MISSING: u16 = 22;
+}
