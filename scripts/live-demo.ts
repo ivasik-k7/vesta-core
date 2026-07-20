@@ -110,7 +110,6 @@ async function main() {
         meta(mint, false, true),
         meta(ata, false, true),
         meta(config, false, false),
-        meta(VESTA_CORE, false, false), // campaign = None sentinel
         meta(T22, false, false),
         meta(ASSOCIATED_TOKEN_PROGRAM_ID, false, false),
         meta(SystemProgram.programId, false, false),
