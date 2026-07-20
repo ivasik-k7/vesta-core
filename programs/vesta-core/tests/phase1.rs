@@ -262,6 +262,75 @@ fn register_merchant_composes_full_extension_stack() {
 }
 
 #[test]
+fn set_token_attribute_enriches_metadata() {
+    use spl_token_2022_interface::extension::BaseStateWithExtensions;
+    use spl_token_metadata_interface::state::TokenMetadata;
+
+    let mut h = Harness::new();
+    let authority = Keypair::new();
+    let (merchant, mint, _) = h.register_merchant(&authority, "Kavarna");
+
+    // Attach two custom attributes.
+    for (k, v) in [("tier", "gold"), ("region", "EU")] {
+        h.send(
+            &[h.ix(
+                vesta_core::accounts::SetTokenAttribute {
+                    authority: authority.pubkey(),
+                    merchant,
+                    point_mint: mint,
+                    token_program: TOKEN_2022_ID,
+                    system_program: system_program::ID,
+                }
+                .to_account_metas(None),
+                vesta_core::instruction::SetTokenAttribute {
+                    key: k.into(),
+                    value: v.into(),
+                }
+                .data(),
+            )],
+            &[&authority],
+            &authority.pubkey(),
+        )
+        .unwrap();
+    }
+
+    // The metadata now carries both key/values.
+    let mint_data = h.svm.get_account(&mint).unwrap().data;
+    let state = StateWithExtensions::<MintState>::unpack(&mint_data).unwrap();
+    let meta = state.get_variable_len_extension::<TokenMetadata>().unwrap();
+    let got: std::collections::HashMap<_, _> = meta.additional_metadata.into_iter().collect();
+    assert_eq!(got.get("tier").map(String::as_str), Some("gold"));
+    assert_eq!(got.get("region").map(String::as_str), Some("EU"));
+
+    // A non-authority cannot set attributes.
+    let rando = Keypair::new();
+    h.svm.airdrop(&rando.pubkey(), 1_000_000_000).unwrap();
+    assert!(
+        h.send(
+            &[h.ix(
+                vesta_core::accounts::SetTokenAttribute {
+                    authority: rando.pubkey(),
+                    merchant,
+                    point_mint: mint,
+                    token_program: TOKEN_2022_ID,
+                    system_program: system_program::ID,
+                }
+                .to_account_metas(None),
+                vesta_core::instruction::SetTokenAttribute {
+                    key: "tier".into(),
+                    value: "hacked".into(),
+                }
+                .data(),
+            )],
+            &[&rando],
+            &rando.pubkey(),
+        )
+        .is_err(),
+        "non-authority set an attribute"
+    );
+}
+
+#[test]
 fn register_merchant_survives_prefunded_mint_griefing() {
     let mut h = Harness::new();
     let authority = Keypair::new();

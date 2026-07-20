@@ -42,6 +42,14 @@ pub struct MerchantUpdated {
 }
 
 #[event]
+pub struct TokenAttributeSet {
+    pub merchant: Pubkey,
+    pub mint: Pubkey,
+    pub key: String,
+    pub value: String,
+}
+
+#[event]
 pub struct PointsEarned {
     pub merchant: Pubkey,
     pub customer: Pubkey,

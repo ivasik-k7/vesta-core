@@ -67,6 +67,15 @@ pub mod vesta_core {
         instructions::finalize_transfer_guard::handle_finalize_transfer_guard(ctx)
     }
 
+    /// Attach/update a custom metadata attribute on the point token (enrichment).
+    pub fn set_token_attribute(
+        ctx: Context<SetTokenAttribute>,
+        key: String,
+        value: String,
+    ) -> Result<()> {
+        instructions::set_token_attribute::handle_set_token_attribute(ctx, key, value)
+    }
+
     pub fn earn_points(ctx: Context<EarnPoints>, amount_base: u64, visit_day: u32) -> Result<()> {
         instructions::earn_points::handle_earn_points(ctx, amount_base, visit_day)
     }

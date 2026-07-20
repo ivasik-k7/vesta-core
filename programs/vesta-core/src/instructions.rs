@@ -9,6 +9,7 @@ pub mod koinon;
 pub mod migrate_config;
 pub mod offers;
 pub mod register_merchant;
+pub mod set_token_attribute;
 
 pub use achievements::*;
 pub use admin::*;
@@ -21,3 +22,4 @@ pub use koinon::*;
 pub use migrate_config::*;
 pub use offers::*;
 pub use register_merchant::*;
+pub use set_token_attribute::*;
