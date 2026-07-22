@@ -164,4 +164,51 @@ pub mod aegis {
     pub fn verify_policy(ctx: Context<VerifyPolicy>, subject: Pubkey) -> Result<()> {
         instructions::policy::handle_verify_policy(ctx, subject)
     }
+
+    /// Declare a trust root (spec 08) — an entity verifiers may pin so its
+    /// accredited issuers inherit trust. Permissionless to declare.
+    pub fn register_trust_root(ctx: Context<RegisterTrustRoot>, name: String) -> Result<()> {
+        instructions::accreditation::handle_register_trust_root(ctx, name)
+    }
+
+    /// Accredit an issuer under the signer's trust root (spec 08).
+    pub fn accredit_issuer(
+        ctx: Context<AccreditIssuer>,
+        subject_issuer: Pubkey,
+        tier: u8,
+        permitted_schemas: Vec<u64>,
+        jurisdiction: u16,
+        expires_at: i64,
+    ) -> Result<()> {
+        instructions::accreditation::handle_accredit_issuer(
+            ctx,
+            subject_issuer,
+            tier,
+            permitted_schemas,
+            jurisdiction,
+            expires_at,
+        )
+    }
+
+    /// Revoke an accreditation — de-trusts the issuer under this root instantly.
+    pub fn revoke_accreditation(ctx: Context<RevokeAccreditation>) -> Result<()> {
+        instructions::accreditation::handle_revoke_accreditation(ctx)
+    }
+
+    /// Stateless verdict (spec 08): is `subject_issuer` accredited by `root` for
+    /// `schema_id`? Returned via return-data — compose it with a credential
+    /// `verify` so a verifier trusts a root instead of a hardcoded issuer key.
+    pub fn verify_accreditation(
+        ctx: Context<VerifyAccreditation>,
+        root: Pubkey,
+        subject_issuer: Pubkey,
+        schema_id: u64,
+    ) -> Result<()> {
+        instructions::accreditation::handle_verify_accreditation(
+            ctx,
+            root,
+            subject_issuer,
+            schema_id,
+        )
+    }
 }

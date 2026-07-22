@@ -19,6 +19,17 @@ pub const SCHEMA_SEED: &[u8] = b"schema";
 #[constant]
 pub const POLICY_SEED: &[u8] = b"policy";
 
+/// Trust root (spec 08). Seeds ["troot", authority].
+#[constant]
+pub const TRUST_ROOT_SEED: &[u8] = b"troot";
+
+/// Issuer accreditation edge (spec 08). Seeds ["accred", root, subject_issuer].
+#[constant]
+pub const ACCREDITATION_SEED: &[u8] = b"accred";
+
+/// Max schemas one accreditation may permit (0 used = all schemas).
+pub const MAX_PERMITTED_SCHEMAS: usize = 8;
+
 /// Account layout version (Track B convention).
 pub const STATE_VERSION: u8 = 1;
 
@@ -54,4 +65,10 @@ pub mod verify_reason {
     pub const UNKNOWN_PREDICATE: u16 = 8;
     /// Credential older than the policy's freshness / re-verification window.
     pub const TOO_OLD: u16 = 9;
+    /// Trust root missing or inactive (spec 08).
+    pub const ROOT_INACTIVE: u16 = 10;
+    /// Issuer is not accredited by the trust root (spec 08).
+    pub const NOT_ACCREDITED: u16 = 11;
+    /// Accreditation does not permit the requested schema (spec 08).
+    pub const SCHEMA_NOT_PERMITTED: u16 = 12;
 }

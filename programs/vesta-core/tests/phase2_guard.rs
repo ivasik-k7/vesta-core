@@ -2088,3 +2088,133 @@ fn argus_gates_on_an_aegis_policy() {
     w.send(&[ix], &[&alice], &alice.pubkey()).unwrap();
     assert_eq!(w.state_of(alice.pubkey()).sent_today, 1_000);
 }
+
+/// aegis 08: the issuer accreditation trust graph. A verifier pins one root;
+/// issuers it accredits inherit trust. verify_accreditation is a return-data
+/// verdict, composable with a credential verify.
+#[test]
+fn aegis_accreditation_trust_graph() {
+    let mut w = setup();
+    let root_authority = Keypair::new();
+    let subject_issuer = Keypair::new().pubkey(); // the accredited issuer's PDA (opaque here)
+    let other_issuer = Keypair::new().pubkey();
+    w.svm
+        .airdrop(&root_authority.pubkey(), 5_000_000_000)
+        .unwrap();
+    let kyc = aegis::constants::well_known_schema::KYC_TIER;
+    let region = aegis::constants::well_known_schema::REGION;
+
+    let trust_root =
+        Pubkey::find_program_address(&[b"troot", root_authority.pubkey().as_ref()], &aegis::id()).0;
+    let accred = |issuer: Pubkey| {
+        Pubkey::find_program_address(
+            &[b"accred", root_authority.pubkey().as_ref(), issuer.as_ref()],
+            &aegis::id(),
+        )
+        .0
+    };
+
+    // Declare the root and accredit `subject_issuer` for KYC only.
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::RegisterTrustRoot {
+                authority: root_authority.pubkey(),
+                trust_root,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::RegisterTrustRoot {
+                name: "EU-Compliance".into(),
+            }
+            .data(),
+        }],
+        &[&root_authority],
+        &root_authority.pubkey(),
+    )
+    .unwrap();
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::AccreditIssuer {
+                authority: root_authority.pubkey(),
+                trust_root,
+                accreditation: accred(subject_issuer),
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::AccreditIssuer {
+                subject_issuer,
+                tier: 2,
+                permitted_schemas: vec![kyc],
+                jurisdiction: 42,
+                expires_at: 0,
+            }
+            .data(),
+        }],
+        &[&root_authority],
+        &root_authority.pubkey(),
+    )
+    .unwrap();
+
+    let verdict = |w: &mut World, issuer: Pubkey, schema: u64| -> aegis::Verdict {
+        let ix = Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::VerifyAccreditation {
+                trust_root,
+                accreditation: accred(issuer),
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::VerifyAccreditation {
+                root: root_authority.pubkey(),
+                subject_issuer: issuer,
+                schema_id: schema,
+            }
+            .data(),
+        };
+        let mut msg = Message::new(&[ix], Some(&root_authority.pubkey()));
+        msg.recent_blockhash = w.svm.latest_blockhash();
+        let tx = VersionedTransaction::try_new(VersionedMessage::Legacy(msg), &[&root_authority])
+            .unwrap();
+        let meta = w.svm.send_transaction(tx).unwrap();
+        w.svm.expire_blockhash();
+        aegis::Verdict::try_from_slice(&meta.return_data.data).unwrap()
+    };
+
+    // Accredited issuer, permitted schema → ok.
+    assert!(
+        verdict(&mut w, subject_issuer, kyc).ok,
+        "accredited KYC rejected"
+    );
+    // Same issuer, non-permitted schema → rejected.
+    assert!(
+        !verdict(&mut w, subject_issuer, region).ok,
+        "non-permitted schema accepted"
+    );
+    // A different, unaccredited issuer → rejected.
+    assert!(
+        !verdict(&mut w, other_issuer, kyc).ok,
+        "unaccredited issuer accepted"
+    );
+
+    // Revoke → the whole issuer de-trusts instantly.
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::RevokeAccreditation {
+                authority: root_authority.pubkey(),
+                trust_root,
+                accreditation: accred(subject_issuer),
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::RevokeAccreditation {}.data(),
+        }],
+        &[&root_authority],
+        &root_authority.pubkey(),
+    )
+    .unwrap();
+    assert!(
+        !verdict(&mut w, subject_issuer, kyc).ok,
+        "revoked accreditation still trusted"
+    );
+}

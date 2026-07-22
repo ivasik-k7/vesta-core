@@ -36,6 +36,108 @@
       "args": []
     },
     {
+      "name": "accredit_issuer",
+      "docs": [
+        "Accredit an issuer under the signer's trust root (spec 08)."
+      ],
+      "discriminator": [
+        226,
+        35,
+        214,
+        220,
+        211,
+        89,
+        208,
+        138
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "trust_root"
+          ]
+        },
+        {
+          "name": "trust_root",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  111,
+                  111,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "accreditation",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  99,
+                  99,
+                  114,
+                  101,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              },
+              {
+                "kind": "arg",
+                "path": "subject_issuer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "subject_issuer",
+          "type": "pubkey"
+        },
+        {
+          "name": "tier",
+          "type": "u8"
+        },
+        {
+          "name": "permitted_schemas",
+          "type": {
+            "vec": "u64"
+          }
+        },
+        {
+          "name": "jurisdiction",
+          "type": "u16"
+        },
+        {
+          "name": "expires_at",
+          "type": "i64"
+        }
+      ]
+    },
+    {
       "name": "close_attestation",
       "docs": [
         "Close an attestation and reclaim rent to the issuer authority."
@@ -604,6 +706,137 @@
       ]
     },
     {
+      "name": "register_trust_root",
+      "docs": [
+        "Declare a trust root (spec 08) — an entity verifiers may pin so its",
+        "accredited issuers inherit trust. Permissionless to declare."
+      ],
+      "discriminator": [
+        122,
+        82,
+        95,
+        244,
+        81,
+        115,
+        86,
+        41
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "trust_root",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  111,
+                  111,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "revoke_accreditation",
+      "docs": [
+        "Revoke an accreditation — de-trusts the issuer under this root instantly."
+      ],
+      "discriminator": [
+        240,
+        131,
+        185,
+        246,
+        81,
+        161,
+        17,
+        99
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "trust_root"
+          ]
+        },
+        {
+          "name": "trust_root",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  111,
+                  111,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "accreditation",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  99,
+                  99,
+                  114,
+                  101,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "accreditation.subject_issuer",
+                "account": "Accreditation"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "revoke_attestation",
       "docs": [
         "Revoke an attestation — downstream guards fail closed immediately."
@@ -897,6 +1130,46 @@
       ]
     },
     {
+      "name": "verify_accreditation",
+      "docs": [
+        "Stateless verdict (spec 08): is `subject_issuer` accredited by `root` for",
+        "`schema_id`? Returned via return-data — compose it with a credential",
+        "`verify` so a verifier trusts a root instead of a hardcoded issuer key."
+      ],
+      "discriminator": [
+        38,
+        164,
+        48,
+        151,
+        85,
+        16,
+        248,
+        134
+      ],
+      "accounts": [
+        {
+          "name": "trust_root"
+        },
+        {
+          "name": "accreditation"
+        }
+      ],
+      "args": [
+        {
+          "name": "root",
+          "type": "pubkey"
+        },
+        {
+          "name": "subject_issuer",
+          "type": "pubkey"
+        },
+        {
+          "name": "schema_id",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "verify_policy",
       "docs": [
         "Evaluate a subject against a named policy — reproducible, jurisdiction-",
@@ -933,6 +1206,19 @@
     }
   ],
   "accounts": [
+    {
+      "name": "Accreditation",
+      "discriminator": [
+        33,
+        207,
+        31,
+        177,
+        201,
+        70,
+        235,
+        37
+      ]
+    },
     {
       "name": "Attestation",
       "discriminator": [
@@ -984,9 +1270,35 @@
         52,
         105
       ]
+    },
+    {
+      "name": "TrustRoot",
+      "discriminator": [
+        9,
+        7,
+        149,
+        2,
+        208,
+        197,
+        128,
+        144
+      ]
     }
   ],
   "events": [
+    {
+      "name": "AccreditationRevoked",
+      "discriminator": [
+        234,
+        219,
+        63,
+        52,
+        28,
+        177,
+        20,
+        181
+      ]
+    },
     {
       "name": "AttestationClosed",
       "discriminator": [
@@ -1050,6 +1362,19 @@
         173,
         37,
         75
+      ]
+    },
+    {
+      "name": "IssuerAccredited",
+      "discriminator": [
+        124,
+        9,
+        82,
+        15,
+        129,
+        21,
+        152,
+        1
       ]
     },
     {
@@ -1181,6 +1506,19 @@
         233,
         76
       ]
+    },
+    {
+      "name": "TrustRootRegistered",
+      "discriminator": [
+        64,
+        106,
+        61,
+        111,
+        78,
+        72,
+        198,
+        168
+      ]
     }
   ],
   "errors": [
@@ -1256,6 +1594,97 @@
     }
   ],
   "types": [
+    {
+      "name": "Accreditation",
+      "docs": [
+        "A direct accreditation edge (spec 08 phase 1a): `root` vouches for",
+        "`subject_issuer` to issue credentials of `permitted_schemas` in",
+        "`jurisdiction`. `AccreditedBy(root)` verification walks these edges — for now",
+        "a single hop (recursive root→sector→issuer chains are a later sub-phase)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "root",
+            "docs": [
+              "The trust-root authority that granted this accreditation."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "subject_issuer",
+            "docs": [
+              "The aegis `Issuer` PDA being accredited."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "tier",
+            "type": "u8"
+          },
+          {
+            "name": "permitted_schemas",
+            "docs": [
+              "Schemas this issuer is accredited for; `count == 0` means all schemas."
+            ],
+            "type": {
+              "array": [
+                "u64",
+                8
+              ]
+            }
+          },
+          {
+            "name": "permitted_count",
+            "type": "u8"
+          },
+          {
+            "name": "jurisdiction",
+            "type": "u16"
+          },
+          {
+            "name": "status",
+            "type": "u8"
+          },
+          {
+            "name": "issued_at",
+            "type": "i64"
+          },
+          {
+            "name": "expires_at",
+            "docs": [
+              "Unix expiry; 0 = never."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AccreditationRevoked",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "root",
+            "type": "pubkey"
+          },
+          {
+            "name": "subject_issuer",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
     {
       "name": "Attestation",
       "docs": [
@@ -1585,6 +2014,30 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "IssuerAccredited",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "root",
+            "type": "pubkey"
+          },
+          {
+            "name": "subject_issuer",
+            "type": "pubkey"
+          },
+          {
+            "name": "tier",
+            "type": "u8"
+          },
+          {
+            "name": "jurisdiction",
+            "type": "u16"
           }
         ]
       }
@@ -1925,6 +2378,56 @@
       }
     },
     {
+      "name": "TrustRoot",
+      "docs": [
+        "A trust root (spec 08): an entity a verifier chooses to trust. Issuers it",
+        "accredits inherit that trust, so a verifier pins ONE root instead of a",
+        "hand-maintained allowlist of issuer keys. Declaration is permissionless;",
+        "trust is conferred by whichever verifier pins the root."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "active",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TrustRootRegistered",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "root",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
       "name": "VerifyPredicate",
       "docs": [
         "The predicate `verify` evaluates (spec 07 opcode set, phase-1 subset). More",
@@ -1997,6 +2500,14 @@
   ],
   "constants": [
     {
+      "name": "ACCREDITATION_SEED",
+      "docs": [
+        "Issuer accreditation edge (spec 08). Seeds [\"accred\", root, subject_issuer]."
+      ],
+      "type": "bytes",
+      "value": "[97, 99, 99, 114, 101, 100]"
+    },
+    {
       "name": "ATTESTATION_SEED",
       "docs": [
         "Per-(issuer, subject, schema) credential. Consumers read it through the",
@@ -2030,6 +2541,14 @@
       ],
       "type": "bytes",
       "value": "[115, 99, 104, 101, 109, 97]"
+    },
+    {
+      "name": "TRUST_ROOT_SEED",
+      "docs": [
+        "Trust root (spec 08). Seeds [\"troot\", authority]."
+      ],
+      "type": "bytes",
+      "value": "[116, 114, 111, 111, 116]"
     }
   ]
 }

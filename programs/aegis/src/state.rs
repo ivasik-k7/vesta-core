@@ -57,6 +57,67 @@ pub struct Schema {
     pub bump: u8,
 }
 
+/// A trust root (spec 08): an entity a verifier chooses to trust. Issuers it
+/// accredits inherit that trust, so a verifier pins ONE root instead of a
+/// hand-maintained allowlist of issuer keys. Declaration is permissionless;
+/// trust is conferred by whichever verifier pins the root.
+#[account]
+#[derive(InitSpace)]
+pub struct TrustRoot {
+    pub version: u8,
+    pub authority: Pubkey,
+    #[max_len(MAX_NAME_LEN)]
+    pub name: String,
+    pub active: bool,
+    pub bump: u8,
+}
+
+/// Accreditation status. `Revoked` is terminal (de-trusts the issuer instantly).
+pub mod accreditation_status {
+    pub const ACTIVE: u8 = 0;
+    pub const REVOKED: u8 = 1;
+}
+
+/// A direct accreditation edge (spec 08 phase 1a): `root` vouches for
+/// `subject_issuer` to issue credentials of `permitted_schemas` in
+/// `jurisdiction`. `AccreditedBy(root)` verification walks these edges — for now
+/// a single hop (recursive root→sector→issuer chains are a later sub-phase).
+#[account]
+#[derive(InitSpace)]
+pub struct Accreditation {
+    pub version: u8,
+    /// The trust-root authority that granted this accreditation.
+    pub root: Pubkey,
+    /// The aegis `Issuer` PDA being accredited.
+    pub subject_issuer: Pubkey,
+    pub tier: u8,
+    /// Schemas this issuer is accredited for; `count == 0` means all schemas.
+    pub permitted_schemas: [u64; crate::constants::MAX_PERMITTED_SCHEMAS],
+    pub permitted_count: u8,
+    pub jurisdiction: u16,
+    pub status: u8,
+    pub issued_at: i64,
+    /// Unix expiry; 0 = never.
+    pub expires_at: i64,
+    pub bump: u8,
+}
+
+impl Accreditation {
+    /// Live = active status and within the validity window at `now`.
+    pub fn is_live(&self, now: i64) -> bool {
+        self.status == accreditation_status::ACTIVE
+            && (self.expires_at == 0 || now < self.expires_at)
+    }
+
+    /// Whether this accreditation covers `schema_id` (empty list = all).
+    pub fn permits(&self, schema_id: u64) -> bool {
+        let count = usize::from(self.permitted_count);
+        count == 0
+            || self.permitted_schemas[..count.min(self.permitted_schemas.len())]
+                .contains(&schema_id)
+    }
+}
+
 /// A named, versioned, jurisdiction-tagged verifier policy (spec 07). A verifier
 /// references a policy by name instead of inlining checks; `verify_policy`
 /// returns a `Verdict` and emits an audit event stamped with `version`, so an

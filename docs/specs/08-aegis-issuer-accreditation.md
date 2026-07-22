@@ -1,6 +1,6 @@
 # 08 · aegis — Issuer Accreditation Trust Graph
 
-> **Status:** Draft / Proposed · **Track:** B · **Layer:** Moat · **Depends on:** 06 (accreditation is an attestation); enforced by 07 (`AccreditedBy`)
+> **Status:** ◒ Phase 1a implemented (v2.0.0 — trust roots + direct issuer accreditation + `verify_accreditation` verdict; recursive multi-hop, DID/real-world-PKI, and bond/cascade deferred to later sub-phases) · **Track:** B · **Layer:** Moat · **Depends on:** 06; enforced by 07 (`AccreditedBy`)
 > Inherits all [shared conventions](README.md#shared-conventions-normative-for-all-specs), incl. [Track B conventions](README.md#track-b-conventions-aegis--sas--crypto--normative-for-specs-0608).
 
 ## 1. Summary

@@ -7,6 +7,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Crates bumped to **2.0.0** (breaking on-chain layout changes; devnet redeploy).
 
+### Added — aegis accreditation trust graph ([spec 08](docs/specs/08-aegis-issuer-accreditation.md) phase 1a)
+- `TrustRoot` (`register_trust_root`) + `Accreditation` (`accredit_issuer` /
+  `revoke_accreditation`): a root vouches for an issuer to issue certain schemas
+  in a jurisdiction. `verify_accreditation(root, issuer, schema)` returns a
+  `Verdict` via return-data — so a verifier **pins one root** and any issuer it
+  accredits inherits trust (no hardcoded issuer allowlist). Revocation
+  de-trusts the issuer instantly. Recursive multi-hop chains, DID/real-world PKI
+  (secp256r1), and bonds/cascade timelock are later sub-phases.
+
 ### Added — argus enforces aegis Policies ([spec 09](docs/specs/09-argus-policy-vm.md) phase 2)
 - `GuardConfig.policy`: when set, `refresh_eligibility` CPIs aegis
   **`verify_policy`** instead of a raw `Present` check — so the compliance rule

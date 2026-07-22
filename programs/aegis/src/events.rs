@@ -70,6 +70,26 @@ pub struct PolicyDecision {
 }
 
 #[event]
+pub struct TrustRootRegistered {
+    pub root: Pubkey,
+    pub authority: Pubkey,
+}
+
+#[event]
+pub struct IssuerAccredited {
+    pub root: Pubkey,
+    pub subject_issuer: Pubkey,
+    pub tier: u8,
+    pub jurisdiction: u16,
+}
+
+#[event]
+pub struct AccreditationRevoked {
+    pub root: Pubkey,
+    pub subject_issuer: Pubkey,
+}
+
+#[event]
 pub struct AttestationIssued {
     pub issuer: Pubkey,
     pub subject: Pubkey,
