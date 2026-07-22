@@ -195,8 +195,9 @@ async function main(): Promise<void> {
         meta(s.mint, false, true),
         meta(ata, false, true),
         meta(config, false, false),
-        // Optional `campaign` = None → Anchor sentinel is the program id itself.
-        meta(VESTA_CORE, false, false),
+        // Optional accounts = None → Anchor sentinel is the program id itself.
+        meta(VESTA_CORE, false, false), // merchant_segments
+        meta(VESTA_CORE, false, false), // customer_eligibility
         meta(T22, false, false),
         meta(ASSOCIATED_TOKEN_PROGRAM_ID, false, false),
         meta(SystemProgram.programId, false, false),
@@ -345,6 +346,8 @@ async function main(): Promise<void> {
       meta(kav.mint, false, true),
       meta(kavAta, false, true),
       meta(config, false, false),
+      meta(VESTA_CORE, false, false), // merchant_segments: None
+      meta(VESTA_CORE, false, false), // customer_eligibility: None
       meta(T22, false, false),
       meta(ASSOCIATED_TOKEN_PROGRAM_ID, false, false),
       meta(SystemProgram.programId, false, false),

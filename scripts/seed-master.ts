@@ -124,21 +124,25 @@ const pdas = {
     argusPda([enc.encode('entry'), mint.toBuffer(), target.toBuffer()]),
   eaml: (mint: PublicKey) => argusPda([enc.encode('extra-account-metas'), mint.toBuffer()]),
   issuer: (auth: PublicKey, id: bigint) => aegisPda([enc.encode('issuer'), auth.toBuffer(), u64(id)]),
-  attestation: (issuer: PublicKey, subject: PublicKey) =>
-    aegisPda([enc.encode('attestation'), issuer.toBuffer(), subject.toBuffer()]),
+  attestation: (issuer: PublicKey, subject: PublicKey, schemaId: bigint) =>
+    aegisPda([
+      enc.encode('attestation'),
+      issuer.toBuffer(),
+      subject.toBuffer(),
+      Buffer.from(new BigUint64Array([schemaId]).buffer),
+    ]),
+  cap: (mint: PublicKey, subject: PublicKey) =>
+    argusPda([enc.encode('cap'), mint.toBuffer(), subject.toBuffer()]),
 }
 
 // argus transfer-hook extra accounts (ExtraAccountMetaList order).
 function argusExtras(mint: PublicKey, sourceOwner: PublicKey, destOwner: PublicKey) {
-  const issuer = PublicKey.default
   return [
     meta(pdas.guard(mint), false, false),
     meta(pdas.wstate(mint, sourceOwner), false, true),
     meta(destOwner, false, false),
     meta(pdas.entry(mint, destOwner), false, false),
-    meta(AEGIS, false, false),
-    meta(issuer, false, false),
-    meta(pdas.attestation(issuer, destOwner), false, false),
+    meta(pdas.cap(mint, destOwner), false, false),
     meta(ARGUS, false, false),
     meta(pdas.eaml(mint), false, false),
   ]
@@ -146,11 +150,11 @@ function argusExtras(mint: PublicKey, sourceOwner: PublicKey, destOwner: PublicK
 
 // ── demo fixtures ────────────────────────────────────────────────────────────
 const MERCHANTS = [
-  { id: 0n, name: 'Kavarna Roasters', symbol: 'KAV', decayBps: -2000, category: 1, verify: true },
-  { id: 1n, name: 'Duomo Books', symbol: 'DUOMO', decayBps: -1500, category: 2, verify: true },
-  { id: 2n, name: 'Aegean Air Miles', symbol: 'AERO', decayBps: -800, category: 5, verify: false },
-  { id: 3n, name: 'Palestra Fitness', symbol: 'FLEX', decayBps: -3000, category: 3, verify: false },
-  { id: 4n, name: 'Cinema Vesuvio', symbol: 'VESUV', decayBps: -1200, category: 4, verify: false },
+  { id: 10n, name: 'Kavarna Roasters', symbol: 'KAV', decayBps: -2000, category: 1, verify: true },
+  { id: 11n, name: 'Duomo Books', symbol: 'DUOMO', decayBps: -1500, category: 2, verify: true },
+  { id: 12n, name: 'Aegean Air Miles', symbol: 'AERO', decayBps: -800, category: 5, verify: false },
+  { id: 13n, name: 'Palestra Fitness', symbol: 'FLEX', decayBps: -3000, category: 3, verify: false },
+  { id: 14n, name: 'Cinema Vesuvio', symbol: 'VESUV', decayBps: -1200, category: 4, verify: false },
 ]
 const CAMPAIGN_KIND = { MULTIPLIER: 0, FLAT_BONUS: 1, QUEST: 2 }
 const GUARD_FLAG_BLOCK_PROGRAM = 1
@@ -292,13 +296,15 @@ async function main() {
           disc('initialize_transfer_guard'),
           u16(GUARD_FLAG_BLOCK_PROGRAM),
           u64(DEFAULT_GIFT_CAP),
-          u64(0n),
-          u64(0n),
-          u16(0),
-          u32(0),
-          PublicKey.default.toBuffer(),
-          u16(0),
-          u64(0n),
+          u64(0n), // per_tx_cap
+          u64(0n), // max_wallet_balance
+          u16(0), // transfers_per_day_cap
+          u32(0), // cooldown_secs
+          PublicKey.default.toBuffer(), // aegis_program (attestation unused)
+          PublicKey.default.toBuffer(), // policy
+          PublicKey.default.toBuffer(), // attestation_issuer
+          u64(0n), // attestation_schema
+          i64(0n), // capability_ttl_secs (protocol default)
         ]),
       } as TransactionInstruction,
     ])
@@ -426,17 +432,17 @@ async function main() {
 
   // ── aegis issuer + attestations ─────────────────────────────────────────────
   console.log('\n[5/9] aegis attestations')
-  const issuer = pdas.issuer(authority, 0n)
+  const issuer = pdas.issuer(authority, 1n)
   await ensure('init_issuer "VESTA Geo Oracle"', issuer, [
     {
       programId: AEGIS,
       keys: [meta(authority, true, true), meta(issuer, false, true), meta(SystemProgram.programId, false, false)],
-      data: Buffer.concat([disc('init_issuer'), u64(0n), bstr('VESTA Geo Oracle')]),
+      data: Buffer.concat([disc('init_issuer'), u64(1n), bstr('VESTA Geo Oracle')]),
     } as TransactionInstruction,
   ])
   const subjects = [PHANTOM, ...customers.slice(0, 3).map((c) => c.publicKey)]
   for (const [i, subject] of subjects.entries()) {
-    const att = pdas.attestation(issuer, subject)
+    const att = pdas.attestation(issuer, subject, 1n /* REGION */)
     await ensure(`issue_attestation ${subject.toBase58().slice(0, 6)}…`, att, [
       {
         programId: AEGIS,
@@ -449,10 +455,11 @@ async function main() {
         data: Buffer.concat([
           disc('issue_attestation'),
           subject.toBuffer(),
-          u16(1), // schema: region
-          u64(BigInt(2 + i)), // value
-          i64(0n),
-          i64(0n),
+          u64(1n), // schema: REGION
+          Buffer.alloc(32, 2 + i), // commitment (demo: deterministic filler)
+          Buffer.alloc(32, 0), // attr_root
+          i64(0n), // valid_from
+          i64(0n), // expires_at (0 = no expiry)
         ]),
       } as TransactionInstruction,
     ])
@@ -495,6 +502,8 @@ async function main() {
             meta(b.mint, false, true),
             meta(custAta, false, true),
             meta(config, false, false),
+            meta(VESTA_CORE, false, false), // merchant_segments: None
+            meta(VESTA_CORE, false, false), // customer_eligibility: None
             meta(T22, false, false),
             meta(ATOKEN, false, false),
             meta(SystemProgram.programId, false, false),
@@ -530,6 +539,8 @@ async function main() {
           meta(b0.mint, false, true),
           meta(ata(b0.mint, c0.publicKey), false, true),
           meta(config, false, false),
+          meta(VESTA_CORE, false, false), // merchant_segments: None
+          meta(VESTA_CORE, false, false), // customer_eligibility: None
           meta(T22, false, false),
           meta(ATOKEN, false, false),
           meta(SystemProgram.programId, false, false),
@@ -550,6 +561,8 @@ async function main() {
           meta(b0.mint, false, true),
           meta(ata(b0.mint, c0.publicKey), false, true),
           meta(config, false, false),
+          meta(VESTA_CORE, false, false), // merchant_segments: None
+          meta(VESTA_CORE, false, false), // customer_eligibility: None
           meta(T22, false, false),
           meta(ATOKEN, false, false),
           meta(SystemProgram.programId, false, false),
@@ -611,6 +624,8 @@ async function main() {
           meta(b0.mint, false, true),
           meta(ata(b0.mint, victim), false, true),
           meta(config, false, false),
+          meta(VESTA_CORE, false, false), // merchant_segments: None
+          meta(VESTA_CORE, false, false), // customer_eligibility: None
           meta(T22, false, false),
           meta(ATOKEN, false, false),
           meta(SystemProgram.programId, false, false),
