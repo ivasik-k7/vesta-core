@@ -108,6 +108,8 @@ impl World {
         let ix = Instruction {
             program_id: vesta_core::id(),
             accounts: vesta_core::accounts::EarnPoints {
+                merchant_segments: None,
+                customer_eligibility: None,
                 merchant_authority: authority.pubkey(),
                 merchant: self.merchant,
                 customer,

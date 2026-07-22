@@ -26,6 +26,7 @@ fn accrue(
     amount_base: u64,
     unix_day: u32,
     bonus_raw: u64,
+    extra_bps: u64,
 ) -> Result<(u64, u16, u64)> {
     // Streak: +1 on consecutive days, hold on same-day repeats, reset otherwise.
     profile.streak_days = if profile.last_visit_day == unix_day {
@@ -37,11 +38,14 @@ fn accrue(
     };
     profile.last_visit_day = unix_day;
 
+    // Streak boost + any verified-segment boost (spec 12), jointly re-clamped to
+    // the ×2.4 ceiling — no boost can breach the existing cap.
     let streak_bps = u64::from(profile.streak_days.min(STREAK_DAYS_CAP))
         .checked_mul(u64::from(STREAK_BPS_PER_DAY))
         .ok_or(VestaError::MultiplierOverflow)?;
     let total_bps = 10_000u64
         .checked_add(streak_bps)
+        .and_then(|v| v.checked_add(extra_bps))
         .ok_or(VestaError::MultiplierOverflow)?
         .min(MAX_TOTAL_MULTIPLIER_BPS);
 
@@ -147,9 +151,50 @@ pub struct EarnPoints<'info> {
     #[account(seeds = [CONFIG_SEED], bump = config.bump)]
     pub config: Account<'info, Config>,
 
+    /// Optional verified-segment definitions (spec 12). When present with a fresh
+    /// `customer_eligibility`, satisfied segments add their `boost_bps`.
+    #[account(
+        seeds = [crate::constants::SEGMENTS_SEED, merchant.key().as_ref()],
+        bump = merchant_segments.bump,
+    )]
+    pub merchant_segments: Option<Box<Account<'info, crate::state::MerchantSegments>>>,
+
+    /// Optional cached eligibility for `customer` (paired with `merchant_segments`).
+    #[account(
+        seeds = [
+            crate::constants::CUSTOMER_ELIGIBILITY_SEED,
+            merchant.key().as_ref(),
+            customer.key().as_ref(),
+        ],
+        bump = customer_eligibility.bump,
+    )]
+    pub customer_eligibility: Option<Box<Account<'info, crate::state::CustomerEligibility>>>,
+
     pub token_program: Program<'info, Token2022>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
+}
+
+/// Sum the `boost_bps` of every segment the customer satisfies, when both the
+/// segment set and a fresh eligibility cache are supplied (spec 12 §4.2). Absent
+/// or stale ⇒ no boost (behaves exactly as today).
+fn segment_boost_bps(ctx: &Context<EarnPoints>, now: i64) -> u64 {
+    let (Some(segs), Some(cel)) = (
+        &ctx.accounts.merchant_segments,
+        &ctx.accounts.customer_eligibility,
+    ) else {
+        return 0;
+    };
+    if !cel.is_fresh(segs.policy_epoch, now) {
+        return 0;
+    }
+    let mut boost = 0u64;
+    for (i, seg) in segs.segments.iter().enumerate() {
+        if seg.active && cel.verdicts & (1u32 << i) != 0 {
+            boost = boost.saturating_add(u64::from(seg.boost_bps));
+        }
+    }
+    boost
 }
 
 pub fn handle_earn_points(
@@ -175,6 +220,8 @@ pub fn handle_earn_points(
     require!(amount_base > 0, VestaError::InvalidAmount);
 
     let unix_day = current_day(&visit_day)?;
+    let now = Clock::get()?.unix_timestamp;
+    let extra_bps = segment_boost_bps(&ctx, now);
     init_profile_identity(
         &mut ctx.accounts.customer_profile,
         &mut ctx.accounts.merchant,
@@ -188,6 +235,7 @@ pub fn handle_earn_points(
         amount_base,
         unix_day,
         0,
+        extra_bps,
     )?;
     mint_points(
         &ctx.accounts.token_program,
@@ -390,6 +438,7 @@ pub fn handle_earn_points_campaign(
         amount_base,
         unix_day,
         bonus,
+        0,
     )?;
     mint_points(
         &ctx.accounts.token_program,

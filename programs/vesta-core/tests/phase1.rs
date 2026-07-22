@@ -185,6 +185,8 @@ impl Harness {
         self.send(
             &[self.ix(
                 vesta_core::accounts::EarnPoints {
+                    merchant_segments: None,
+                    customer_eligibility: None,
                     merchant_authority: authority.pubkey(),
                     merchant,
                     customer,

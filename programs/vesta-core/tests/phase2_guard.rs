@@ -119,6 +119,8 @@ impl World {
         let ix = Instruction {
             program_id: vesta_core::id(),
             accounts: vesta_core::accounts::EarnPoints {
+                merchant_segments: None,
+                customer_eligibility: None,
                 merchant_authority: authority.pubkey(),
                 merchant: self.merchant,
                 customer,
@@ -3641,6 +3643,8 @@ fn try_earn(
     let ix = Instruction {
         program_id: vesta_core::id(),
         accounts: vesta_core::accounts::EarnPoints {
+            merchant_segments: None,
+            customer_eligibility: None,
             merchant_authority: authority.pubkey(),
             merchant: w.merchant,
             customer,
@@ -4042,6 +4046,8 @@ fn try_earn_as(
     let ix = Instruction {
         program_id: vesta_core::id(),
         accounts: vesta_core::accounts::EarnPoints {
+            merchant_segments: None,
+            customer_eligibility: None,
             merchant_authority: signer.pubkey(),
             merchant: w.merchant,
             customer,
@@ -4221,6 +4227,7 @@ fn merchant_verified_segmentation_caches_aegis_verdict() {
                     issuer,
                     schema_id,
                     ttl_secs: 0,
+                    boost_bps: 0,
                     active: true,
                 }],
             }
@@ -4363,5 +4370,176 @@ fn merchant_decision_statement_anchoring() {
     assert!(
         anchor_merchant_statement(&mut w, &stranger, 20_251, root, 1).is_err(),
         "stranger anchored a statement"
+    );
+}
+
+// ── Segment-boosted earn (spec 12, phase 2 consumption) ──────────────────────
+
+fn earn_with_eligibility(
+    w: &mut World,
+    signer: &Keypair,
+    customer: Pubkey,
+    amount_base: u64,
+) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+    let visit_day = (w.svm.get_sysvar::<Clock>().unix_timestamp / 86_400) as u32;
+    let profile = Pubkey::find_program_address(
+        &[CUSTOMER_SEED, w.merchant.as_ref(), customer.as_ref()],
+        &vesta_core::id(),
+    )
+    .0;
+    let ata = get_associated_token_address_with_program_id(&customer, &w.mint, &TOKEN_2022_ID);
+    let ix = Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::EarnPoints {
+            merchant_segments: Some(segments_pda(w)),
+            customer_eligibility: Some(celig_pda(w, customer)),
+            merchant_authority: signer.pubkey(),
+            merchant: w.merchant,
+            customer,
+            customer_profile: profile,
+            point_mint: w.mint,
+            customer_ata: ata,
+            config: w.config,
+            token_program: TOKEN_2022_ID,
+            associated_token_program: ATA_PROGRAM_ID,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::EarnPoints {
+            amount_base,
+            visit_day,
+        }
+        .data(),
+    };
+    w.send(&[ix], &[signer], &signer.pubkey())
+}
+
+fn lifetime_earned(w: &World, customer: Pubkey) -> u64 {
+    let profile = Pubkey::find_program_address(
+        &[CUSTOMER_SEED, w.merchant.as_ref(), customer.as_ref()],
+        &vesta_core::id(),
+    )
+    .0;
+    let data = w.svm.get_account(&profile).unwrap().data;
+    vesta_core::state::CustomerProfile::try_deserialize(&mut data.as_slice())
+        .unwrap()
+        .lifetime_earned
+}
+
+#[test]
+fn merchant_segment_boosts_earn() {
+    let mut w = setup();
+    let owner = w.merchant_authority.insecure_clone();
+    let issuer_authority = Keypair::new();
+    w.svm
+        .airdrop(&issuer_authority.pubkey(), 5_000_000_000)
+        .unwrap();
+    let issuer = Pubkey::find_program_address(
+        &[
+            b"issuer",
+            issuer_authority.pubkey().as_ref(),
+            &0u64.to_le_bytes(),
+        ],
+        &aegis::id(),
+    )
+    .0;
+    let schema_id = aegis::constants::well_known_schema::REGION;
+    let vip = Keypair::new();
+    let plain = Keypair::new();
+    let attestation = Pubkey::find_program_address(
+        &[
+            b"attestation",
+            issuer.as_ref(),
+            vip.pubkey().as_ref(),
+            &schema_id.to_le_bytes(),
+        ],
+        &aegis::id(),
+    )
+    .0;
+
+    // aegis issuer + a +50% segment.
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::InitIssuer {
+                authority: issuer_authority.pubkey(),
+                issuer,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::InitIssuer {
+                id: 0,
+                name: "Geo".into(),
+            }
+            .data(),
+        }],
+        &[&issuer_authority],
+        &issuer_authority.pubkey(),
+    )
+    .unwrap();
+    w.send(
+        &[Instruction {
+            program_id: vesta_core::id(),
+            accounts: vesta_core::accounts::SetMerchantSegments {
+                authority: owner.pubkey(),
+                merchant: w.merchant,
+                merchant_segments: segments_pda(&w),
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: vesta_core::instruction::SetMerchantSegments {
+                segments: vec![vesta_core::state::Segment {
+                    issuer,
+                    schema_id,
+                    ttl_secs: 0,
+                    boost_bps: 5_000, // +50%
+                    active: true,
+                }],
+            }
+            .data(),
+        }],
+        &[&owner],
+        &owner.pubkey(),
+    )
+    .unwrap();
+
+    // Issue the VIP a credential + refresh eligibility.
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::IssueAttestation {
+                signer: issuer_authority.pubkey(),
+                issuer,
+                attestation,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::IssueAttestation {
+                subject: vip.pubkey(),
+                data: aegis::instructions::attestation::AttestationData {
+                    schema_id,
+                    commitment: [7u8; 32],
+                    attr_root: [0u8; 32],
+                    valid_from: 0,
+                    expires_at: 0,
+                },
+            }
+            .data(),
+        }],
+        &[&issuer_authority],
+        &issuer_authority.pubkey(),
+    )
+    .unwrap();
+    refresh_customer_eligibility(&mut w, &owner, vip.pubkey(), issuer, schema_id, 0).unwrap();
+
+    // Same base, same day: the VIP (satisfies the segment) out-earns the plain
+    // customer by the +50% segment boost. Plain earns via the no-eligibility path.
+    try_earn_as(&mut w, &owner, plain.pubkey(), 100).unwrap();
+    earn_with_eligibility(&mut w, &owner, vip.pubkey(), 100).unwrap();
+    let plain_earned = lifetime_earned(&w, plain.pubkey());
+    let vip_earned = lifetime_earned(&w, vip.pubkey());
+    assert!(
+        vip_earned > plain_earned,
+        "VIP {vip_earned} did not out-earn plain {plain_earned} despite the segment boost"
     );
 }

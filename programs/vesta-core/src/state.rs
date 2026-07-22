@@ -178,6 +178,9 @@ pub struct Segment {
     pub schema_id: u64,
     /// Cache TTL for this segment's verdict (0 = protocol default).
     pub ttl_secs: i64,
+    /// Additive earn boost (bps) applied when a customer satisfies this segment;
+    /// composed with streak, jointly re-clamped to the ×2.4 ceiling.
+    pub boost_bps: u16,
     pub active: bool,
 }
 
