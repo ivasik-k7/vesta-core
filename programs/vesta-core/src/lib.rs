@@ -241,6 +241,15 @@ pub mod vesta_core {
         instructions::offers::handle_set_offer_segment(ctx, required_segment)
     }
 
+    /// Turn a campaign into a winback — pays only customers inactive for
+    /// `min_days_inactive` days (spec 12 §4.3). `0` disables.
+    pub fn set_campaign_winback(
+        ctx: Context<SetCampaignWinback>,
+        min_days_inactive: u16,
+    ) -> Result<()> {
+        instructions::campaigns::handle_set_campaign_winback(ctx, min_days_inactive)
+    }
+
     /// Anchor a period's economic-decision Merkle root on-chain (owner) —
     /// tamper-evident, provably complete (spec 13 §4.4).
     pub fn anchor_merchant_statement(

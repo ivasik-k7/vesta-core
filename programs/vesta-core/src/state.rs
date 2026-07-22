@@ -366,6 +366,9 @@ pub struct Campaign {
     /// next so stale CampaignProgress cannot bleed across (AUDIT M-3).
     pub created_slot: u64,
     pub bump: u8,
+    /// Winback targeting (spec 12 §4.3): when `> 0`, the campaign pays only
+    /// customers whose last visit was at least this many days ago. Appended.
+    pub min_days_inactive: u16,
 }
 
 impl Campaign {

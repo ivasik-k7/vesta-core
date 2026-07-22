@@ -364,6 +364,16 @@ pub fn handle_earn_points_campaign(
         ctx.accounts.customer_profile.tier >= campaign.min_tier,
         VestaError::CampaignNotEligible
     );
+    // Winback targeting (spec 12 §4.3): a campaign may pay only customers
+    // inactive for >= min_days_inactive. `last_visit_day` is still the PRE-earn
+    // value here (accrue rolls it below), so the gap is measured correctly.
+    if campaign.min_days_inactive > 0 {
+        let inactive_days = unix_day.saturating_sub(ctx.accounts.customer_profile.last_visit_day);
+        require!(
+            u32::from(campaign.min_days_inactive) <= inactive_days,
+            VestaError::CampaignNotEligible
+        );
+    }
 
     // Fresh progress → count a participant. Also treat a progress account that
     // survived a close+recreate of this campaign id as fresh: the campaign PDA

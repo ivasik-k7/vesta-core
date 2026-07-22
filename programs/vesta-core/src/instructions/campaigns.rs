@@ -6,7 +6,7 @@ use crate::{
         MAX_QUEST_TARGET, MERCHANT_SEED,
     },
     error::VestaError,
-    events::{CampaignClosed, CampaignCreated, CampaignUpdated},
+    events::{CampaignClosed, CampaignCreated, CampaignUpdated, CampaignWinbackSet},
     state::{campaign_kind, Campaign, Config, Merchant},
 };
 
@@ -134,6 +134,7 @@ pub fn handle_create_campaign(
     c.paused = false;
     c.created_slot = Clock::get()?.slot;
     c.bump = ctx.bumps.campaign;
+    c.min_days_inactive = 0;
 
     emit!(CampaignCreated {
         merchant: c.merchant,
@@ -212,6 +213,42 @@ pub fn handle_update_campaign(
         paused: c.paused,
         points_budget: c.points_budget,
         ends_at: c.ends_at,
+    });
+    Ok(())
+}
+
+/// Turn a campaign into a winback (spec 12 §4.3): when `min_days_inactive > 0`,
+/// only customers inactive that long qualify. Opt-in setter — keeps the
+/// `CampaignArgs` create surface unchanged.
+#[derive(Accounts)]
+pub struct SetCampaignWinback<'info> {
+    pub authority: Signer<'info>,
+
+    #[account(
+        seeds = [MERCHANT_SEED, merchant.authority.as_ref(), &merchant.id.to_le_bytes()],
+        bump = merchant.bump,
+    )]
+    pub merchant: Account<'info, Merchant>,
+
+    #[account(mut, has_one = merchant @ VestaError::MerchantMismatch)]
+    pub campaign: Account<'info, Campaign>,
+}
+
+pub fn handle_set_campaign_winback(
+    ctx: Context<SetCampaignWinback>,
+    min_days_inactive: u16,
+) -> Result<()> {
+    require!(
+        ctx.accounts
+            .merchant
+            .may_manage(&ctx.accounts.authority.key()),
+        VestaError::Unauthorized
+    );
+    ctx.accounts.campaign.min_days_inactive = min_days_inactive;
+    emit!(CampaignWinbackSet {
+        merchant: ctx.accounts.merchant.key(),
+        id: ctx.accounts.campaign.id,
+        min_days_inactive,
     });
     Ok(())
 }

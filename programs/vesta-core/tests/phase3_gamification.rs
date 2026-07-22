@@ -1174,3 +1174,59 @@ fn operator_creates_campaign_and_pause_blocks() {
         "paused merchant created a campaign"
     );
 }
+
+// ── Winback campaigns (spec 12, phase 3) ─────────────────────────────────────
+
+impl World {
+    fn set_campaign_winback(
+        &mut self,
+        campaign: Pubkey,
+        min_days_inactive: u16,
+    ) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+        let authority = self.merchant_authority.insecure_clone();
+        let ix = Instruction {
+            program_id: vesta_core::id(),
+            accounts: vesta_core::accounts::SetCampaignWinback {
+                authority: authority.pubkey(),
+                merchant: self.merchant,
+                campaign,
+            }
+            .to_account_metas(None),
+            data: vesta_core::instruction::SetCampaignWinback { min_days_inactive }.data(),
+        };
+        self.send(&[ix], &[&authority], &authority.pubkey())
+    }
+}
+
+#[test]
+fn winback_campaign_pays_only_lapsed_customers() {
+    let mut w = setup();
+    let authority = w.merchant_authority.insecure_clone();
+    let start = w.now() - 10;
+    let end = w.now() + 10_000_000;
+    let campaign = w.create_campaign(0, 5_000, start, end).unwrap();
+    w.set_campaign_winback(campaign, 30).unwrap();
+
+    // Active customer: earned today → gap 0 < 30 → campaign rejects.
+    let active = Keypair::new();
+    w.svm.airdrop(&active.pubkey(), 5_000_000_000).unwrap();
+    w.earn(active.pubkey(), 10).unwrap();
+    assert!(
+        w.earn_campaign(active.pubkey(), 10, campaign, &authority)
+            .is_err(),
+        "winback paid an active customer"
+    );
+
+    // Lapsed customer: earned, then 40 days pass → gap 40 >= 30 → campaign pays.
+    let lapsed = Keypair::new();
+    w.svm.airdrop(&lapsed.pubkey(), 5_000_000_000).unwrap();
+    w.earn(lapsed.pubkey(), 10).unwrap();
+    let before = w.balance(lapsed.pubkey());
+    w.warp_days(40);
+    w.earn_campaign(lapsed.pubkey(), 10, campaign, &authority)
+        .unwrap();
+    assert!(
+        w.balance(lapsed.pubkey()) > before,
+        "winback did not pay a lapsed customer"
+    );
+}

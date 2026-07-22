@@ -137,6 +137,13 @@ pub struct CampaignBonusPaid {
 }
 
 #[event]
+pub struct CampaignWinbackSet {
+    pub merchant: Pubkey,
+    pub id: u64,
+    pub min_days_inactive: u16,
+}
+
+#[event]
 pub struct CampaignClosed {
     pub merchant: Pubkey,
     pub id: u64,
