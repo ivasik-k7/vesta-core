@@ -137,58 +137,97 @@ Honest costs of the design, and how they are managed:
 | Capability | Mechanism |
 |---|---|
 | **Breathing points** | Token-2022 `InterestBearingConfig`, negative rate — activity streaks outpace the cooling |
-| **Guarded transfers** | Transfer hook (**argus**): velocity caps, cooldowns, lists, gift caps — fail-closed |
+| **Guarded transfers** | Transfer hook (**argus**): velocity caps, cooldowns, lists, gift caps + a cached identity verdict — fail-closed, zero hot-path CPI |
+| **Governed & auditable** | Versioned policy lifecycle (maker/checker + timelock), tamper-evident decision statements, per-mint licensing |
 | **Cross-brand alliances** (*koinon*) | Atomic point swaps at governed rates, UI-value denominated on both legs |
 | **Soulbound achievements** (*kleos*) | Non-transferable Token-2022 badges any dApp can token-gate on |
-| **Verifiable identity** (*aegis*) | Attestation registry (region / KYC tier / age band) guards can gate on |
+| **Privacy-preserving identity** (*aegis*) | Commitment-based attestations (no PII on-chain) + issuer accreditation graph; any program gates on a `verify` verdict |
+| **Live-revocable compliance** | Screening-epoch sanctions freeze + a trust triangle that auto-degrades a mint if its issuer's accreditation is pulled |
 | **Accountable clawback** | `PermanentDelegate` recovery — reason-coded, publicly self-capped, on-chain audited |
 | **Gasless customers** | Merchants (or their operators) sign earns; customers pay nothing to be loyal |
 
 ## Architecture
 
-Three programs with strictly one-directional trust — the economy configures the
-guard, the guard reads identity, and nothing points back up:
+Three programs, strictly one-directional trust: the economy configures the
+guard, the guard consumes identity, and nothing points back up. The pivotal
+detail is **where** each edge runs — the expensive identity decision is paid
+**once, off the transfer path**, and the transfer hook itself does **no**
+cross-program call:
 
 ```mermaid
 flowchart TB
     subgraph clients["Clients (untrusted)"]
-        UI["vesta-ui<br/>web client"]
-        SDK["vesta-sdk<br/>Python"]
+        UI["vesta-ui / vesta-sdk"]
         WALLET["any wallet /<br/>third-party dApp"]
     end
 
     subgraph chain["Solana devnet"]
-        CORE["<b>vesta_core</b><br/>merchants · points · offers<br/>campaigns · badges · alliances · clawback<br/><i>gaMq6BpH…RG6L4LDz</i>"]
-        T22["<b>Token-2022</b><br/>point mints with<br/>InterestBearing · TransferHook<br/>PermanentDelegate · Metadata"]
-        ARGUS["<b>argus</b> — policy engine<br/>velocity caps · lists · cooldowns<br/>attestation gates · <i>fail-closed</i><br/><i>9zJEWrk4…Czsz3rx</i>"]
-        AEGIS["<b>aegis</b> — attestations<br/>region · KYC tier · age band<br/><i>AcCdMQC1…Thsu15e1</i>"]
+        CORE["<b>vesta_core</b> — the economy<br/>merchants · points · offers · campaigns<br/>badges · alliances · clawback<br/><i>gaMq6BpH…RG6L4LDz</i>"]
+        T22["<b>Token-2022</b><br/>InterestBearing · TransferHook<br/>PermanentDelegate · Metadata"]
+
+        subgraph argusbox["<b>argus</b> — transfer-policy engine + governance · 9zJEWrk4…Czsz3rx"]
+            EX["<b>execute</b> — hot path, &lt;3k CU, <b>zero CPI</b><br/>reads cached capability + mechanical caps/velocity"]
+            CAP["<b>EligibilityCapability</b><br/>verdict bitmap · TTL · policy/screening epochs"]
+            RF["<b>refresh_eligibility</b> — off hot path<br/>(pay the identity decision once)"]
+            GOV["governance: versioned policy · roles/SoD<br/>timelock · decision statements · licensing"]
+            TRI["trust triangle: reverify crank → auto-degrade"]
+        end
+
+        subgraph aegisbox["<b>aegis</b> — privacy-preserving verify &amp; trust layer · AcCdMQC1…Thsu15e1"]
+            VER["<b>verify / verify_policy</b><br/>return-data verdict (never reverts)"]
+            ATT["Attestation = <b>commitment</b> (no PII on-chain)<br/>revocable · GDPR-erasable"]
+            ACC["issuer accreditation trust graph"]
+        end
     end
 
     UI --> CORE
-    SDK --> CORE
     WALLET -- "peer transfer" --> T22
-    CORE -- "mints / burns via CPI" --> T22
-    CORE -- "configures & finalizes guard" --> ARGUS
-    T22 -- "TransferHook CPI on<br/><b>every</b> peer transfer" --> ARGUS
-    ARGUS -- "reads attestation PDAs<br/>(pinned program id + issuer)" --> AEGIS
+    CORE -- "mints / burns (CPI)" --> T22
+    CORE -- "configures guard" --> argusbox
+    T22 -- "TransferHook CPI on<br/><b>every</b> transfer" --> EX
+    EX -- "reads (no CPI)" --> CAP
+    RF -- "writes" --> CAP
+    RF -- "verify verdict (CPI, once per TTL)" --> VER
+    TRI -- "verify_accreditation (crank)" --> ACC
+    VER --- ATT
+    VER --- ACC
 
     style CORE fill:#7c2d12,stroke:#fb923c,color:#fff
-    style ARGUS fill:#1e3a8a,stroke:#60a5fa,color:#fff
-    style AEGIS fill:#14532d,stroke:#4ade80,color:#fff
+    style argusbox fill:#1e3a8a,stroke:#60a5fa,color:#fff
+    style aegisbox fill:#14532d,stroke:#4ade80,color:#fff
+    style EX fill:#1e40af,stroke:#93c5fd,color:#fff
+    style CAP fill:#1e40af,stroke:#93c5fd,color:#fff
     style T22 fill:#3f3f46,stroke:#a1a1aa,color:#fff
 ```
 
 - **vesta_core** owns the economy. Registering a merchant mints a Token-2022
   point token in one transaction with on-chain metadata, negative interest
-  (decay), a transfer-hook extension pointed at argus, a permanent delegate
-  for clawback, and a mint-close authority for clean deletion.
-- **argus** is invoked by Token-2022 on **every** peer transfer. It resolves
-  its policy account from pinned seeds (no account substitution possible),
-  applies the policy, and rejects on any inconsistency.
-  Deep dive: [`docs/ARGUS_SPEC.md`](docs/ARGUS_SPEC.md).
-- **aegis** is a standalone attestation registry. argus derives attestation
-  PDAs from a **pinned program ID and issuer**, so a malicious client cannot
-  smuggle in a forged attestation.
+  (decay), a transfer-hook extension pointed at argus, a permanent delegate for
+  clawback, and a mint-close authority for clean deletion.
+- **aegis** is a privacy-preserving **verification & trust layer**, not a data
+  store. On-chain it holds only *commitments* (hiding + binding), validity, and
+  revocation — never PII — so a credential is GDPR-erasable. Any program asks a
+  question through the stable `verify` / `verify_policy` CPI and gets back a
+  `Verdict` via return-data (it *never* reverts on a negative answer), learning
+  that a rule holds and nothing about the person. An issuer **accreditation
+  trust graph** roots *who* is allowed to attest.
+  Deep dive: [specs 06–08](docs/specs/).
+- **argus** consumes that identity through a **verify-once verdict capability**.
+  `refresh_eligibility` pays aegis's `verify` **once, off the hot path**, and
+  caches the result as an `EligibilityCapability` (a versioned bitmap with a TTL
+  and policy/screening epochs). `execute` — which Token-2022 CPIs on *every*
+  transfer — then reads that cached bitmap plus its own mechanical caps/velocity
+  in `<3k` CU with **no cross-program call**, so cost is constant regardless of
+  how deep aegis's trust graph goes. It fails closed on anything stale or
+  missing. On top of the core sits an enterprise layer: a governed policy
+  lifecycle (versioned, maker/checker, timelocked), tamper-evident decision
+  statements, a **trust triangle** that auto-degrades a mint if its issuer's
+  accreditation is revoked, a screening-epoch sanctions freeze, and per-mint
+  licensing. Deep dive: [specs 09–10](docs/specs/).
+
+Everything argus reads cross-program is **pinned** — capability, policy, and the
+aegis accounts behind the off-path `verify` are re-derived from seeds and
+owner-checked, so a malicious client can never substitute a forged account.
 
 ## Deployments
 
@@ -215,7 +254,7 @@ Canonical IDLs are committed under [`idl/`](idl/) and published on-chain.
 git clone git@github.com:ivasik-k7/vesta-core.git && cd vesta-core
 npm install
 anchor build                                    # all three programs
-cargo test                                      # LiteSVM integration suite (52 tests)
+cargo test                                      # LiteSVM integration suite (73 tests)
 ```
 
 Deploy your own instance:
@@ -258,8 +297,9 @@ own multiple merchants, alliances, and issuers. `Merchant.id` leads the account
 layout so argus reads fixed byte offsets with zero deserialization drift.
 
 **Fail closed.** argus rejects a transfer when *anything* is off — missing
-wallet-state, wrong PDA, paused guard, exceeded velocity, absent/revoked/
-expired attestation. There is no permissive fallback.
+wallet-state, wrong PDA, paused guard, exceeded velocity, a degraded trust
+posture, or a missing/stale eligibility capability (expired TTL, or a bumped
+policy/screening epoch). There is no permissive fallback.
 
 The whole loop, from the customer's point of view:
 
@@ -300,32 +340,48 @@ sequenceDiagram
     VC->>CP: update streak / lifetime / tier
 ```
 
-### Guarded peer transfer — every gift pays the toll
+### Guarded peer transfer — pay identity once, then transfer cheaply
+
+Eligibility is decided **off** the transfer path and cached; the hot path is a
+pure local read. A wallet with a stale or missing capability simply prepends
+`refresh_eligibility` in the same transaction — pay once, then transfer freely
+until the TTL (or an epoch bump) invalidates it.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor A as Sender
-    participant T22 as Token-2022
-    participant AR as argus (hook)
+    actor A as Sender / relayer
+    participant AR as argus
     participant AE as aegis
+    participant T22 as Token-2022
 
+    rect rgb(20,60,45)
+    note over A,AE: Off the hot path — once per TTL window
+    A->>AR: refresh_eligibility(mint, subject)
+    AR->>AE: verify / verify_policy (CPI)
+    AE-->>AR: Verdict via return-data (never reverts)
+    AR->>AR: write EligibilityCapability<br/>{verdict bitmap · TTL · policy & screening epochs}
+    end
+
+    rect rgb(30,40,80)
+    note over A,T22: Hot path — every transfer, no CPI, <3k CU
     A->>T22: transfer_checked(amount)
     T22->>AR: execute() — TransferHook CPI
-    AR->>AR: resolve GuardConfig + WalletState<br/>from PINNED seeds (no substitution)
-    AR->>AR: paused? per-tx cap? daily gift cap?<br/>cooldown? balance floor? deny list?
-    opt policy requires identity
-        AR->>AE: read Attestation PDA<br/>(pinned program id + issuer)
-        AR->>AR: present? not revoked? not expired?<br/>region / KYC tier / age band ok?
-    end
+    AR->>AR: transferring-flag? treasury/clawback short-circuit?
+    AR->>AR: paused? trust-degraded? capability fresh<br/>(version · epochs · TTL · binding)?
+    AR->>AR: per-tx cap? balance floor? cooldown?<br/>daily count / volume caps? lists?
     alt every check passes
-        AR-->>T22: approve
-        T22-->>A: transfer settles
-    else anything is off
-        AR-->>T22: reject (typed error)
-        T22-->>A: transaction fails — fail-closed
+        AR-->>T22: approve → transfer settles
+    else stale capability / any check off
+        AR-->>T22: reject (typed error) — fail-closed
+    end
     end
 ```
+
+The capability carries the aegis deployment, `policy_epoch`, and
+`screening_epoch` it was minted under; a policy change or a sanctions freeze
+bumps the matching epoch and invalidates every cached capability **regardless of
+TTL**, so a revoked or sanctioned subject can't outrun a config change.
 
 ### Cross-brand alliance swap — one atomic transaction
 
@@ -482,7 +538,7 @@ M-2, deferred to the mainnet migration).
 | Layer | Tooling | Coverage |
 |---|---|---|
 | Unit | `cargo test` | math, state helpers |
-| Integration | **LiteSVM** (bundled Token-2022) | 52 tests: happy paths, guard rejections, cap violations, authority checks, campaign kinds, alliance swaps, clawback accounting |
+| Integration | **LiteSVM** (bundled Token-2022) | 73 tests: happy paths, guard rejections, cap violations, authority checks, campaign kinds, alliance swaps, clawback accounting |
 | Live | `scripts/seed-master.ts` | end-to-end devnet run with per-step ✓/✗ verification |
 
 ```bash
