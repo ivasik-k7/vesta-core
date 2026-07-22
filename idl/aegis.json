@@ -110,6 +110,67 @@
       "args": []
     },
     {
+      "name": "deprecate_policy",
+      "docs": [
+        "Deprecate a policy, optionally naming a successor (authority only)."
+      ],
+      "discriminator": [
+        193,
+        77,
+        253,
+        49,
+        23,
+        253,
+        216,
+        228
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "policy"
+          ]
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "policy.id",
+                "account": "Policy"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "successor",
+          "type": {
+            "option": "pubkey"
+          }
+        }
+      ]
+    },
+    {
       "name": "deprecate_schema",
       "docs": [
         "Deprecate a schema, optionally pointing at a successor (registrar only)."
@@ -384,6 +445,82 @@
               "name": "AttestationData"
             }
           }
+        }
+      ]
+    },
+    {
+      "name": "register_policy",
+      "docs": [
+        "Register a named, versioned, jurisdiction-tagged verifier policy (spec 07)."
+      ],
+      "discriminator": [
+        62,
+        66,
+        167,
+        36,
+        252,
+        227,
+        38,
+        132
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              },
+              {
+                "kind": "arg",
+                "path": "id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "id",
+          "type": "u64"
+        },
+        {
+          "name": "jurisdiction",
+          "type": "u16"
+        },
+        {
+          "name": "issuer",
+          "type": "pubkey"
+        },
+        {
+          "name": "schema_id",
+          "type": "u64"
+        },
+        {
+          "name": "freshness_secs",
+          "type": "i64"
         }
       ]
     },
@@ -758,6 +895,41 @@
           }
         }
       ]
+    },
+    {
+      "name": "verify_policy",
+      "docs": [
+        "Evaluate a subject against a named policy — reproducible, jurisdiction-",
+        "aware, freshness-checked. Returns a `Verdict` via return-data and emits a",
+        "`PolicyDecision` audit event stamped with the policy version."
+      ],
+      "discriminator": [
+        198,
+        175,
+        207,
+        241,
+        67,
+        9,
+        94,
+        55
+      ],
+      "accounts": [
+        {
+          "name": "policy"
+        },
+        {
+          "name": "attestation",
+          "docs": [
+            "policy.schema_id); re-derived and owner-checked inside `evaluate`."
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "subject",
+          "type": "pubkey"
+        }
+      ]
     }
   ],
   "accounts": [
@@ -785,6 +957,19 @@
         53,
         80,
         14
+      ]
+    },
+    {
+      "name": "Policy",
+      "discriminator": [
+        222,
+        135,
+        7,
+        163,
+        235,
+        177,
+        33,
+        68
       ]
     },
     {
@@ -930,6 +1115,45 @@
         67,
         224,
         239
+      ]
+    },
+    {
+      "name": "PolicyDecision",
+      "discriminator": [
+        26,
+        2,
+        112,
+        111,
+        253,
+        53,
+        249,
+        115
+      ]
+    },
+    {
+      "name": "PolicyDeprecated",
+      "discriminator": [
+        218,
+        190,
+        203,
+        102,
+        67,
+        234,
+        121,
+        80
+      ]
+    },
+    {
+      "name": "PolicyRegistered",
+      "discriminator": [
+        26,
+        48,
+        9,
+        236,
+        225,
+        174,
+        113,
+        80
       ]
     },
     {
@@ -1456,6 +1680,148 @@
       }
     },
     {
+      "name": "Policy",
+      "docs": [
+        "A named, versioned, jurisdiction-tagged verifier policy (spec 07). A verifier",
+        "references a policy by name instead of inlining checks; `verify_policy`",
+        "returns a `Verdict` and emits an audit event stamped with `version`, so an",
+        "accept/reject decision is reproducible against the policy live at the time."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "id",
+            "type": "u64"
+          },
+          {
+            "name": "jurisdiction",
+            "docs": [
+              "Jurisdiction code (0 = global) — the same credential can pass one",
+              "jurisdiction's policy and fail another, deterministically."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "issuer",
+            "docs": [
+              "Required credential issuer."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "schema_id",
+            "docs": [
+              "Required credential schema."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "freshness_secs",
+            "docs": [
+              "Max credential age in seconds (0 = no freshness requirement)."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "deprecated",
+            "type": "bool"
+          },
+          {
+            "name": "successor",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyDecision",
+      "docs": [
+        "One reproducible accept/reject decision against a named policy (spec 07 §4.3)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "policy",
+            "type": "pubkey"
+          },
+          {
+            "name": "policy_version",
+            "type": "u8"
+          },
+          {
+            "name": "subject",
+            "type": "pubkey"
+          },
+          {
+            "name": "ok",
+            "type": "bool"
+          },
+          {
+            "name": "reason_code",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyDeprecated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "policy",
+            "type": "pubkey"
+          },
+          {
+            "name": "successor",
+            "type": {
+              "option": "pubkey"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyRegistered",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "policy",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "id",
+            "type": "u64"
+          },
+          {
+            "name": "jurisdiction",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
       "name": "Schema",
       "docs": [
         "A typed, versioned credential schema (spec 06). Schemas are shapes, not",
@@ -1648,6 +2014,14 @@
       ],
       "type": "bytes",
       "value": "[105, 115, 115, 117, 101, 114]"
+    },
+    {
+      "name": "POLICY_SEED",
+      "docs": [
+        "Named verifier policy (spec 07). Seeds [\"policy\", authority, policy_id_le]."
+      ],
+      "type": "bytes",
+      "value": "[112, 111, 108, 105, 99, 121]"
     },
     {
       "name": "SCHEMA_SEED",

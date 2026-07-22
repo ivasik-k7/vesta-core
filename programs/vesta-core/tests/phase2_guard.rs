@@ -12,7 +12,7 @@ use {
             instruction::{AccountMeta, Instruction},
             system_program,
         },
-        AccountDeserialize, InstructionData, ToAccountMetas,
+        AccountDeserialize, AnchorDeserialize, InstructionData, ToAccountMetas,
     },
     anchor_spl::associated_token::get_associated_token_address_with_program_id,
     argus::instructions::policy::{InitialPolicy, PolicyUpdate},
@@ -1736,4 +1736,175 @@ fn argus_hardcoded_constants_match_dependencies() {
         vesta_core::state::Merchant::DISCRIMINATOR
     );
     assert_eq!(argus::constants::AEGIS_ID, aegis::id());
+}
+
+/// The aegis policy engine (spec 07 phase 2): a named, jurisdiction-tagged,
+/// freshness-checked verdict a verifier resolves by policy id.
+#[test]
+fn aegis_policy_engine_returns_named_verdicts() {
+    let mut w = setup();
+    let authority = Keypair::new();
+    let subject = Keypair::new().pubkey();
+    w.svm.airdrop(&authority.pubkey(), 5_000_000_000).unwrap();
+    let schema_id = aegis::constants::well_known_schema::KYC_TIER;
+
+    let issuer = Pubkey::find_program_address(
+        &[b"issuer", authority.pubkey().as_ref(), &0u64.to_le_bytes()],
+        &aegis::id(),
+    )
+    .0;
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::InitIssuer {
+                authority: authority.pubkey(),
+                issuer,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::InitIssuer {
+                id: 0,
+                name: "KYC".into(),
+            }
+            .data(),
+        }],
+        &[&authority],
+        &authority.pubkey(),
+    )
+    .unwrap();
+
+    let attestation = Pubkey::find_program_address(
+        &[
+            b"attestation",
+            issuer.as_ref(),
+            subject.as_ref(),
+            &schema_id.to_le_bytes(),
+        ],
+        &aegis::id(),
+    )
+    .0;
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::IssueAttestation {
+                signer: authority.pubkey(),
+                issuer,
+                attestation,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::IssueAttestation {
+                subject,
+                data: aegis::instructions::attestation::AttestationData {
+                    schema_id,
+                    commitment: [9u8; 32],
+                    attr_root: [0u8; 32],
+                    valid_from: 0,
+                    expires_at: 0,
+                },
+            }
+            .data(),
+        }],
+        &[&authority],
+        &authority.pubkey(),
+    )
+    .unwrap();
+
+    // Register two policies: one matching, one requiring a fresh (≤1h) credential.
+    let register = |id: u64, freshness: i64| Instruction {
+        program_id: aegis::id(),
+        accounts: aegis::accounts::RegisterPolicy {
+            authority: authority.pubkey(),
+            policy: Pubkey::find_program_address(
+                &[b"policy", authority.pubkey().as_ref(), &id.to_le_bytes()],
+                &aegis::id(),
+            )
+            .0,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+        data: aegis::instruction::RegisterPolicy {
+            id,
+            jurisdiction: 1,
+            issuer,
+            schema_id,
+            freshness_secs: freshness,
+        }
+        .data(),
+    };
+    w.send(&[register(0, 0)], &[&authority], &authority.pubkey())
+        .unwrap();
+    w.send(&[register(1, 3_600)], &[&authority], &authority.pubkey())
+        .unwrap();
+
+    let policy_pda = |id: u64| {
+        Pubkey::find_program_address(
+            &[b"policy", authority.pubkey().as_ref(), &id.to_le_bytes()],
+            &aegis::id(),
+        )
+        .0
+    };
+
+    // verify_policy never reverts — it returns a Verdict via return-data.
+    let verdict = |w: &mut World, policy_id: u64| -> aegis::Verdict {
+        let ix = Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::VerifyPolicy {
+                policy: policy_pda(policy_id),
+                attestation,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::VerifyPolicy { subject }.data(),
+        };
+        let mut msg = Message::new(&[ix], Some(&authority.pubkey()));
+        msg.recent_blockhash = w.svm.latest_blockhash();
+        let tx =
+            VersionedTransaction::try_new(VersionedMessage::Legacy(msg), &[&authority]).unwrap();
+        let meta = w.svm.send_transaction(tx).unwrap();
+        w.svm.expire_blockhash();
+        aegis::Verdict::try_from_slice(&meta.return_data.data).unwrap()
+    };
+
+    // Matching policy → ok.
+    assert!(
+        verdict(&mut w, 0).ok,
+        "matching policy rejected a valid credential"
+    );
+    // Fresh-required policy, credential just issued → still ok.
+    assert!(
+        verdict(&mut w, 1).ok,
+        "fresh policy rejected a just-issued credential"
+    );
+    // Warp past the freshness window → the fresh policy now fails (TOO_OLD),
+    // while the no-freshness policy still passes.
+    w.warp_days(1);
+    assert!(
+        verdict(&mut w, 0).ok,
+        "no-freshness policy failed after time passed"
+    );
+    assert!(
+        !verdict(&mut w, 1).ok,
+        "stale credential passed a fresh-required policy"
+    );
+
+    // Revoke → both policies fail.
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::ManageAttestation {
+                signer: authority.pubkey(),
+                issuer,
+                attestation,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::RevokeAttestation { reason_code: 1 }.data(),
+        }],
+        &[&authority],
+        &authority.pubkey(),
+    )
+    .unwrap();
+    assert!(
+        !verdict(&mut w, 0).ok,
+        "revoked credential passed the policy"
+    );
 }

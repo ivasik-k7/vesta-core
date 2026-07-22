@@ -77,7 +77,14 @@ pub fn handle_verify(ctx: Context<Verify>, predicate: VerifyPredicate) -> Result
         issuer,
         subject,
         schema_id,
+        0,
     );
+    emit_verdict(&verdict)
+}
+
+/// Serialize a `Verdict` into instruction return-data (shared by `verify` and
+/// `verify_policy`).
+pub(crate) fn emit_verdict(verdict: &Verdict) -> Result<()> {
     let mut buf = Vec::with_capacity(64);
     verdict
         .serialize(&mut buf)
@@ -94,12 +101,16 @@ fn fail(reason: u16) -> Verdict {
     }
 }
 
-fn evaluate(
+/// Evaluate a predicate over an attestation account, returning a `Verdict`.
+/// `max_age_secs > 0` additionally requires the credential to have been issued
+/// within that window (freshness / periodic re-verification — used by policies).
+pub(crate) fn evaluate(
     account: &UncheckedAccount,
     predicate: &VerifyPredicate,
     issuer: Pubkey,
     subject: Pubkey,
     schema_id: u64,
+    max_age_secs: i64,
 ) -> Verdict {
     // Pinned derivation: the account MUST be the canonical PDA for the predicate.
     let expected = Pubkey::find_program_address(
@@ -145,6 +156,10 @@ fn evaluate(
     };
     if !att.is_live(now) {
         return fail(verify_reason::OUT_OF_WINDOW);
+    }
+    // Freshness / periodic re-verification (policy-driven).
+    if max_age_secs > 0 && now.saturating_sub(att.issued_at) > max_age_secs {
+        return fail(verify_reason::TOO_OLD);
     }
 
     if let VerifyPredicate::AttributeDisclosed {

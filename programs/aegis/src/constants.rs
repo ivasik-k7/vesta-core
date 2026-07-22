@@ -15,6 +15,10 @@ pub const ATTESTATION_SEED: &[u8] = b"attestation";
 #[constant]
 pub const SCHEMA_SEED: &[u8] = b"schema";
 
+/// Named verifier policy (spec 07). Seeds ["policy", authority, policy_id_le].
+#[constant]
+pub const POLICY_SEED: &[u8] = b"policy";
+
 /// Account layout version (Track B convention).
 pub const STATE_VERSION: u8 = 1;
 
@@ -48,4 +52,6 @@ pub mod verify_reason {
     pub const DISCLOSURE_MISMATCH: u16 = 6;
     pub const THRESHOLD_UNMET: u16 = 7;
     pub const UNKNOWN_PREDICATE: u16 = 8;
+    /// Credential older than the policy's freshness / re-verification window.
+    pub const TOO_OLD: u16 = 9;
 }

@@ -57,6 +57,30 @@ pub struct Schema {
     pub bump: u8,
 }
 
+/// A named, versioned, jurisdiction-tagged verifier policy (spec 07). A verifier
+/// references a policy by name instead of inlining checks; `verify_policy`
+/// returns a `Verdict` and emits an audit event stamped with `version`, so an
+/// accept/reject decision is reproducible against the policy live at the time.
+#[account]
+#[derive(InitSpace)]
+pub struct Policy {
+    pub version: u8,
+    pub authority: Pubkey,
+    pub id: u64,
+    /// Jurisdiction code (0 = global) — the same credential can pass one
+    /// jurisdiction's policy and fail another, deterministically.
+    pub jurisdiction: u16,
+    /// Required credential issuer.
+    pub issuer: Pubkey,
+    /// Required credential schema.
+    pub schema_id: u64,
+    /// Max credential age in seconds (0 = no freshness requirement).
+    pub freshness_secs: i64,
+    pub deprecated: bool,
+    pub successor: Option<Pubkey>,
+    pub bump: u8,
+}
+
 /// Attestation lifecycle status. `Revoked` and `Erased` are terminal.
 pub mod attestation_status {
     pub const ACTIVE: u8 = 0;

@@ -3,9 +3,18 @@
 All notable changes to the VESTA on-chain programs are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] — Identity & Trust rework (specs 06/07/09, phase 1)
+## [Unreleased] — Identity & Trust rework (specs 06/07/09)
 
 Crates bumped to **2.0.0** (breaking on-chain layout changes; devnet redeploy).
+
+### Added — aegis policy engine ([spec 07](docs/specs/07-aegis-verify-and-policy.md) phase 2)
+- Named, versioned, **jurisdiction-tagged** `Policy` accounts (`register_policy`/
+  `deprecate_policy`) with a **freshness** (max-credential-age) requirement.
+- `verify_policy(subject)` returns a `Verdict` (return-data) and emits a
+  reproducible `PolicyDecision` audit event stamped with the policy version.
+- **Poseidon deferred** to the ZK phase: it requires BN254 field-element inputs
+  (`InputLargerThanModulus`), adding complexity for no present (non-ZK) benefit;
+  phase 1/2 use sha256 for commitments/Merkle. Devnet re-issue on migration is free.
 
 ### Changed — aegis (privacy-preserving attestations, [spec 06](docs/specs/06-aegis-commitment-substrate.md)/[07](docs/specs/07-aegis-verify-and-policy.md))
 - `Attestation` no longer stores a public `value` bitmask. It stores a hiding

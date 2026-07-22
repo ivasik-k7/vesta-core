@@ -1,11 +1,10 @@
 //! Aegis — the shield of VESTA.
 //!
-//! An attestation issuer: authorities sign region / KYC-tier / age credentials
-//! into per-subject accounts that downstream programs gate on (see
-//! docs/ARGUS_SPEC.md §7, §13). argus reads an `Attestation` by fixed byte
-//! offset to enforce geofenced and compliance-gated transfers; vesta_core
-//! campaigns can gate issuance the same way. aegis knows nothing about their
-//! business logic — the two compose through a documented account layout.
+//! A privacy-preserving attestation & trust layer (docs/specs/06, 07): issuers
+//! publish only hiding commitments (PII off-chain), and any program consumes
+//! them through the stable `verify` / `verify_policy` interface — a verdict via
+//! return-data — rather than reading account layouts. argus gates transfers on
+//! these verdicts; vesta_core campaigns can gate issuance the same way.
 
 pub mod constants;
 pub mod error;
@@ -130,5 +129,39 @@ pub mod aegis {
     /// this instead of reading aegis accounts by layout.
     pub fn verify(ctx: Context<Verify>, predicate: VerifyPredicate) -> Result<()> {
         instructions::verify::handle_verify(ctx, predicate)
+    }
+
+    /// Register a named, versioned, jurisdiction-tagged verifier policy (spec 07).
+    pub fn register_policy(
+        ctx: Context<RegisterPolicy>,
+        id: u64,
+        jurisdiction: u16,
+        issuer: Pubkey,
+        schema_id: u64,
+        freshness_secs: i64,
+    ) -> Result<()> {
+        instructions::policy::handle_register_policy(
+            ctx,
+            id,
+            jurisdiction,
+            issuer,
+            schema_id,
+            freshness_secs,
+        )
+    }
+
+    /// Deprecate a policy, optionally naming a successor (authority only).
+    pub fn deprecate_policy(
+        ctx: Context<DeprecatePolicy>,
+        successor: Option<Pubkey>,
+    ) -> Result<()> {
+        instructions::policy::handle_deprecate_policy(ctx, successor)
+    }
+
+    /// Evaluate a subject against a named policy — reproducible, jurisdiction-
+    /// aware, freshness-checked. Returns a `Verdict` via return-data and emits a
+    /// `PolicyDecision` audit event stamped with the policy version.
+    pub fn verify_policy(ctx: Context<VerifyPolicy>, subject: Pubkey) -> Result<()> {
+        instructions::policy::handle_verify_policy(ctx, subject)
     }
 }
