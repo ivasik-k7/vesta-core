@@ -32,6 +32,12 @@ pub fn handle_configure_policy(
         ctx.accounts.guard_config.authority,
         ctx.accounts.authority.key(),
     )?;
+    // Once a mint adopts governance, free-tier live mutation is off — every
+    // change must run the propose → approve → timelock → activate lifecycle.
+    require!(
+        !ctx.accounts.guard_config.governed,
+        GuardError::RoleUnauthorized
+    );
 
     let config = &mut ctx.accounts.guard_config;
     update.apply(config)?;

@@ -28,6 +28,7 @@ spl-discriminator = "0.5.2"
 spl-tlv-account-resolution = "0.11.1"
 spl-token-2022-interface = "2.1.0"
 spl-transfer-hook-interface = "2.1.0"
+solana-sha256-hasher = "3.1.0"
 # argus consumes aegis's stable `verify` CPI (spec 07/09) — linked as a
 # no-entrypoint lib (via the `cpi` feature) so only argus carries an entrypoint.
 aegis = { path = "../aegis", default-features = false, features = ["cpi"] }

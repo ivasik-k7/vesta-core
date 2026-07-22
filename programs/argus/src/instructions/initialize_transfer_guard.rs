@@ -142,6 +142,7 @@ pub fn handle_initialize_transfer_guard(
     config.attestation_schema = policy.attestation_schema;
     require!(policy.capability_ttl_secs >= 0, GuardError::InvalidPolicy);
     config.capability_ttl_secs = policy.capability_ttl_secs;
+    config.governed = false;
     config.bump = ctx.bumps.guard_config;
 
     let eaml_info = ctx.accounts.extra_account_meta_list.to_account_info();

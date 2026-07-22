@@ -52,7 +52,29 @@ pub struct GuardConfig {
     /// strict mint sets this low to shrink the aegis-revocation-latency window;
     /// `invalidate_capability` closes it immediately for a known revocation.
     pub capability_ttl_secs: i64,
+    /// True once the mint adopts the governed policy lifecycle (spec 10 §4.1).
+    /// While set, `configure_policy` (free-tier live mutation) is rejected — all
+    /// policy changes must go through propose → approve → timelock → activate.
+    pub governed: bool,
     pub bump: u8,
+}
+
+impl GuardConfig {
+    /// Snapshot the governed (retunable) fields as a `PolicyDoc` — used to seed
+    /// the genesis version when a mint adopts governance (spec 10 §4.1).
+    pub fn as_policy_doc(&self) -> PolicyDoc {
+        PolicyDoc {
+            flags: self.flags,
+            daily_gift_cap: self.daily_gift_cap,
+            per_tx_cap: self.per_tx_cap,
+            max_wallet_balance: self.max_wallet_balance,
+            transfers_per_day_cap: self.transfers_per_day_cap,
+            cooldown_secs: self.cooldown_secs,
+            attestation_schema: self.attestation_schema,
+            capability_ttl_secs: self.capability_ttl_secs,
+            policy: self.policy,
+        }
+    }
 }
 
 /// Per-(mint, source-owner) velocity counters (spec §2.2). Deliberately
@@ -102,4 +124,170 @@ pub struct EligibilityCapability {
     /// Unix expiry; the capability is stale once `now >= expires_at`.
     pub expires_at: i64,
     pub bump: u8,
+}
+
+// ── Governance (spec 10) ─────────────────────────────────────────────────────
+
+/// The tunable policy fields under governance — the content that a
+/// `PolicyVersion` hashes and that `activate_policy` writes onto `GuardConfig`
+/// (spec 10 §4.1). Deliberately the retunable subset: the aegis *program* and
+/// trusted issuer are bound immutably at guard init and are NOT governed here.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, Default, InitSpace, PartialEq, Eq)]
+pub struct PolicyDoc {
+    pub flags: u16,
+    pub daily_gift_cap: u64,
+    pub per_tx_cap: u64,
+    pub max_wallet_balance: u64,
+    pub transfers_per_day_cap: u16,
+    pub cooldown_secs: u32,
+    pub attestation_schema: u64,
+    pub capability_ttl_secs: i64,
+    /// aegis `Policy` to enforce (`Pubkey::default()` = legacy `Present` check).
+    pub policy: Pubkey,
+}
+
+impl PolicyDoc {
+    /// Content address: sha256 over the borsh encoding. Two proposals with the
+    /// same rules share a version account (idempotent, deduplicated).
+    pub fn hash(&self) -> Result<[u8; 32]> {
+        let mut bytes = Vec::new();
+        self.serialize(&mut bytes)
+            .map_err(|_| crate::error::GuardError::InvalidPolicy)?;
+        Ok(solana_sha256_hasher::hashv(&[&bytes]).to_bytes())
+    }
+}
+
+/// An immutable, content-addressed proposed/approved policy (spec 10 §4.1).
+/// Seeds `["pver", mint, policy_hash]` — the hash IS the identity, so a version
+/// can never be silently rewritten. Lifecycle metadata (author/approver/times)
+/// is appended; the `doc` itself is frozen at propose time.
+#[account]
+#[derive(InitSpace)]
+pub struct PolicyVersion {
+    pub version: u8,
+    pub mint: Pubkey,
+    /// sha256 of `doc` — equals the PDA seed component.
+    pub policy_hash: [u8; 32],
+    pub doc: PolicyDoc,
+    /// Role::Author key that proposed it.
+    pub author: Pubkey,
+    /// Role::Approver key that approved it (`default()` until approved).
+    pub approver: Pubkey,
+    pub proposed_at: i64,
+    /// Unix ts of approval (`0` until approved) — the timelock reference.
+    pub approved_at: i64,
+    pub bump: u8,
+}
+
+/// Per-mint active-policy pointer + pending-change timelock (spec 10 §4.1, §5).
+/// This is the governed replacement for silent live-mutation of `GuardConfig`.
+#[account]
+#[derive(InitSpace)]
+pub struct PolicyPointer {
+    pub version: u8,
+    pub mint: Pubkey,
+    /// Hash of the currently-active `PolicyVersion`.
+    pub active_hash: [u8; 32],
+    /// Hash of a proposed version awaiting approval/timelock (`[0;32]` = none).
+    pub pending_hash: [u8; 32],
+    /// Approval ts of the pending version (`0` = proposed-but-unapproved).
+    pub pending_approved_at: i64,
+    /// Seconds that must elapse after approval before activation.
+    pub timelock_secs: i64,
+    /// Configurable immutability (spec 10 §4.1): once pinned, no propose/activate;
+    /// only the freeze (pause) authority stays alive.
+    pub pinned: bool,
+    pub bump: u8,
+}
+
+/// The separation-of-duties roles (spec 10 §4.2). Each maps to a single
+/// authority key — which may itself be a multisig (e.g. a Squads PDA); argus
+/// treats it as one signer, so multisig is transparent.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Role {
+    /// Grants/revokes roles (itself the most privileged; timelocked changes).
+    RoleAdmin,
+    /// Proposes new policy versions.
+    Author,
+    /// Approves a proposed version (must differ from its author).
+    Approver,
+    /// Activates an approved version after the timelock; rolls back.
+    Activator,
+    /// Instant freeze-only (cannot change rules or unpause).
+    PauseOperator,
+    /// Anchors period decision statements.
+    Reporter,
+}
+
+/// Per-mint role registry (spec 10 §4.2), seeds `["roles", mint]`. A mint that
+/// never adopts governance never creates this; free-tier stays single-authority.
+#[account]
+#[derive(InitSpace)]
+pub struct RoleRegistry {
+    pub version: u8,
+    pub mint: Pubkey,
+    pub role_admin: Pubkey,
+    pub author: Pubkey,
+    pub approver: Pubkey,
+    pub activator: Pubkey,
+    pub pause_operator: Pubkey,
+    pub reporter: Pubkey,
+    /// A two-step, timelocked pending role change (spec 10 §4.2 "timelocked").
+    /// `pending_after == 0` means no change is queued.
+    pub pending_role: u8,
+    pub pending_authority: Pubkey,
+    pub pending_after: i64,
+    pub bump: u8,
+}
+
+impl RoleRegistry {
+    /// The live authority for `role`.
+    pub fn authority_for(&self, role: Role) -> Pubkey {
+        match role {
+            Role::RoleAdmin => self.role_admin,
+            Role::Author => self.author,
+            Role::Approver => self.approver,
+            Role::Activator => self.activator,
+            Role::PauseOperator => self.pause_operator,
+            Role::Reporter => self.reporter,
+        }
+    }
+
+    /// Overwrite the authority for `role`.
+    pub fn set(&mut self, role: Role, authority: Pubkey) {
+        match role {
+            Role::RoleAdmin => self.role_admin = authority,
+            Role::Author => self.author = authority,
+            Role::Approver => self.approver = authority,
+            Role::Activator => self.activator = authority,
+            Role::PauseOperator => self.pause_operator = authority,
+            Role::Reporter => self.reporter = authority,
+        }
+    }
+
+    /// Assert `signer` holds `role`. Fail-closed: an unset (default) role
+    /// authority matches nothing, so an unconfigured role can never be invoked.
+    pub fn require(&self, role: Role, signer: Pubkey) -> Result<()> {
+        let authority = self.authority_for(role);
+        require!(
+            authority != Pubkey::default() && authority == signer,
+            crate::error::GuardError::RoleUnauthorized
+        );
+        Ok(())
+    }
+}
+
+impl TryFrom<u8> for Role {
+    type Error = Error;
+    fn try_from(v: u8) -> Result<Self> {
+        Ok(match v {
+            0 => Role::RoleAdmin,
+            1 => Role::Author,
+            2 => Role::Approver,
+            3 => Role::Activator,
+            4 => Role::PauseOperator,
+            5 => Role::Reporter,
+            _ => return err!(crate::error::GuardError::InvalidRole),
+        })
+    }
 }

@@ -410,6 +410,133 @@ impl World {
         let data = self.svm.get_account(&self.guard_config()).unwrap().data;
         argus::state::GuardConfig::try_deserialize(&mut data.as_slice()).unwrap()
     }
+
+    // ── Governance (spec 10) helpers ─────────────────────────────────────────
+
+    fn roles_pda(&self) -> Pubkey {
+        Pubkey::find_program_address(&[b"roles", self.mint.as_ref()], &argus::id()).0
+    }
+
+    fn pointer_pda(&self) -> Pubkey {
+        Pubkey::find_program_address(&[b"active", self.mint.as_ref()], &argus::id()).0
+    }
+
+    fn version_pda(&self, hash: &[u8; 32]) -> Pubkey {
+        Pubkey::find_program_address(&[b"pver", self.mint.as_ref(), hash], &argus::id()).0
+    }
+
+    fn pointer_of(&self) -> argus::state::PolicyPointer {
+        let data = self.svm.get_account(&self.pointer_pda()).unwrap().data;
+        argus::state::PolicyPointer::try_deserialize(&mut data.as_slice()).unwrap()
+    }
+
+    fn roles_of(&self) -> argus::state::RoleRegistry {
+        let data = self.svm.get_account(&self.roles_pda()).unwrap().data;
+        argus::state::RoleRegistry::try_deserialize(&mut data.as_slice()).unwrap()
+    }
+
+    /// Adopt governance with the given role authorities and timelock.
+    #[allow(clippy::too_many_arguments)]
+    fn init_governance(
+        &mut self,
+        roles: argus::instructions::governance::RoleAssignment,
+        timelock_secs: i64,
+    ) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+        let authority = self.merchant_authority.insecure_clone();
+        let genesis = self.config_of().as_policy_doc();
+        let gh = genesis.hash().unwrap();
+        let ix = Instruction {
+            program_id: argus::id(),
+            accounts: argus::accounts::InitializeGovernance {
+                authority: authority.pubkey(),
+                mint: self.mint,
+                guard_config: self.guard_config(),
+                role_registry: self.roles_pda(),
+                policy_pointer: self.pointer_pda(),
+                genesis_version: self.version_pda(&gh),
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: argus::instruction::InitializeGovernance {
+                genesis_hash: gh,
+                roles,
+                timelock_secs,
+            }
+            .data(),
+        };
+        self.send(&[ix], &[&authority], &authority.pubkey())
+    }
+
+    fn propose_policy(
+        &mut self,
+        author: &Keypair,
+        doc: argus::state::PolicyDoc,
+    ) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+        let hash = doc.hash().unwrap();
+        let ix = Instruction {
+            program_id: argus::id(),
+            accounts: argus::accounts::ProposePolicy {
+                author: author.pubkey(),
+                role_registry: self.roles_pda(),
+                policy_pointer: self.pointer_pda(),
+                policy_version: self.version_pda(&hash),
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: argus::instruction::ProposePolicy {
+                policy_hash: hash,
+                doc,
+            }
+            .data(),
+        };
+        self.send(&[ix], &[author], &author.pubkey())
+    }
+
+    fn approve_policy(
+        &mut self,
+        approver: &Keypair,
+        hash: [u8; 32],
+    ) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+        let ix = Instruction {
+            program_id: argus::id(),
+            accounts: argus::accounts::ApprovePolicy {
+                approver: approver.pubkey(),
+                role_registry: self.roles_pda(),
+                policy_pointer: self.pointer_pda(),
+                policy_version: self.version_pda(&hash),
+            }
+            .to_account_metas(None),
+            data: argus::instruction::ApprovePolicy {}.data(),
+        };
+        self.send(&[ix], &[approver], &approver.pubkey())
+    }
+
+    fn activate_or_rollback(
+        &mut self,
+        activator: &Keypair,
+        hash: [u8; 32],
+        rollback: bool,
+    ) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+        let accounts = argus::accounts::ActivatePolicy {
+            activator: activator.pubkey(),
+            role_registry: self.roles_pda(),
+            policy_pointer: self.pointer_pda(),
+            policy_version: self.version_pda(&hash),
+            guard_config: self.guard_config(),
+        }
+        .to_account_metas(None);
+        let data = if rollback {
+            argus::instruction::RollbackPolicy {}.data()
+        } else {
+            argus::instruction::ActivatePolicy {}.data()
+        };
+        let ix = Instruction {
+            program_id: argus::id(),
+            accounts,
+            data,
+        };
+        self.send(&[ix], &[activator], &activator.pubkey())
+    }
 }
 
 fn setup() -> World {
@@ -2385,5 +2512,250 @@ fn aegis_accreditation_trust_graph() {
     assert!(
         !verdict(&mut w, subject_issuer, kyc).ok,
         "revoked accreditation still trusted"
+    );
+}
+
+// ── Governance (spec 10, phase 1) ────────────────────────────────────────────
+
+use argus::instructions::governance::RoleAssignment;
+use argus::state::PolicyDoc;
+
+/// Build a role assignment with distinct keys (SoD-friendly), all sharing
+/// `admin` as RoleAdmin. Returns the assignment plus the freshly-funded keys.
+fn gov_roles(w: &mut World) -> (RoleAssignment, Keypair, Keypair, Keypair, Keypair) {
+    let role_admin = Keypair::new();
+    let author = Keypair::new();
+    let approver = Keypair::new();
+    let activator = Keypair::new();
+    for k in [&role_admin, &author, &approver, &activator] {
+        w.svm.airdrop(&k.pubkey(), 5_000_000_000).unwrap();
+    }
+    let assignment = RoleAssignment {
+        role_admin: role_admin.pubkey(),
+        author: author.pubkey(),
+        approver: approver.pubkey(),
+        activator: activator.pubkey(),
+        pause_operator: role_admin.pubkey(),
+        reporter: role_admin.pubkey(),
+    };
+    (assignment, role_admin, author, approver, activator)
+}
+
+/// A doc that differs from `base_policy` so activation is observable.
+fn amended_doc() -> PolicyDoc {
+    PolicyDoc {
+        flags: argus::constants::flags::BLOCK_PROGRAM_OWNED,
+        daily_gift_cap: CAP,
+        per_tx_cap: 111,
+        max_wallet_balance: 0,
+        transfers_per_day_cap: 0,
+        cooldown_secs: 0,
+        attestation_schema: 0,
+        capability_ttl_secs: 0,
+        policy: Pubkey::default(),
+    }
+}
+
+#[test]
+fn argus_governance_full_lifecycle() {
+    let mut w = setup_with_policy(base_policy());
+    let (roles, _admin, author, approver, activator) = gov_roles(&mut w);
+
+    w.init_governance(roles, 3_600).unwrap();
+    assert!(w.config_of().governed, "governance flag not set");
+    let epoch0 = w.config_of().policy_epoch;
+
+    // Free-tier live mutation is now disabled.
+    let merchant = w.merchant_authority.insecure_clone();
+    let bad = Instruction {
+        program_id: argus::id(),
+        accounts: argus::accounts::GuardAuthorityOnly {
+            authority: merchant.pubkey(),
+            guard_config: w.guard_config(),
+        }
+        .to_account_metas(None),
+        data: argus::instruction::ConfigurePolicy {
+            update: argus::instructions::policy::PolicyUpdate::default(),
+        }
+        .data(),
+    };
+    assert!(
+        w.send(&[bad], &[&merchant], &merchant.pubkey()).is_err(),
+        "configure_policy worked on a governed mint"
+    );
+
+    // propose → approve → timelock → activate.
+    let doc = amended_doc();
+    let hash = doc.hash().unwrap();
+    w.propose_policy(&author, doc).unwrap();
+    w.approve_policy(&approver, hash).unwrap();
+
+    // Too early — timelock still running.
+    assert!(
+        w.activate_or_rollback(&activator, hash, false).is_err(),
+        "activated before timelock elapsed"
+    );
+
+    w.warp_secs(3_601);
+    w.activate_or_rollback(&activator, hash, false).unwrap();
+
+    let cfg = w.config_of();
+    assert_eq!(cfg.per_tx_cap, 111, "activated doc not applied");
+    assert_eq!(cfg.policy_epoch, epoch0 + 1, "epoch not bumped");
+    assert_eq!(w.pointer_of().active_hash, hash);
+    assert_eq!(w.pointer_of().pending_hash, [0u8; 32]);
+}
+
+#[test]
+fn argus_governance_self_approval_rejected() {
+    let mut w = setup_with_policy(base_policy());
+    let (mut roles, _admin, author, _approver, _activator) = gov_roles(&mut w);
+    // Make the author also the approver → activation becomes impossible.
+    roles.approver = author.pubkey();
+    w.init_governance(roles, 0).unwrap();
+
+    let doc = amended_doc();
+    let hash = doc.hash().unwrap();
+    w.propose_policy(&author, doc).unwrap();
+    assert!(
+        w.approve_policy(&author, hash).is_err(),
+        "author approved their own proposal"
+    );
+}
+
+#[test]
+fn argus_governance_role_not_held_rejected() {
+    let mut w = setup_with_policy(base_policy());
+    let (roles, _admin, _author, approver, _activator) = gov_roles(&mut w);
+    w.init_governance(roles, 0).unwrap();
+
+    // `approver` is not the Author → cannot propose.
+    let doc = amended_doc();
+    assert!(
+        w.propose_policy(&approver, doc).is_err(),
+        "non-author proposed a policy"
+    );
+}
+
+#[test]
+fn argus_governance_pin_blocks_further_change() {
+    let mut w = setup_with_policy(base_policy());
+    let (roles, admin, author, _approver, _activator) = gov_roles(&mut w);
+    w.init_governance(roles, 0).unwrap();
+
+    // Pin the active (genesis) version.
+    let pin = Instruction {
+        program_id: argus::id(),
+        accounts: argus::accounts::PinPolicy {
+            role_admin: admin.pubkey(),
+            role_registry: w.roles_pda(),
+            policy_pointer: w.pointer_pda(),
+        }
+        .to_account_metas(None),
+        data: argus::instruction::PinPolicy {}.data(),
+    };
+    w.send(&[pin], &[&admin], &admin.pubkey()).unwrap();
+    assert!(w.pointer_of().pinned);
+
+    // No further proposals accepted.
+    assert!(
+        w.propose_policy(&author, amended_doc()).is_err(),
+        "proposed a policy on a pinned mint"
+    );
+}
+
+#[test]
+fn argus_governance_rollback_restores_prior_version() {
+    let mut w = setup_with_policy(base_policy());
+    let (roles, _admin, author, approver, activator) = gov_roles(&mut w);
+    w.init_governance(roles, 0).unwrap();
+    let genesis_hash = w.pointer_of().active_hash;
+
+    // Activate an amended version.
+    let doc = amended_doc();
+    let hash = doc.hash().unwrap();
+    w.propose_policy(&author, doc).unwrap();
+    w.approve_policy(&approver, hash).unwrap();
+    w.activate_or_rollback(&activator, hash, false).unwrap();
+    assert_eq!(w.config_of().per_tx_cap, 111);
+
+    // Expedited rollback to the (approved) genesis version.
+    w.activate_or_rollback(&activator, genesis_hash, true)
+        .unwrap();
+    assert_eq!(w.config_of().per_tx_cap, 0, "rollback did not restore");
+    assert_eq!(w.pointer_of().active_hash, genesis_hash);
+}
+
+#[test]
+fn argus_governance_role_change_is_timelocked() {
+    let mut w = setup_with_policy(base_policy());
+    let (roles, admin, _author, _approver, _activator) = gov_roles(&mut w);
+    w.init_governance(roles, 3_600).unwrap();
+
+    let new_author = Keypair::new();
+    let propose = |w: &World| Instruction {
+        program_id: argus::id(),
+        accounts: argus::accounts::RoleChange {
+            role_admin: admin.pubkey(),
+            role_registry: w.roles_pda(),
+            policy_pointer: w.pointer_pda(),
+        }
+        .to_account_metas(None),
+        data: argus::instruction::ProposeRoleChange {
+            role: 1, // Author
+            authority: new_author.pubkey(),
+        }
+        .data(),
+    };
+    let ix = propose(&w);
+    w.send(&[ix], &[&admin], &admin.pubkey()).unwrap();
+
+    let apply = |w: &World| Instruction {
+        program_id: argus::id(),
+        accounts: argus::accounts::RoleChange {
+            role_admin: admin.pubkey(),
+            role_registry: w.roles_pda(),
+            policy_pointer: w.pointer_pda(),
+        }
+        .to_account_metas(None),
+        data: argus::instruction::ApplyRoleChange {}.data(),
+    };
+
+    // Too early.
+    let early = apply(&w);
+    assert!(
+        w.send(&[early], &[&admin], &admin.pubkey()).is_err(),
+        "role change applied before timelock"
+    );
+
+    w.warp_secs(3_601);
+    let ok = apply(&w);
+    w.send(&[ok], &[&admin], &admin.pubkey()).unwrap();
+    assert_eq!(
+        w.roles_of().author,
+        new_author.pubkey(),
+        "author not rotated"
+    );
+
+    // A stranger cannot drive role changes.
+    let stranger = Keypair::new();
+    w.svm.airdrop(&stranger.pubkey(), 5_000_000_000).unwrap();
+    let bad = Instruction {
+        program_id: argus::id(),
+        accounts: argus::accounts::RoleChange {
+            role_admin: stranger.pubkey(),
+            role_registry: w.roles_pda(),
+            policy_pointer: w.pointer_pda(),
+        }
+        .to_account_metas(None),
+        data: argus::instruction::ProposeRoleChange {
+            role: 1,
+            authority: stranger.pubkey(),
+        }
+        .data(),
+    };
+    assert!(
+        w.send(&[bad], &[&stranger], &stranger.pubkey()).is_err(),
+        "non-admin drove a role change"
     );
 }

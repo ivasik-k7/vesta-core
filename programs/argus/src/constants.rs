@@ -24,6 +24,29 @@ pub const EXTRA_ACCOUNT_METAS_SEED: &[u8] = b"extra-account-metas";
 #[constant]
 pub const CAP_SEED: &[u8] = b"cap";
 
+// ── Governance (spec 10) ─────────────────────────────────────────────────────
+
+/// Immutable, content-addressed policy version (spec 10 §5): `["pver", mint, hash]`.
+#[constant]
+pub const POLICY_VERSION_SEED: &[u8] = b"pver";
+
+/// Per-mint active-policy pointer + timelock state (spec 10 §5): `["active", mint]`.
+#[constant]
+pub const POLICY_POINTER_SEED: &[u8] = b"active";
+
+/// Per-mint separation-of-duties role registry (spec 10 §5): `["roles", mint]`.
+#[constant]
+pub const ROLES_SEED: &[u8] = b"roles";
+
+/// Default governance timelock, seconds, seeded when a mint adopts governance.
+/// A change is `propose → approve → wait(timelock) → activate`; a compromised
+/// approver alone still cannot rush a rule change past the delay.
+pub const DEFAULT_GOVERNANCE_TIMELOCK_SECS: i64 = 86_400;
+
+/// Upper bound on the configurable timelock (365 days) — a sanity clamp so a
+/// fat-fingered value can't lock a mint's policy effectively forever.
+pub const MAX_GOVERNANCE_TIMELOCK_SECS: i64 = 365 * 86_400;
+
 /// How long a minted `EligibilityCapability` stays valid, seconds. A shorter
 /// window means fresher revocation at the cost of more refreshes; a config
 /// `policy_epoch` bump invalidates all capabilities immediately regardless.

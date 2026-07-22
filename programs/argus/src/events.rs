@@ -71,6 +71,63 @@ pub struct WalletStateOpened {
     pub owner: Pubkey,
 }
 
+// ── Governance (spec 10) ─────────────────────────────────────────────────────
+
+#[event]
+pub struct GovernanceInitialized {
+    pub mint: Pubkey,
+    pub role_admin: Pubkey,
+    pub genesis_policy_hash: [u8; 32],
+    pub timelock_secs: i64,
+}
+
+#[event]
+pub struct PolicyProposed {
+    pub mint: Pubkey,
+    pub policy_hash: [u8; 32],
+    pub author: Pubkey,
+}
+
+#[event]
+pub struct PolicyApproved {
+    pub mint: Pubkey,
+    pub policy_hash: [u8; 32],
+    pub approver: Pubkey,
+    pub activate_after: i64,
+}
+
+#[event]
+pub struct PolicyActivated {
+    pub mint: Pubkey,
+    pub old_hash: [u8; 32],
+    pub new_hash: [u8; 32],
+    pub policy_epoch: u64,
+    /// True when this activation was an expedited rollback to a prior version.
+    pub rollback: bool,
+}
+
+#[event]
+pub struct PolicyPinned {
+    pub mint: Pubkey,
+    pub policy_hash: [u8; 32],
+}
+
+#[event]
+pub struct RoleChangeProposed {
+    pub mint: Pubkey,
+    pub role: u8,
+    pub authority: Pubkey,
+    pub apply_after: i64,
+}
+
+#[event]
+pub struct RoleChanged {
+    pub mint: Pubkey,
+    pub role: u8,
+    pub old: Pubkey,
+    pub new: Pubkey,
+}
+
 // ── Per-transfer decision (spec §10) ─────────────────────────────────────────
 
 /// One event per `execute` call, carrying a stable reason code

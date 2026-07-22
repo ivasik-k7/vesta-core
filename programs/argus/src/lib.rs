@@ -101,6 +101,70 @@ pub mod argus {
         instructions::refresh_eligibility::handle_invalidate_capability(ctx)
     }
 
+    // ── Governance (spec 10, phase 1) ────────────────────────────────────────
+
+    /// Adopt the governed policy lifecycle for a mint (guard authority only).
+    /// Seeds the role registry, active-policy pointer, and a genesis version
+    /// capturing the current config; thereafter `configure_policy` is disabled
+    /// and all changes run propose → approve → timelock → activate.
+    pub fn initialize_governance(
+        ctx: Context<InitializeGovernance>,
+        genesis_hash: [u8; 32],
+        roles: RoleAssignment,
+        timelock_secs: i64,
+    ) -> Result<()> {
+        instructions::governance::handle_initialize_governance(
+            ctx,
+            genesis_hash,
+            roles,
+            timelock_secs,
+        )
+    }
+
+    /// Propose an immutable, content-addressed policy version (Author role).
+    pub fn propose_policy(
+        ctx: Context<ProposePolicy>,
+        policy_hash: [u8; 32],
+        doc: PolicyDoc,
+    ) -> Result<()> {
+        instructions::governance::handle_propose_policy(ctx, policy_hash, doc)
+    }
+
+    /// Approve a pending version and start the timelock (Approver ≠ Author).
+    pub fn approve_policy(ctx: Context<ApprovePolicy>) -> Result<()> {
+        instructions::governance::handle_approve_policy(ctx)
+    }
+
+    /// Activate an approved version after the timelock (Activator role).
+    pub fn activate_policy(ctx: Context<ActivatePolicy>) -> Result<()> {
+        instructions::governance::handle_activate_policy(ctx)
+    }
+
+    /// Expedited re-point to any prior approved version (Activator role).
+    pub fn rollback_policy(ctx: Context<ActivatePolicy>) -> Result<()> {
+        instructions::governance::handle_rollback_policy(ctx)
+    }
+
+    /// Finalize the active version as immutable — freeze-only stays alive
+    /// (RoleAdmin). Configurable immutability, not an all-or-nothing cliff.
+    pub fn pin_policy(ctx: Context<PinPolicy>) -> Result<()> {
+        instructions::governance::handle_pin_policy(ctx)
+    }
+
+    /// Queue a timelocked role reassignment (RoleAdmin).
+    pub fn propose_role_change(
+        ctx: Context<RoleChange>,
+        role: u8,
+        authority: Pubkey,
+    ) -> Result<()> {
+        instructions::governance::handle_propose_role_change(ctx, role, authority)
+    }
+
+    /// Apply a queued role reassignment after its timelock (RoleAdmin).
+    pub fn apply_role_change(ctx: Context<RoleChange>) -> Result<()> {
+        instructions::governance::handle_apply_role_change(ctx)
+    }
+
     /// Invoked by Token-2022 on every transfer of a hooked mint (spec §5).
     #[instruction(discriminator = ExecuteInstruction::SPL_DISCRIMINATOR_SLICE)]
     pub fn execute(ctx: Context<Execute>, amount: u64) -> Result<()> {

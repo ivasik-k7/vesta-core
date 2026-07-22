@@ -392,6 +392,7 @@ dependencies = [
  "solana-keypair",
  "solana-message",
  "solana-security-txt",
+ "solana-sha256-hasher",
  "solana-signer",
  "solana-transaction",
  "spl-discriminator",
