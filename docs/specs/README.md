@@ -153,11 +153,11 @@ flowchart TB
     style D13 fill:#14532d,stroke:#4ade80,color:#fff
 ```
 
-| # | Spec | Codename | Lens | Reuses (shipped) | Depends on |
-|---|---|---|---|---|---|
-| 11 | [Accredited Merchant Identity & Solvency](11-merchant-accredited-identity.md) | NOMOS | Regulated operator | argus `TrustAnchor` + reverify + auto-degrade; aegis `verify_accreditation` | 08 |
-| 12 | [Verified Customer Segmentation & Programmable Growth](12-merchant-verified-segmentation.md) | PROSOPON | Growth engine | argus `EligibilityCapability` + `refresh` + `screening_epoch`; aegis `verify_policy` | 06, 07, (11) |
-| 13 | [Merchant Governance & Operational Integrity](13-merchant-governance-integrity.md) | EPHORATE | Integrity / SoD | argus `RoleRegistry` + governed lifecycle + `StatementCommitment` | (11) |
+| # | Spec | Codename | Lens | Reuses (shipped) | Depends on | Status |
+|---|---|---|---|---|---|---|
+| 11 | [Accredited Merchant Identity & Solvency](11-merchant-accredited-identity.md) | NOMOS | Regulated operator | argus `TrustAnchor` + reverify + auto-degrade; aegis `verify_accreditation` | 08 | ✅ Shipped (v2.1.0); pre-mint earn solvency gate deferred |
+| 12 | [Verified Customer Segmentation & Programmable Growth](12-merchant-verified-segmentation.md) | PROSOPON | Growth engine | argus `EligibilityCapability` + `refresh` + `screening_epoch`; aegis `verify_policy` | 06, 07, (11) | Draft / Proposed |
+| 13 | [Merchant Governance & Operational Integrity](13-merchant-governance-integrity.md) | EPHORATE | Integrity / SoD | argus `RoleRegistry` + governed lifecycle + `StatementCommitment` | (11) | Draft / Proposed |
 
 **Recommended delivery order (dependency-driven):** **11 → 13 → 12**, but the
 *growth-first* path **11 → 12 → 13** is equally valid — see each spec's

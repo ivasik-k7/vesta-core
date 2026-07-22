@@ -1,7 +1,23 @@
 # 11 · vesta_core — Accredited Merchant Identity & Solvency
 
-> **Status:** Draft / Proposed · **Track:** D (Merchant) · **Layer:** Foundation / regulated-operator trust · **Codename:** NOMOS · **Depends on:** 08 (aegis accreditation), argus trust-triangle (shipped v2.1.0)
+> **Status:** ✅ Implemented (vesta_core v2.1.0) · **Track:** D (Merchant) · **Layer:** Foundation / regulated-operator trust · **Codename:** NOMOS · **Depends on:** 08 (aegis accreditation), argus trust-triangle (shipped v2.1.0)
 > Inherits all [shared conventions](README.md#shared-conventions-normative-for-all-specs).
+>
+> **Implemented:** (§4.1) `MerchantTrust` + permissionless `reverify_merchant` crank
+> (CPIs aegis `verify_accreditation`, pins the aegis PDAs from the anchor — no
+> griefing) + grace-window auto-degrade / auto-restore of `Merchant.issue_status`;
+> `set_merchant_trust` + `set_merchant_issue_status` (manual override); the earn
+> gate (`earn_points`/`earn_points_campaign` require `issue_status == NORMAL`;
+> redemption + clawback never gated). (§4.2) `MerchantReserve` +
+> `open`/`fund`/`withdraw`(coverage-enforced)/`attest_reserve` proof-of-reserves,
+> liability measured on raw supply (decay-conservative).
+>
+> **Deferred (documented):** the *pre-mint* solvency gate on `earn` (§4.2) — it
+> would thread optional reserve accounts through the earn hot path and every earn
+> call site; withdrawal-coverage + public attestation already guarantee reserves
+> cannot be pulled below outstanding liability and that under-collateralization is
+> provable. `verified` is retained as the legacy admin badge (not removed);
+> `issue_status` is the real signal.
 
 ## 1. Summary
 
