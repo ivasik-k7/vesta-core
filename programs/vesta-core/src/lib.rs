@@ -150,6 +150,45 @@ pub mod vesta_core {
         instructions::merchant_admin::handle_verify_merchant(ctx, verified)
     }
 
+    // ── Accredited merchant identity (spec 11, phase 1) ──────────────────────
+
+    /// Bind the merchant's authority-to-issue to an aegis accreditation root
+    /// (owner-only). Configures the fall-to posture + grace window.
+    pub fn set_merchant_trust(
+        ctx: Context<SetMerchantTrust>,
+        accreditation_root: Pubkey,
+        subject_issuer: Pubkey,
+        required_schema: u64,
+        aegis_program: Pubkey,
+        degrade_target: u8,
+        grace_secs: i64,
+    ) -> Result<()> {
+        instructions::merchant_trust::handle_set_merchant_trust(
+            ctx,
+            accreditation_root,
+            subject_issuer,
+            required_schema,
+            aegis_program,
+            degrade_target,
+            grace_secs,
+        )
+    }
+
+    /// Permissionless crank: re-check the merchant's aegis accreditation and
+    /// auto-degrade (after grace) or auto-restore its issuance posture.
+    pub fn reverify_merchant(ctx: Context<ReverifyMerchant>) -> Result<()> {
+        instructions::merchant_trust::handle_reverify_merchant(ctx)
+    }
+
+    /// Owner manual issuance-posture override — emergency freeze, or restore to
+    /// NORMAL after resolving a dispute.
+    pub fn set_merchant_issue_status(
+        ctx: Context<SetMerchantIssueStatus>,
+        status: u8,
+    ) -> Result<()> {
+        instructions::merchant_trust::handle_set_merchant_issue_status(ctx, status)
+    }
+
     /// Set the merchant's daily clawback cap (raw units; 0 = unlimited).
     pub fn set_clawback_cap(ctx: Context<MerchantOwnerOnly>, daily_cap_raw: u64) -> Result<()> {
         instructions::merchant_admin::handle_set_clawback_cap(ctx, daily_cap_raw)

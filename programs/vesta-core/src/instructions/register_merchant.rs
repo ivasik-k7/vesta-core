@@ -329,6 +329,7 @@ pub fn handle_register_merchant(
     merchant.clawback_day = 0;
     merchant.bump = ctx.bumps.merchant;
     merchant.mint_bump = ctx.bumps.mint;
+    merchant.issue_status = crate::constants::issue_status::NORMAL;
 
     emit!(MerchantRegistered {
         merchant: merchant_key,

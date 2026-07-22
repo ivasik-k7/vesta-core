@@ -160,6 +160,34 @@ pub struct MerchantProfileUpdated {
     pub category: u8,
 }
 
+// ── Accreditation (spec 11) ──────────────────────────────────────────────────
+
+#[event]
+pub struct MerchantTrustSet {
+    pub merchant: Pubkey,
+    pub accreditation_root: Pubkey,
+    pub subject_issuer: Pubkey,
+    pub required_schema: u64,
+    pub degrade_target: u8,
+}
+
+#[event]
+pub struct MerchantReverified {
+    pub merchant: Pubkey,
+    pub healthy: bool,
+    pub issue_status: u8,
+    pub reason_code: u16,
+}
+
+#[event]
+pub struct MerchantIssueStatusSet {
+    pub merchant: Pubkey,
+    pub old: u8,
+    pub new: u8,
+    /// True when set by the permissionless crank; false for a manual override.
+    pub automatic: bool,
+}
+
 #[event]
 pub struct AlliancePausedSet {
     pub alliance: Pubkey,

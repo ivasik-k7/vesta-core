@@ -63,6 +63,11 @@ pub struct Merchant {
     pub clawback_day: u32,
     pub bump: u8,
     pub mint_bump: u8,
+    // ── accreditation (spec 11) — APPENDED past the argus-read ABI prefix ─────
+    /// Live issuance posture (`issue_status::*`), driven by `reverify_merchant`.
+    /// `NORMAL` for a merchant that never adopts accreditation, so the earn gate
+    /// is a no-op until opt-in.
+    pub issue_status: u8,
 }
 
 impl Merchant {
@@ -71,6 +76,38 @@ impl Merchant {
         *signer == self.authority
             || self.operators[..usize::from(self.operator_count)].contains(signer)
     }
+}
+
+/// Accredited merchant identity (spec 11 §4.1), seeds `["mtrust", merchant]`.
+/// The merchant-side analogue of argus's `TrustAnchor`: binds the merchant's
+/// authority to *issue* to an aegis accreditation root. The permissionless
+/// `reverify_merchant` crank re-checks the chain and, after a grace window,
+/// trips `Merchant.issue_status` to `degrade_target` — freezing earn (never
+/// redemption/clawback). Auto-restores on the next healthy crank.
+#[account]
+#[derive(InitSpace)]
+pub struct MerchantTrust {
+    pub version: u8,
+    pub merchant: Pubkey,
+    /// aegis accreditation root the merchant's KYB identity must chain to.
+    pub accreditation_root: Pubkey,
+    /// The merchant's aegis subject/issuer identity being verified.
+    pub subject_issuer: Pubkey,
+    /// Required accreditation schema ("KYB type").
+    pub required_schema: u64,
+    /// aegis deployment (verify_accreditation target).
+    pub aegis_program: Pubkey,
+    /// Posture to fall to on sustained failure (`EARN_FROZEN`/`REDEMPTION_ONLY`).
+    pub degrade_target: u8,
+    /// Seconds a failing streak must persist before auto-degrade bites.
+    pub grace_secs: i64,
+    /// Unix ts the current failing streak began (`0` = healthy).
+    pub failing_since: i64,
+    pub last_verified_at: i64,
+    /// Accreditation provenance captured from the verdict.
+    pub tier: u8,
+    pub jurisdiction: u16,
+    pub bump: u8,
 }
 
 /// Per merchant-customer pair.

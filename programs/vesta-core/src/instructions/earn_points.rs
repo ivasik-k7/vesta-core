@@ -141,6 +141,13 @@ pub fn handle_earn_points(
 ) -> Result<()> {
     require!(!ctx.accounts.config.paused, VestaError::ProtocolPaused);
     require!(!ctx.accounts.merchant.paused, VestaError::MerchantPaused);
+    // Accreditation gate (spec 11 §4.1): a degraded issuance posture freezes
+    // earn. Default NORMAL, so a merchant that never adopts accreditation is
+    // unaffected. Redemption and clawback deliberately do NOT check this.
+    require!(
+        ctx.accounts.merchant.issue_status == crate::constants::issue_status::NORMAL,
+        VestaError::IssuanceFrozen
+    );
     require!(
         ctx.accounts
             .merchant
@@ -256,6 +263,13 @@ pub fn handle_earn_points_campaign(
 ) -> Result<()> {
     require!(!ctx.accounts.config.paused, VestaError::ProtocolPaused);
     require!(!ctx.accounts.merchant.paused, VestaError::MerchantPaused);
+    // Accreditation gate (spec 11 §4.1): a degraded issuance posture freezes
+    // earn. Default NORMAL, so a merchant that never adopts accreditation is
+    // unaffected. Redemption and clawback deliberately do NOT check this.
+    require!(
+        ctx.accounts.merchant.issue_status == crate::constants::issue_status::NORMAL,
+        VestaError::IssuanceFrozen
+    );
     require!(
         ctx.accounts
             .merchant

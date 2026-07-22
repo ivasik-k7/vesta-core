@@ -1,5 +1,9 @@
 use anchor_lang::prelude::*;
 
+/// Account layout version stamped into newer accounts (e.g. `MerchantTrust`);
+/// readers fail closed on an unknown version.
+pub const STATE_VERSION: u8 = 1;
+
 #[constant]
 pub const CONFIG_SEED: &[u8] = b"config";
 #[constant]
@@ -26,6 +30,29 @@ pub const BADGE_SEED: &[u8] = b"badge";
 pub const ALLIANCE_SEED: &[u8] = b"alliance";
 #[constant]
 pub const MEMBER_SEED: &[u8] = b"member";
+
+/// Per-merchant accreditation anchor (spec 11): `["mtrust", merchant]`.
+#[constant]
+pub const MERCHANT_TRUST_SEED: &[u8] = b"mtrust";
+
+/// Default merchant accreditation grace window, seconds — a failing streak must
+/// persist this long before issuance auto-degrades (absorbs a transient aegis
+/// outage). Configurable per merchant on the `MerchantTrust`.
+pub const DEFAULT_MERCHANT_TRUST_GRACE_SECS: i64 = 3_600;
+
+/// Merchant issuance posture (spec 11 §4.1), denormalized onto `Merchant.issue_status`.
+/// Any non-`NORMAL` posture freezes minting (earn) while leaving redemption and
+/// clawback open, so a compliance failure never strands holder assets.
+pub mod issue_status {
+    pub const NORMAL: u8 = 0;
+    pub const EARN_FROZEN: u8 = 1;
+    pub const REDEMPTION_ONLY: u8 = 2;
+
+    /// Postures accepted as an auto-degrade target (must be an actual freeze).
+    pub fn is_valid_target(s: u8) -> bool {
+        s == EARN_FROZEN || s == REDEMPTION_ONLY
+    }
+}
 
 /// UI points carry two implied decimals; all mints.
 #[constant]

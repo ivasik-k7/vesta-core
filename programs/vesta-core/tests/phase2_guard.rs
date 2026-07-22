@@ -3541,3 +3541,224 @@ fn argus_tenants_are_isolated() {
     // The first tenant's license is intact and scoped to its own mint.
     assert_eq!(w1.license_of().mint, w1.mint);
 }
+
+// ── Merchant accredited identity (spec 11, phase 1) ──────────────────────────
+
+fn merchant_trust_pda(w: &World) -> Pubkey {
+    Pubkey::find_program_address(&[b"mtrust", w.merchant.as_ref()], &vesta_core::id()).0
+}
+
+fn set_merchant_trust(
+    w: &mut World,
+    root: Pubkey,
+    subject_issuer: Pubkey,
+    schema: u64,
+    degrade_target: u8,
+    grace_secs: i64,
+) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+    let authority = w.merchant_authority.insecure_clone();
+    let ix = Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::SetMerchantTrust {
+            authority: authority.pubkey(),
+            merchant: w.merchant,
+            merchant_trust: merchant_trust_pda(w),
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::SetMerchantTrust {
+            accreditation_root: root,
+            subject_issuer,
+            required_schema: schema,
+            aegis_program: aegis::id(),
+            degrade_target,
+            grace_secs,
+        }
+        .data(),
+    };
+    w.send(&[ix], &[&authority], &authority.pubkey())
+}
+
+fn reverify_merchant(
+    w: &mut World,
+    cranker: &Keypair,
+    root: Pubkey,
+    subject_issuer: Pubkey,
+) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+    let aegis_trust_root = Pubkey::find_program_address(&[b"troot", root.as_ref()], &aegis::id()).0;
+    let aegis_accreditation = Pubkey::find_program_address(
+        &[b"accred", root.as_ref(), subject_issuer.as_ref()],
+        &aegis::id(),
+    )
+    .0;
+    let ix = Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::ReverifyMerchant {
+            cranker: cranker.pubkey(),
+            merchant: w.merchant,
+            merchant_trust: merchant_trust_pda(w),
+            aegis_trust_root,
+            aegis_accreditation,
+            aegis_program: aegis::id(),
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::ReverifyMerchant {}.data(),
+    };
+    w.send(&[ix], &[cranker], &cranker.pubkey())
+}
+
+fn set_merchant_issue_status(
+    w: &mut World,
+    status: u8,
+) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+    let authority = w.merchant_authority.insecure_clone();
+    let ix = Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::SetMerchantIssueStatus {
+            authority: authority.pubkey(),
+            merchant: w.merchant,
+            merchant_trust: merchant_trust_pda(w),
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::SetMerchantIssueStatus { status }.data(),
+    };
+    w.send(&[ix], &[&authority], &authority.pubkey())
+}
+
+fn try_earn(
+    w: &mut World,
+    customer: Pubkey,
+    amount_base: u64,
+) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+    let visit_day = (w.svm.get_sysvar::<Clock>().unix_timestamp / 86_400) as u32;
+    let profile = Pubkey::find_program_address(
+        &[CUSTOMER_SEED, w.merchant.as_ref(), customer.as_ref()],
+        &vesta_core::id(),
+    )
+    .0;
+    let ata = get_associated_token_address_with_program_id(&customer, &w.mint, &TOKEN_2022_ID);
+    let authority = w.merchant_authority.insecure_clone();
+    let ix = Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::EarnPoints {
+            merchant_authority: authority.pubkey(),
+            merchant: w.merchant,
+            customer,
+            customer_profile: profile,
+            point_mint: w.mint,
+            customer_ata: ata,
+            config: w.config,
+            token_program: TOKEN_2022_ID,
+            associated_token_program: ATA_PROGRAM_ID,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::EarnPoints {
+            amount_base,
+            visit_day,
+        }
+        .data(),
+    };
+    w.send(&[ix], &[&authority], &authority.pubkey())
+}
+
+fn merchant_issue_status(w: &World) -> u8 {
+    let data = w.svm.get_account(&w.merchant).unwrap().data;
+    vesta_core::state::Merchant::try_deserialize(&mut data.as_slice())
+        .unwrap()
+        .issue_status
+}
+
+#[test]
+fn merchant_accreditation_auto_degrade_freezes_earn_not_redemption() {
+    let mut w = setup();
+    let root_authority = Keypair::new();
+    let subject_issuer = Keypair::new().pubkey();
+    let schema = aegis::constants::well_known_schema::KYC_TIER;
+    aegis_setup_accreditation(&mut w, &root_authority, subject_issuer, schema);
+
+    let alice = Keypair::new();
+    w.svm.airdrop(&alice.pubkey(), 5_000_000_000).unwrap();
+
+    // Before adopting accreditation, earn works (issue_status defaults NORMAL).
+    try_earn(&mut w, alice.pubkey(), 1_000).unwrap();
+
+    // Adopt accreditation with a zero grace, EARN_FROZEN on failure.
+    set_merchant_trust(
+        &mut w,
+        root_authority.pubkey(),
+        subject_issuer,
+        schema,
+        vesta_core::constants::issue_status::EARN_FROZEN,
+        0,
+    )
+    .unwrap();
+
+    let cranker = Keypair::new();
+    w.svm.airdrop(&cranker.pubkey(), 5_000_000_000).unwrap();
+
+    // Healthy accreditation → NORMAL → earn still flows.
+    reverify_merchant(&mut w, &cranker, root_authority.pubkey(), subject_issuer).unwrap();
+    assert_eq!(
+        merchant_issue_status(&w),
+        vesta_core::constants::issue_status::NORMAL
+    );
+    try_earn(&mut w, alice.pubkey(), 1_000).unwrap();
+
+    // Revoke accreditation → crank freezes issuance.
+    aegis_revoke_accreditation(&mut w, &root_authority, subject_issuer);
+    reverify_merchant(&mut w, &cranker, root_authority.pubkey(), subject_issuer).unwrap();
+    assert_eq!(
+        merchant_issue_status(&w),
+        vesta_core::constants::issue_status::EARN_FROZEN
+    );
+
+    // Earn is now frozen...
+    assert!(
+        try_earn(&mut w, alice.pubkey(), 1_000).is_err(),
+        "earn succeeded under a frozen issuance posture"
+    );
+
+    // ...but a manual restore (dispute resolved) reopens issuance.
+    set_merchant_issue_status(&mut w, vesta_core::constants::issue_status::NORMAL).unwrap();
+    try_earn(&mut w, alice.pubkey(), 1_000).unwrap();
+}
+
+#[test]
+fn merchant_reverify_grace_absorbs_transient_failure() {
+    let mut w = setup();
+    let root_authority = Keypair::new();
+    let subject_issuer = Keypair::new().pubkey();
+    let schema = aegis::constants::well_known_schema::KYC_TIER;
+    aegis_setup_accreditation(&mut w, &root_authority, subject_issuer, schema);
+
+    set_merchant_trust(
+        &mut w,
+        root_authority.pubkey(),
+        subject_issuer,
+        schema,
+        vesta_core::constants::issue_status::EARN_FROZEN,
+        3_600,
+    )
+    .unwrap();
+    let cranker = Keypair::new();
+    w.svm.airdrop(&cranker.pubkey(), 5_000_000_000).unwrap();
+    reverify_merchant(&mut w, &cranker, root_authority.pubkey(), subject_issuer).unwrap();
+
+    // Revoke + crank inside the grace window → still NORMAL.
+    aegis_revoke_accreditation(&mut w, &root_authority, subject_issuer);
+    reverify_merchant(&mut w, &cranker, root_authority.pubkey(), subject_issuer).unwrap();
+    assert_eq!(
+        merchant_issue_status(&w),
+        vesta_core::constants::issue_status::NORMAL,
+        "froze before the grace window elapsed"
+    );
+
+    // Past grace → freeze bites.
+    w.warp_secs(3_601);
+    reverify_merchant(&mut w, &cranker, root_authority.pubkey(), subject_issuer).unwrap();
+    assert_eq!(
+        merchant_issue_status(&w),
+        vesta_core::constants::issue_status::EARN_FROZEN
+    );
+}

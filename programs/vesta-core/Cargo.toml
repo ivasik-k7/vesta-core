@@ -1,6 +1,6 @@
 [package]
 name = "vesta-core"
-version = "2.0.0"
+version = "2.1.0"
 description = "VESTA living loyalty protocol: merchants, campaigns, points, alliances, badges"
 edition.workspace = true
 rust-version.workspace = true
@@ -27,6 +27,9 @@ anchor-spl = "1.1.2"
 solana-security-txt = "1.1.1"
 spl-token-2022-interface = "2.1.0"
 spl-token-metadata-interface = "0.8.0"
+# vesta_core CPIs aegis's stable verify_accreditation (spec 11) — linked as a
+# no-entrypoint lib (cpi feature) so only aegis carries an entrypoint.
+aegis = { path = "../aegis", default-features = false, features = ["cpi"] }
 
 [dev-dependencies]
 litesvm = "0.10.0"

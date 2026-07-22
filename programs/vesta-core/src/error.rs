@@ -86,4 +86,15 @@ pub enum VestaError {
     Overflow,
     #[msg("Conversion return data missing or malformed")]
     ConversionFailed,
+    // ── Accreditation (spec 11) ─────────────────────────────────────────────
+    #[msg("Issuance is frozen — merchant accreditation is degraded")]
+    IssuanceFrozen,
+    #[msg("Degrade target must be a real frozen posture")]
+    InvalidIssueStatus,
+    #[msg("Merchant trust anchor is not configured")]
+    MerchantTrustMissing,
+    #[msg("aegis program does not match the merchant's configured deployment")]
+    AegisProgramMismatch,
+    #[msg("Grace window is out of range")]
+    InvalidGrace,
 }
