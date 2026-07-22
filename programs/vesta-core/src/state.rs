@@ -300,6 +300,9 @@ pub struct Offer {
     pub supply_remaining: u32,
     pub active: bool,
     pub bump: u8,
+    /// Verified-segment gate (spec 12 §4.5): `0` = open to all; else the customer
+    /// must satisfy segment index `required_segment - 1` to redeem. Appended.
+    pub required_segment: u8,
 }
 
 /// Voucher for a redemption; indexed by the profile's on-chain counter.

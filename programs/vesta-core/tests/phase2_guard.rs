@@ -4543,3 +4543,242 @@ fn merchant_segment_boosts_earn() {
         "VIP {vip_earned} did not out-earn plain {plain_earned} despite the segment boost"
     );
 }
+
+// ── Segment-gated offers (spec 12, phase 4 offer depth) ──────────────────────
+
+fn offer_pda(w: &World, id: u64) -> Pubkey {
+    Pubkey::find_program_address(
+        &[b"offer", w.merchant.as_ref(), &id.to_le_bytes()],
+        &vesta_core::id(),
+    )
+    .0
+}
+
+fn redeem_offer(
+    w: &mut World,
+    customer: &Keypair,
+    offer_id: u64,
+    gated: bool,
+) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+    let profile = Pubkey::find_program_address(
+        &[
+            CUSTOMER_SEED,
+            w.merchant.as_ref(),
+            customer.pubkey().as_ref(),
+        ],
+        &vesta_core::id(),
+    )
+    .0;
+    let lifetime_redemptions = w
+        .svm
+        .get_account(&profile)
+        .map(|a| {
+            vesta_core::state::CustomerProfile::try_deserialize(&mut a.data.as_slice())
+                .unwrap()
+                .lifetime_redemptions
+        })
+        .unwrap_or(0);
+    let receipt = Pubkey::find_program_address(
+        &[
+            b"receipt",
+            offer_pda(w, offer_id).as_ref(),
+            customer.pubkey().as_ref(),
+            &lifetime_redemptions.to_le_bytes(),
+        ],
+        &vesta_core::id(),
+    )
+    .0;
+    let ata =
+        get_associated_token_address_with_program_id(&customer.pubkey(), &w.mint, &TOKEN_2022_ID);
+    let (segs, cel) = if gated {
+        (Some(segments_pda(w)), Some(celig_pda(w, customer.pubkey())))
+    } else {
+        (None, None)
+    };
+    let ix = Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::RedeemOffer {
+            customer: customer.pubkey(),
+            merchant: w.merchant,
+            offer: offer_pda(w, offer_id),
+            customer_profile: profile,
+            receipt,
+            point_mint: w.mint,
+            customer_ata: ata,
+            config: w.config,
+            merchant_segments: segs,
+            customer_eligibility: cel,
+            token_program: TOKEN_2022_ID,
+            associated_token_program: ATA_PROGRAM_ID,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::RedeemOffer {
+            max_raw_amount: u64::MAX,
+        }
+        .data(),
+    };
+    w.send(&[ix], &[customer], &customer.pubkey())
+}
+
+#[test]
+fn merchant_segment_gated_offer() {
+    let mut w = setup();
+    let owner = w.merchant_authority.insecure_clone();
+    let issuer_authority = Keypair::new();
+    w.svm
+        .airdrop(&issuer_authority.pubkey(), 5_000_000_000)
+        .unwrap();
+    let issuer = Pubkey::find_program_address(
+        &[
+            b"issuer",
+            issuer_authority.pubkey().as_ref(),
+            &0u64.to_le_bytes(),
+        ],
+        &aegis::id(),
+    )
+    .0;
+    let schema_id = aegis::constants::well_known_schema::REGION;
+
+    // aegis issuer + segment 0.
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::InitIssuer {
+                authority: issuer_authority.pubkey(),
+                issuer,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::InitIssuer {
+                id: 0,
+                name: "Geo".into(),
+            }
+            .data(),
+        }],
+        &[&issuer_authority],
+        &issuer_authority.pubkey(),
+    )
+    .unwrap();
+    w.send(
+        &[Instruction {
+            program_id: vesta_core::id(),
+            accounts: vesta_core::accounts::SetMerchantSegments {
+                authority: owner.pubkey(),
+                merchant: w.merchant,
+                merchant_segments: segments_pda(&w),
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: vesta_core::instruction::SetMerchantSegments {
+                segments: vec![vesta_core::state::Segment {
+                    issuer,
+                    schema_id,
+                    ttl_secs: 0,
+                    boost_bps: 0,
+                    active: true,
+                }],
+            }
+            .data(),
+        }],
+        &[&owner],
+        &owner.pubkey(),
+    )
+    .unwrap();
+
+    // Create an offer priced at 1.00 UI point, gated on segment 0.
+    w.send(
+        &[Instruction {
+            program_id: vesta_core::id(),
+            accounts: vesta_core::accounts::CreateOffer {
+                authority: owner.pubkey(),
+                merchant: w.merchant,
+                offer: offer_pda(&w, 0),
+                config: w.config,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: vesta_core::instruction::CreateOffer {
+                id: 0,
+                price_points: 100,
+                supply: 10,
+            }
+            .data(),
+        }],
+        &[&owner],
+        &owner.pubkey(),
+    )
+    .unwrap();
+    w.send(
+        &[Instruction {
+            program_id: vesta_core::id(),
+            accounts: vesta_core::accounts::SetOfferSegment {
+                authority: owner.pubkey(),
+                merchant: w.merchant,
+                offer: offer_pda(&w, 0),
+            }
+            .to_account_metas(None),
+            data: vesta_core::instruction::SetOfferSegment {
+                required_segment: 1,
+            }
+            .data(),
+        }],
+        &[&owner],
+        &owner.pubkey(),
+    )
+    .unwrap();
+
+    // Fund both customers with points.
+    let vip = Keypair::new();
+    let plain = Keypair::new();
+    for k in [&vip, &plain] {
+        w.svm.airdrop(&k.pubkey(), 5_000_000_000).unwrap();
+        w.earn(k.pubkey(), 1_000);
+    }
+
+    // VIP: issue credential + refresh eligibility.
+    let attestation = Pubkey::find_program_address(
+        &[
+            b"attestation",
+            issuer.as_ref(),
+            vip.pubkey().as_ref(),
+            &schema_id.to_le_bytes(),
+        ],
+        &aegis::id(),
+    )
+    .0;
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::IssueAttestation {
+                signer: issuer_authority.pubkey(),
+                issuer,
+                attestation,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::IssueAttestation {
+                subject: vip.pubkey(),
+                data: aegis::instructions::attestation::AttestationData {
+                    schema_id,
+                    commitment: [7u8; 32],
+                    attr_root: [0u8; 32],
+                    valid_from: 0,
+                    expires_at: 0,
+                },
+            }
+            .data(),
+        }],
+        &[&issuer_authority],
+        &issuer_authority.pubkey(),
+    )
+    .unwrap();
+    refresh_customer_eligibility(&mut w, &owner, vip.pubkey(), issuer, schema_id, 0).unwrap();
+
+    // Plain customer cannot redeem the gated offer; the VIP can.
+    assert!(
+        redeem_offer(&mut w, &plain, 0, false).is_err(),
+        "plain customer redeemed a segment-gated offer"
+    );
+    redeem_offer(&mut w, &vip, 0, true).unwrap();
+}

@@ -236,6 +236,11 @@ pub mod vesta_core {
         instructions::segmentation::handle_refresh_customer_eligibility(ctx, segment_index)
     }
 
+    /// Gate/ungate an offer on a verified segment (spec 12 §4.5).
+    pub fn set_offer_segment(ctx: Context<SetOfferSegment>, required_segment: u8) -> Result<()> {
+        instructions::offers::handle_set_offer_segment(ctx, required_segment)
+    }
+
     /// Anchor a period's economic-decision Merkle root on-chain (owner) —
     /// tamper-evident, provably complete (spec 13 §4.4).
     pub fn anchor_merchant_statement(

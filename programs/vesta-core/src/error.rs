@@ -109,4 +109,6 @@ pub enum VestaError {
     TooManySegments,
     #[msg("Segment index is invalid or inactive")]
     InvalidSegment,
+    #[msg("Offer is restricted to a verified segment the customer does not satisfy")]
+    OfferSegmentGated,
 }

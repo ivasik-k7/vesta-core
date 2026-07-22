@@ -8,7 +8,7 @@ use anchor_spl::{
 use crate::{
     constants::{CONFIG_SEED, CUSTOMER_SEED, MERCHANT_SEED, MINT_SEED, OFFER_SEED, RECEIPT_SEED},
     error::VestaError,
-    events::{OfferClosed, OfferCreated, OfferRedeemed, ReceiptClosed},
+    events::{OfferClosed, OfferCreated, OfferRedeemed, OfferSegmentSet, ReceiptClosed},
     state::{Config, CustomerProfile, Merchant, Offer, Receipt},
 };
 
@@ -63,6 +63,7 @@ pub fn handle_create_offer(
     offer.supply_remaining = supply;
     offer.active = true;
     offer.bump = ctx.bumps.offer;
+    offer.required_segment = 0;
 
     emit!(OfferCreated {
         merchant: offer.merchant,
@@ -97,6 +98,42 @@ pub fn handle_close_offer(ctx: Context<CloseOffer>) -> Result<()> {
     emit!(OfferClosed {
         merchant: ctx.accounts.merchant.key(),
         offer_id: ctx.accounts.offer.id,
+    });
+    Ok(())
+}
+
+/// Gate (or ungate) an offer on a verified segment (spec 12 §4.5). `0` = open;
+/// else the redeemer must satisfy segment index `required_segment - 1`.
+#[derive(Accounts)]
+pub struct SetOfferSegment<'info> {
+    pub authority: Signer<'info>,
+
+    #[account(
+        seeds = [MERCHANT_SEED, merchant.authority.as_ref(), &merchant.id.to_le_bytes()],
+        bump = merchant.bump,
+    )]
+    pub merchant: Account<'info, Merchant>,
+
+    #[account(mut, has_one = merchant @ VestaError::MerchantMismatch)]
+    pub offer: Account<'info, Offer>,
+}
+
+pub fn handle_set_offer_segment(ctx: Context<SetOfferSegment>, required_segment: u8) -> Result<()> {
+    require!(
+        ctx.accounts
+            .merchant
+            .may_manage(&ctx.accounts.authority.key()),
+        VestaError::Unauthorized
+    );
+    require!(
+        usize::from(required_segment) <= crate::constants::MAX_SEGMENTS,
+        VestaError::InvalidSegment
+    );
+    ctx.accounts.offer.required_segment = required_segment;
+    emit!(OfferSegmentSet {
+        merchant: ctx.accounts.merchant.key(),
+        offer_id: ctx.accounts.offer.id,
+        required_segment,
     });
     Ok(())
 }
@@ -158,7 +195,25 @@ pub struct RedeemOffer<'info> {
     pub customer_ata: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(seeds = [CONFIG_SEED], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
+
+    /// Optional verified-segment gate accounts (spec 12 §4.5), required only when
+    /// the offer sets `required_segment`.
+    #[account(
+        seeds = [crate::constants::SEGMENTS_SEED, merchant.key().as_ref()],
+        bump = merchant_segments.bump,
+    )]
+    pub merchant_segments: Option<Box<Account<'info, crate::state::MerchantSegments>>>,
+
+    #[account(
+        seeds = [
+            crate::constants::CUSTOMER_ELIGIBILITY_SEED,
+            merchant.key().as_ref(),
+            customer.key().as_ref(),
+        ],
+        bump = customer_eligibility.bump,
+    )]
+    pub customer_eligibility: Option<Box<Account<'info, crate::state::CustomerEligibility>>>,
 
     pub token_program: Program<'info, Token2022>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -168,6 +223,23 @@ pub struct RedeemOffer<'info> {
 pub fn handle_redeem_offer(ctx: Context<RedeemOffer>, max_raw_amount: u64) -> Result<()> {
     require!(!ctx.accounts.config.paused, VestaError::ProtocolPaused);
     require!(!ctx.accounts.merchant.paused, VestaError::MerchantPaused);
+
+    // Verified-segment gate: an offer may restrict redemption to customers who
+    // satisfy a segment (e.g. accredited-only, verified-region flash sale).
+    let required_segment = ctx.accounts.offer.required_segment;
+    if required_segment != 0 {
+        let now = Clock::get()?.unix_timestamp;
+        let ok = match (
+            &ctx.accounts.merchant_segments,
+            &ctx.accounts.customer_eligibility,
+        ) {
+            (Some(segs), Some(cel)) => {
+                cel.satisfies(required_segment.saturating_sub(1), segs.policy_epoch, now)
+            }
+            _ => false,
+        };
+        require!(ok, VestaError::OfferSegmentGated);
+    }
 
     let offer = &mut ctx.accounts.offer;
     require!(offer.active, VestaError::OfferInactive);

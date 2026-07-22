@@ -81,6 +81,13 @@ pub struct OfferClosed {
 }
 
 #[event]
+pub struct OfferSegmentSet {
+    pub merchant: Pubkey,
+    pub offer_id: u64,
+    pub required_segment: u8,
+}
+
+#[event]
 pub struct OfferRedeemed {
     pub offer: Pubkey,
     pub customer: Pubkey,

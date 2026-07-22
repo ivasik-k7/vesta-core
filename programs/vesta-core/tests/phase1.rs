@@ -569,6 +569,8 @@ fn offer_lifecycle_redeem_decay_and_slippage() {
                     point_mint: mint,
                     customer_ata: ata,
                     config: h.config,
+                    merchant_segments: None,
+                    customer_eligibility: None,
                     token_program: TOKEN_2022_ID,
                     associated_token_program: ATA_PROGRAM_ID,
                     system_program: system_program::ID,
