@@ -146,6 +146,25 @@ pub struct MerchantTrust {
     pub bump: u8,
 }
 
+/// Tamper-evident anchor for a period's economic decisions (spec 13 §4.4),
+/// seeds `["mstmt", merchant, period_le]`. An off-chain indexer folds the
+/// period's earns / redemptions / clawbacks into a Merkle tree; the merchant
+/// owner anchors its root here. `decision_count` makes the statement provably
+/// complete — an omission changes both the count and the root. The merchant-side
+/// analogue of argus's `StatementCommitment`.
+#[account]
+#[derive(InitSpace)]
+pub struct MerchantStatement {
+    pub version: u8,
+    pub merchant: Pubkey,
+    pub period: u64,
+    pub merkle_root: [u8; 32],
+    pub decision_count: u64,
+    pub reporter: Pubkey,
+    pub anchored_at: i64,
+    pub bump: u8,
+}
+
 /// One verified-customer segment (spec 12 §4.1). A segment is satisfied when the
 /// customer holds a valid aegis credential of `(issuer, schema_id)` — the merchant
 /// learns only that the predicate holds, never the underlying PII. (A follow-on

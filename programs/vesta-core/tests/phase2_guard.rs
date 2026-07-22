@@ -4297,3 +4297,71 @@ fn merchant_verified_segmentation_caches_aegis_verdict() {
         "bit not cleared after revocation"
     );
 }
+
+// ── Merchant decision statements (spec 13, phase 3) ──────────────────────────
+
+fn merchant_statement_pda(w: &World, period: u64) -> Pubkey {
+    Pubkey::find_program_address(
+        &[b"mstmt", w.merchant.as_ref(), &period.to_le_bytes()],
+        &vesta_core::id(),
+    )
+    .0
+}
+
+fn anchor_merchant_statement(
+    w: &mut World,
+    signer: &Keypair,
+    period: u64,
+    root: [u8; 32],
+    count: u64,
+) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+    let ix = Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::AnchorMerchantStatement {
+            authority: signer.pubkey(),
+            merchant: w.merchant,
+            statement: merchant_statement_pda(w, period),
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::AnchorMerchantStatement {
+            period,
+            merkle_root: root,
+            decision_count: count,
+        }
+        .data(),
+    };
+    w.send(&[ix], &[signer], &signer.pubkey())
+}
+
+#[test]
+fn merchant_decision_statement_anchoring() {
+    let mut w = setup();
+    let owner = w.merchant_authority.insecure_clone();
+
+    let root = [3u8; 32];
+    anchor_merchant_statement(&mut w, &owner, 20_250, root, 128).unwrap();
+    let data = w
+        .svm
+        .get_account(&merchant_statement_pda(&w, 20_250))
+        .unwrap()
+        .data;
+    let s = vesta_core::state::MerchantStatement::try_deserialize(&mut data.as_slice()).unwrap();
+    assert_eq!(s.merkle_root, root);
+    assert_eq!(s.decision_count, 128);
+    assert_eq!(s.period, 20_250);
+
+    // A period is anchored once (immutable/append-only).
+    assert!(
+        anchor_merchant_statement(&mut w, &owner, 20_250, [9u8; 32], 1).is_err(),
+        "re-anchored an existing period"
+    );
+
+    // Only the merchant owner may anchor.
+    let stranger = Keypair::new();
+    w.svm.airdrop(&stranger.pubkey(), 5_000_000_000).unwrap();
+    assert!(
+        anchor_merchant_statement(&mut w, &stranger, 20_251, root, 1).is_err(),
+        "stranger anchored a statement"
+    );
+}

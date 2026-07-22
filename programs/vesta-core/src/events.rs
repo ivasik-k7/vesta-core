@@ -220,6 +220,17 @@ pub struct CustomerEligibilityRefreshed {
     pub expires_at: i64,
 }
 
+// ── Decision statements (spec 13 §4.4) ───────────────────────────────────────
+
+#[event]
+pub struct MerchantStatementAnchored {
+    pub merchant: Pubkey,
+    pub period: u64,
+    pub merkle_root: [u8; 32],
+    pub decision_count: u64,
+    pub reporter: Pubkey,
+}
+
 #[event]
 pub struct ReserveOpened {
     pub merchant: Pubkey,

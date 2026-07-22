@@ -236,6 +236,22 @@ pub mod vesta_core {
         instructions::segmentation::handle_refresh_customer_eligibility(ctx, segment_index)
     }
 
+    /// Anchor a period's economic-decision Merkle root on-chain (owner) —
+    /// tamper-evident, provably complete (spec 13 §4.4).
+    pub fn anchor_merchant_statement(
+        ctx: Context<AnchorMerchantStatement>,
+        period: u64,
+        merkle_root: [u8; 32],
+        decision_count: u64,
+    ) -> Result<()> {
+        instructions::merchant_statements::handle_anchor_merchant_statement(
+            ctx,
+            period,
+            merkle_root,
+            decision_count,
+        )
+    }
+
     /// Set the merchant's daily clawback cap (raw units; 0 = unlimited).
     pub fn set_clawback_cap(ctx: Context<MerchantOwnerOnly>, daily_cap_raw: u64) -> Result<()> {
         instructions::merchant_admin::handle_set_clawback_cap(ctx, daily_cap_raw)

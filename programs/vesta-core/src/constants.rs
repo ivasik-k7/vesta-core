@@ -50,6 +50,10 @@ pub const SEGMENTS_SEED: &[u8] = b"segments";
 #[constant]
 pub const CUSTOMER_ELIGIBILITY_SEED: &[u8] = b"celig";
 
+/// Per-(merchant, period) decision-statement anchor (spec 13 §4.4): `["mstmt", merchant, period]`.
+#[constant]
+pub const MERCHANT_STATEMENT_SEED: &[u8] = b"mstmt";
+
 /// Max verified segments a merchant may define (one verdict bitmap slot each).
 pub const MAX_SEGMENTS: usize = 8;
 
