@@ -12,6 +12,10 @@ protocol, organized into two tracks:
 - **Track C — Transfer Policy / argus** (specs 09–10): turning the transfer hook
   from a fixed loyalty ruleset into a **reusable, aegis-consuming policy VM** and
   a governed, enterprise-grade transfer-control plane.
+- **Track D — Merchant Enterprise Evolution / vesta_core** (specs 11–13): making
+  the merchant a **first-class citizen of the identity, governance, and audit
+  fabric** that Tracks B and C already shipped — accredited, identity-aware,
+  governed, and examinable — instead of the one actor that uses none of it.
 
 Each track was derived from three independent design studies; the directions
 below are the points where all three lenses converged.
@@ -123,6 +127,51 @@ migration — aegis stops publishing the field, argus stops reading it, both mov
 that owns only mechanical checks and delegates all semantic eligibility to aegis
 predicates, consumed through a verify-once verdict cache — so a new compliance rule
 anywhere is a data change, never a redeploy, and the hot path stays cheap.*
+
+## Track D — Merchant Enterprise Evolution, at a glance
+
+Tracks B and C gave the protocol a privacy-preserving identity layer (aegis) and
+a governed, auditable transfer-control plane (argus). The **merchant** — where
+value is actually minted — is the one actor that uses none of it: its trust is a
+cosmetic admin `bool`, its operators are a flat all-or-nothing set, its issuance
+is unbounded and unbacked, and earn/redeem never see identity. Track D closes
+that gap by **consuming the primitives already shipped** rather than inventing
+new ones.
+
+```mermaid
+flowchart TB
+    D11["<b>11 · Accredited Merchant Identity</b> (NOMOS)<br/>merchant-side: KYB accreditation → who may <i>issue</i><br/>reserve-backed solvency · auto-degrade freezes earn, not redemption"]
+    D12["<b>12 · Verified Customer Segmentation</b> (PROSOPON)<br/>customer-side: verdict cache → who may <i>earn/redeem/be targeted</i><br/>programmable earn · lifecycle/winback · sybil-gated referral"]
+    D13["<b>13 · Merchant Governance & Integrity</b> (EPHORATE)<br/>internal: RBAC/SoD → who <i>inside</i> the merchant may act<br/>issuance circuit breaker · governed config · decision statements"]
+
+    D11 --> D12
+    D11 --> D13
+    D13 --> D12
+
+    style D11 fill:#7c2d12,stroke:#fb923c,color:#fff
+    style D12 fill:#1e3a8a,stroke:#60a5fa,color:#fff
+    style D13 fill:#14532d,stroke:#4ade80,color:#fff
+```
+
+| # | Spec | Codename | Lens | Reuses (shipped) | Depends on |
+|---|---|---|---|---|---|
+| 11 | [Accredited Merchant Identity & Solvency](11-merchant-accredited-identity.md) | NOMOS | Regulated operator | argus `TrustAnchor` + reverify + auto-degrade; aegis `verify_accreditation` | 08 |
+| 12 | [Verified Customer Segmentation & Programmable Growth](12-merchant-verified-segmentation.md) | PROSOPON | Growth engine | argus `EligibilityCapability` + `refresh` + `screening_epoch`; aegis `verify_policy` | 06, 07, (11) |
+| 13 | [Merchant Governance & Operational Integrity](13-merchant-governance-integrity.md) | EPHORATE | Integrity / SoD | argus `RoleRegistry` + governed lifecycle + `StatementCommitment` | (11) |
+
+**Recommended delivery order (dependency-driven):** **11 → 13 → 12**, but the
+*growth-first* path **11 → 12 → 13** is equally valid — see each spec's
+Open Questions and the track thesis below. 11 is the cheapest, is a near-verbatim
+port of the argus trust triangle, and is the dependency root for the compliance
+inputs 12/13 consume, so it leads either way.
+
+**Thesis (Track D):** *the merchant becomes an accredited, identity-aware,
+governed, and examinable issuer — its authority to mint chains to an aegis trust
+root and auto-degrades on revocation, its earn/redeem/offer economics are gated
+and personalized by privacy-preserving aegis verdicts cached off the hot path,
+and its internal privileges are role-separated, rate-limited, and folded into a
+provably-complete audit ledger — every piece reusing an already-shipped argus or
+aegis primitive, additively and opt-in, without moving the Merchant ABI byte one.*
 
 ---
 
