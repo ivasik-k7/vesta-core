@@ -2,7 +2,7 @@
   "address": "9zJEWrk47z1ACT3ySMwzmUrMsQzFC8afBSFcsCzsz3rx",
   "metadata": {
     "name": "argus",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "spec": "0.1.0",
     "description": "VESTA transfer-hook policy engine: aegis-verified eligibility + velocity/list controls",
     "repository": "https://github.com/ivasik-k7/vesta-core"
@@ -27,6 +27,145 @@
         {
           "name": "pending_authority",
           "signer": true
+        },
+        {
+          "name": "guard_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard_config.mint",
+                "account": "GuardConfig"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "accept_protocol_authority",
+      "docs": [
+        "Accept a proposed protocol authority (two-step)."
+      ],
+      "discriminator": [
+        237,
+        122,
+        6,
+        39,
+        53,
+        202,
+        141,
+        113
+      ],
+      "accounts": [
+        {
+          "name": "pending_authority",
+          "signer": true
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "activate_policy",
+      "docs": [
+        "Activate an approved version after the timelock (Activator role)."
+      ],
+      "discriminator": [
+        92,
+        136,
+        233,
+        14,
+        49,
+        155,
+        229,
+        61
+      ],
+      "accounts": [
+        {
+          "name": "activator",
+          "signer": true
+        },
+        {
+          "name": "role_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard_config.mint",
+                "account": "GuardConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy_pointer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  99,
+                  116,
+                  105,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard_config.mint",
+                "account": "GuardConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy_version"
         },
         {
           "name": "guard_config",
@@ -135,6 +274,328 @@
           "type": "pubkey"
         }
       ]
+    },
+    {
+      "name": "anchor_statement",
+      "docs": [
+        "Anchor a period's decision-statement Merkle root on-chain (Reporter role,",
+        "spec 10 phase 2) — tamper-evident and provably complete."
+      ],
+      "discriminator": [
+        109,
+        12,
+        181,
+        145,
+        43,
+        80,
+        244,
+        35
+      ],
+      "accounts": [
+        {
+          "name": "reporter",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "role_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "license",
+          "docs": [
+            "Statements are a premium feature — a live license with the STATEMENTS",
+            "entitlement is required (spec 10 §4.7, the revenue wedge)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  99,
+                  101,
+                  110,
+                  115,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "statement",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101,
+                  109,
+                  101,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              },
+              {
+                "kind": "arg",
+                "path": "period"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "period",
+          "type": "u64"
+        },
+        {
+          "name": "merkle_root",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "decision_count",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "apply_role_change",
+      "docs": [
+        "Apply a queued role reassignment after its timelock (RoleAdmin)."
+      ],
+      "discriminator": [
+        176,
+        97,
+        118,
+        41,
+        51,
+        251,
+        254,
+        243
+      ],
+      "accounts": [
+        {
+          "name": "role_admin",
+          "signer": true
+        },
+        {
+          "name": "role_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "role_registry.mint",
+                "account": "RoleRegistry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy_pointer",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  99,
+                  116,
+                  105,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "role_registry.mint",
+                "account": "RoleRegistry"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "approve_policy",
+      "docs": [
+        "Approve a pending version and start the timelock (Approver ≠ Author)."
+      ],
+      "discriminator": [
+        59,
+        238,
+        233,
+        113,
+        238,
+        33,
+        177,
+        156
+      ],
+      "accounts": [
+        {
+          "name": "approver",
+          "signer": true
+        },
+        {
+          "name": "role_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy_pointer.mint",
+                "account": "PolicyPointer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy_pointer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  99,
+                  116,
+                  105,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy_pointer.mint",
+                "account": "PolicyPointer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy_version",
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "bump_screening_epoch",
+      "docs": [
+        "Advance the screening epoch (spec 10 phase 4 SANCTIONS): instantly stale",
+        "every cached capability of the mint for near-real-time freeze propagation."
+      ],
+      "discriminator": [
+        42,
+        156,
+        175,
+        40,
+        192,
+        153,
+        162,
+        192
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "guard_config"
+          ]
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "guard_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
     },
     {
       "name": "configure_policy",
@@ -303,6 +764,212 @@
       ]
     },
     {
+      "name": "initialize_governance",
+      "docs": [
+        "Adopt the governed policy lifecycle for a mint (guard authority only).",
+        "Seeds the role registry, active-policy pointer, and a genesis version",
+        "capturing the current config; thereafter `configure_policy` is disabled",
+        "and all changes run propose → approve → timelock → activate."
+      ],
+      "discriminator": [
+        171,
+        87,
+        101,
+        237,
+        27,
+        107,
+        201,
+        57
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "guard_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "role_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy_pointer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  99,
+                  116,
+                  105,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "genesis_version",
+          "docs": [
+            "The genesis version — captures the current `GuardConfig` as the first",
+            "immutable, content-addressed policy (already active, no timelock)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  118,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              },
+              {
+                "kind": "arg",
+                "path": "genesis_hash"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "genesis_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "roles",
+          "type": {
+            "defined": {
+              "name": "RoleAssignment"
+            }
+          }
+        },
+        {
+          "name": "timelock_secs",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "initialize_protocol",
+      "docs": [
+        "Trust-on-first-use creation of the protocol config + fee treasury."
+      ],
+      "discriminator": [
+        188,
+        233,
+        252,
+        106,
+        134,
+        146,
+        202,
+        91
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "license_fee_lamports",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "initialize_transfer_guard",
       "docs": [
         "Permissioned creation of the GuardConfig + ExtraAccountMetaList,",
@@ -414,6 +1081,84 @@
       ]
     },
     {
+      "name": "invalidate_capability",
+      "docs": [
+        "Guard-authority: immediately invalidate a subject's cached capability",
+        "(e.g. on a known aegis-side revocation), without a global epoch bump."
+      ],
+      "discriminator": [
+        44,
+        65,
+        139,
+        23,
+        142,
+        51,
+        80,
+        32
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "guard_config"
+          ]
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "guard_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "subject"
+        },
+        {
+          "name": "capability",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              },
+              {
+                "kind": "account",
+                "path": "subject"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "open_wallet_state",
       "docs": [
         "One-time, customer-signed velocity-state creation — in-hook creation is",
@@ -471,6 +1216,380 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "pin_policy",
+      "docs": [
+        "Finalize the active version as immutable — freeze-only stays alive",
+        "(RoleAdmin). Configurable immutability, not an all-or-nothing cliff."
+      ],
+      "discriminator": [
+        109,
+        23,
+        167,
+        214,
+        200,
+        221,
+        61,
+        16
+      ],
+      "accounts": [
+        {
+          "name": "role_admin",
+          "signer": true
+        },
+        {
+          "name": "role_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy_pointer.mint",
+                "account": "PolicyPointer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy_pointer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  99,
+                  116,
+                  105,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy_pointer.mint",
+                "account": "PolicyPointer"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "propose_policy",
+      "docs": [
+        "Propose an immutable, content-addressed policy version (Author role)."
+      ],
+      "discriminator": [
+        76,
+        109,
+        252,
+        233,
+        201,
+        68,
+        11,
+        165
+      ],
+      "accounts": [
+        {
+          "name": "author",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "role_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy_pointer.mint",
+                "account": "PolicyPointer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy_pointer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  99,
+                  116,
+                  105,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy_pointer.mint",
+                "account": "PolicyPointer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy_version",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  118,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy_pointer.mint",
+                "account": "PolicyPointer"
+              },
+              {
+                "kind": "arg",
+                "path": "policy_hash"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "policy_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "doc",
+          "type": {
+            "defined": {
+              "name": "PolicyDoc"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "propose_role_change",
+      "docs": [
+        "Queue a timelocked role reassignment (RoleAdmin)."
+      ],
+      "discriminator": [
+        22,
+        36,
+        89,
+        233,
+        42,
+        130,
+        190,
+        183
+      ],
+      "accounts": [
+        {
+          "name": "role_admin",
+          "signer": true
+        },
+        {
+          "name": "role_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "role_registry.mint",
+                "account": "RoleRegistry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy_pointer",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  99,
+                  116,
+                  105,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "role_registry.mint",
+                "account": "RoleRegistry"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "role",
+          "type": "u8"
+        },
+        {
+          "name": "authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "purchase_license",
+      "docs": [
+        "Tenant pays the fee to extend their license by `periods` (spec 10 §4.7)."
+      ],
+      "discriminator": [
+        42,
+        213,
+        241,
+        95,
+        60,
+        182,
+        79,
+        151
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "The tenant's guard authority pays and signs."
+          ],
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "guard_config"
+          ]
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "guard_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "license",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  99,
+                  101,
+                  110,
+                  115,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "periods",
+          "type": "u32"
+        }
+      ]
     },
     {
       "name": "refresh_eligibility",
@@ -648,6 +1767,268 @@
       ]
     },
     {
+      "name": "reverify_accreditation",
+      "docs": [
+        "Permissionless crank: re-check the governing issuer's aegis accreditation",
+        "and auto-degrade (after grace) or auto-restore the transfer posture."
+      ],
+      "discriminator": [
+        49,
+        140,
+        175,
+        188,
+        19,
+        25,
+        63,
+        110
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "docs": [
+            "Anyone may crank — the check is deterministic and mutates only health",
+            "state; there is no privileged input to abuse."
+          ],
+          "signer": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "guard_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "trust_anchor",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  117,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "aegis_trust_root",
+          "docs": [
+            "and owner-checks it; a wrong account yields a negative verdict (fail safe)."
+          ]
+        },
+        {
+          "name": "aegis_accreditation"
+        },
+        {
+          "name": "aegis_program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "rollback_policy",
+      "docs": [
+        "Expedited re-point to any prior approved version (Activator role)."
+      ],
+      "discriminator": [
+        18,
+        193,
+        106,
+        16,
+        31,
+        73,
+        222,
+        221
+      ],
+      "accounts": [
+        {
+          "name": "activator",
+          "signer": true
+        },
+        {
+          "name": "role_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard_config.mint",
+                "account": "GuardConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy_pointer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  99,
+                  116,
+                  105,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard_config.mint",
+                "account": "GuardConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy_version"
+        },
+        {
+          "name": "guard_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard_config.mint",
+                "account": "GuardConfig"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "set_degrade_mode",
+      "docs": [
+        "Guard-authority manual posture override — emergency degrade, or restore",
+        "to NORMAL after resolving a dispute (challenge path)."
+      ],
+      "discriminator": [
+        254,
+        63,
+        154,
+        159,
+        239,
+        204,
+        211,
+        89
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "guard_config"
+          ]
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "guard_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "trust_anchor",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  117,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "mode",
+          "type": "u8"
+        }
+      ]
+    },
+    {
       "name": "set_guard_paused",
       "docs": [
         "Per-mint peer-transfer circuit breaker — guard authority only (spec §3.3)."
@@ -695,6 +2076,248 @@
         {
           "name": "paused",
           "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "set_license",
+      "docs": [
+        "Grant/update a mint's premium license terms (protocol authority)."
+      ],
+      "discriminator": [
+        66,
+        147,
+        54,
+        35,
+        233,
+        101,
+        216,
+        150
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "protocol"
+          ]
+        },
+        {
+          "name": "protocol",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "license",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  99,
+                  101,
+                  110,
+                  115,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "tier",
+          "type": "u8"
+        },
+        {
+          "name": "entitlements",
+          "type": "u32"
+        },
+        {
+          "name": "expires_at",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "set_license_fee",
+      "docs": [
+        "Set the per-period license fee (protocol authority)."
+      ],
+      "discriminator": [
+        40,
+        104,
+        34,
+        114,
+        185,
+        184,
+        66,
+        37
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "protocol"
+          ]
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "fee",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "set_trust_anchor",
+      "docs": [
+        "Bind the mint's governing issuer to an aegis accreditation root (guard",
+        "authority). Configures the fall-to posture and grace window."
+      ],
+      "discriminator": [
+        214,
+        204,
+        38,
+        73,
+        107,
+        213,
+        46,
+        82
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "guard_config"
+          ]
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "guard_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "trust_anchor",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  117,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "accreditation_root",
+          "type": "pubkey"
+        },
+        {
+          "name": "subject_issuer",
+          "type": "pubkey"
+        },
+        {
+          "name": "required_schema",
+          "type": "u64"
+        },
+        {
+          "name": "degrade_target",
+          "type": "u8"
+        },
+        {
+          "name": "grace_secs",
+          "type": "i64"
         }
       ]
     },
@@ -748,9 +2371,130 @@
           "type": "pubkey"
         }
       ]
+    },
+    {
+      "name": "transfer_protocol_authority",
+      "docs": [
+        "Propose a new protocol authority (two-step)."
+      ],
+      "discriminator": [
+        35,
+        76,
+        36,
+        77,
+        136,
+        112,
+        158,
+        222
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "protocol"
+          ]
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "withdraw_fees",
+      "docs": [
+        "Withdraw accrued license fees from the treasury (protocol authority)."
+      ],
+      "discriminator": [
+        198,
+        212,
+        171,
+        109,
+        144,
+        215,
+        174,
+        89
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "protocol"
+          ]
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "recipient",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
     }
   ],
   "accounts": [
+    {
+      "name": "ArgusProtocol",
+      "discriminator": [
+        82,
+        186,
+        181,
+        55,
+        88,
+        212,
+        74,
+        41
+      ]
+    },
     {
       "name": "EligibilityCapability",
       "discriminator": [
@@ -778,6 +2522,19 @@
       ]
     },
     {
+      "name": "LicenseState",
+      "discriminator": [
+        165,
+        13,
+        197,
+        18,
+        207,
+        61,
+        119,
+        233
+      ]
+    },
+    {
       "name": "PolicyListEntry",
       "discriminator": [
         122,
@@ -788,6 +2545,71 @@
         50,
         115,
         29
+      ]
+    },
+    {
+      "name": "PolicyPointer",
+      "discriminator": [
+        44,
+        172,
+        58,
+        115,
+        72,
+        124,
+        250,
+        102
+      ]
+    },
+    {
+      "name": "PolicyVersion",
+      "discriminator": [
+        114,
+        153,
+        99,
+        17,
+        66,
+        130,
+        209,
+        45
+      ]
+    },
+    {
+      "name": "RoleRegistry",
+      "discriminator": [
+        173,
+        129,
+        34,
+        250,
+        223,
+        92,
+        0,
+        232
+      ]
+    },
+    {
+      "name": "StatementCommitment",
+      "discriminator": [
+        242,
+        241,
+        26,
+        216,
+        7,
+        28,
+        5,
+        186
+      ]
+    },
+    {
+      "name": "TrustAnchor",
+      "discriminator": [
+        174,
+        6,
+        247,
+        231,
+        51,
+        65,
+        74,
+        210
       ]
     },
     {
@@ -806,6 +2628,45 @@
   ],
   "events": [
     {
+      "name": "AccreditationReverified",
+      "discriminator": [
+        185,
+        211,
+        230,
+        202,
+        34,
+        252,
+        197,
+        210
+      ]
+    },
+    {
+      "name": "CapabilityInvalidated",
+      "discriminator": [
+        94,
+        172,
+        208,
+        14,
+        173,
+        161,
+        145,
+        156
+      ]
+    },
+    {
+      "name": "DegradeModeSet",
+      "discriminator": [
+        12,
+        121,
+        184,
+        154,
+        135,
+        224,
+        203,
+        163
+      ]
+    },
+    {
       "name": "EligibilityRefreshed",
       "discriminator": [
         153,
@@ -816,6 +2677,32 @@
         20,
         27,
         176
+      ]
+    },
+    {
+      "name": "FeesWithdrawn",
+      "discriminator": [
+        234,
+        15,
+        0,
+        119,
+        148,
+        241,
+        40,
+        21
+      ]
+    },
+    {
+      "name": "GovernanceInitialized",
+      "discriminator": [
+        41,
+        187,
+        103,
+        26,
+        42,
+        44,
+        30,
+        15
       ]
     },
     {
@@ -858,6 +2745,32 @@
       ]
     },
     {
+      "name": "LicensePurchased",
+      "discriminator": [
+        42,
+        229,
+        179,
+        227,
+        76,
+        153,
+        56,
+        79
+      ]
+    },
+    {
+      "name": "LicenseSet",
+      "discriminator": [
+        230,
+        191,
+        121,
+        230,
+        57,
+        100,
+        130,
+        61
+      ]
+    },
+    {
       "name": "ListEntryChanged",
       "discriminator": [
         244,
@@ -871,6 +2784,32 @@
       ]
     },
     {
+      "name": "PolicyActivated",
+      "discriminator": [
+        119,
+        85,
+        218,
+        194,
+        122,
+        181,
+        183,
+        6
+      ]
+    },
+    {
+      "name": "PolicyApproved",
+      "discriminator": [
+        233,
+        5,
+        127,
+        152,
+        71,
+        81,
+        102,
+        231
+      ]
+    },
+    {
       "name": "PolicyConfigured",
       "discriminator": [
         94,
@@ -881,6 +2820,97 @@
         9,
         18,
         101
+      ]
+    },
+    {
+      "name": "PolicyPinned",
+      "discriminator": [
+        172,
+        20,
+        204,
+        152,
+        143,
+        173,
+        108,
+        211
+      ]
+    },
+    {
+      "name": "PolicyProposed",
+      "discriminator": [
+        218,
+        131,
+        42,
+        156,
+        255,
+        118,
+        219,
+        223
+      ]
+    },
+    {
+      "name": "ProtocolInitialized",
+      "discriminator": [
+        173,
+        122,
+        168,
+        254,
+        9,
+        118,
+        76,
+        132
+      ]
+    },
+    {
+      "name": "RoleChangeProposed",
+      "discriminator": [
+        51,
+        192,
+        5,
+        47,
+        45,
+        35,
+        69,
+        69
+      ]
+    },
+    {
+      "name": "RoleChanged",
+      "discriminator": [
+        85,
+        88,
+        130,
+        5,
+        125,
+        143,
+        206,
+        240
+      ]
+    },
+    {
+      "name": "ScreeningEpochBumped",
+      "discriminator": [
+        192,
+        205,
+        154,
+        187,
+        212,
+        73,
+        108,
+        88
+      ]
+    },
+    {
+      "name": "StatementAnchored",
+      "discriminator": [
+        12,
+        123,
+        140,
+        226,
+        59,
+        145,
+        203,
+        23
       ]
     },
     {
@@ -907,6 +2937,19 @@
         94,
         180,
         2
+      ]
+    },
+    {
+      "name": "TrustAnchorSet",
+      "discriminator": [
+        199,
+        147,
+        223,
+        42,
+        107,
+        166,
+        193,
+        255
       ]
     },
     {
@@ -1048,9 +3091,201 @@
       "code": 6024,
       "name": "Overflow",
       "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6025,
+      "name": "RoleUnauthorized",
+      "msg": "Signer does not hold the required governance role"
+    },
+    {
+      "code": 6026,
+      "name": "InvalidRole",
+      "msg": "Unknown governance role"
+    },
+    {
+      "code": 6027,
+      "name": "SelfApproval",
+      "msg": "Approver must differ from the version author (separation of duties)"
+    },
+    {
+      "code": 6028,
+      "name": "PolicyNotApproved",
+      "msg": "Policy version is not approved"
+    },
+    {
+      "code": 6029,
+      "name": "TimelockActive",
+      "msg": "Governance timelock has not elapsed"
+    },
+    {
+      "code": 6030,
+      "name": "PolicyPinned",
+      "msg": "Policy is pinned — no further changes permitted"
+    },
+    {
+      "code": 6031,
+      "name": "PolicyVersionMismatch",
+      "msg": "Provided policy version does not match the pointer state"
+    },
+    {
+      "code": 6032,
+      "name": "PolicyHashMismatch",
+      "msg": "Provided policy version hash does not match its content"
+    },
+    {
+      "code": 6033,
+      "name": "NoPendingChange",
+      "msg": "No pending governance change is queued"
+    },
+    {
+      "code": 6034,
+      "name": "InvalidTimelock",
+      "msg": "Timelock value is out of the permitted range"
+    },
+    {
+      "code": 6035,
+      "name": "TrustDegraded",
+      "msg": "Peer transfers are blocked by the trust-triangle degrade posture"
+    },
+    {
+      "code": 6036,
+      "name": "InvalidDegradeTarget",
+      "msg": "Degrade target must be a real degraded posture"
+    },
+    {
+      "code": 6037,
+      "name": "TrustAnchorMissing",
+      "msg": "Trust anchor is not configured for this mint"
+    },
+    {
+      "code": 6038,
+      "name": "LicenseNotEntitled",
+      "msg": "License does not grant the required entitlement or has expired"
+    },
+    {
+      "code": 6039,
+      "name": "InvalidEntitlement",
+      "msg": "Entitlement bits are out of the permitted range"
+    },
+    {
+      "code": 6040,
+      "name": "InsufficientFee",
+      "msg": "Insufficient funds to cover the license fee"
     }
   ],
   "types": [
+    {
+      "name": "AccreditationReverified",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "healthy",
+            "type": "bool"
+          },
+          {
+            "name": "degrade_mode",
+            "docs": [
+              "Live posture after this crank."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "reason_code",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ArgusProtocol",
+      "docs": [
+        "Protocol-wide config + fee treasury (spec 10 §4.7), seeds `[\"protocol\"]`.",
+        "The PDA itself is the fee vault — lamports from `purchase_license` accrue on",
+        "it and the protocol authority withdraws them. Trust-on-first-use init, then",
+        "two-step authority handover (no god key retained)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "pending_authority",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "license_fee_lamports",
+            "docs": [
+              "Lamports charged per `purchase_license` period."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CapabilityInvalidated",
+      "docs": [
+        "A subject's cached capability was force-invalidated by the guard authority."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "subject",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DegradeModeSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "old",
+            "type": "u8"
+          },
+          {
+            "name": "new",
+            "type": "u8"
+          },
+          {
+            "name": "automatic",
+            "docs": [
+              "True when set by the permissionless crank; false for a manual override."
+            ],
+            "type": "bool"
+          }
+        ]
+      }
+    },
     {
       "name": "EligibilityCapability",
       "docs": [
@@ -1096,6 +3331,27 @@
             "type": "u64"
           },
           {
+            "name": "screening_epoch",
+            "docs": [
+              "`GuardConfig.screening_epoch` at mint time (spec 10 §4.4 SANCTIONS). A",
+              "screening-epoch bump invalidates every capability of the mint regardless",
+              "of TTL — near-real-time sanctions/freeze propagation with no polling."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "jurisdiction",
+            "docs": [
+              "Accreditation provenance carried from the aegis verdict (spec 10 §4.4",
+              "CORRIDOR): the issuer's jurisdiction and tier at verification time."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "tier",
+            "type": "u8"
+          },
+          {
             "name": "issued_at",
             "type": "i64"
           },
@@ -1135,6 +3391,51 @@
           },
           {
             "name": "expires_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FeesWithdrawn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "recipient",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GovernanceInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "role_admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "genesis_policy_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "timelock_secs",
             "type": "i64"
           }
         ]
@@ -1264,6 +3565,16 @@
             "type": "u64"
           },
           {
+            "name": "screening_epoch",
+            "docs": [
+              "Fast-revocation clock (spec 10 §4.4 SANCTIONS). Bumped by",
+              "`bump_screening_epoch` on a screening/sanctions event; a capability whose",
+              "`screening_epoch` differs is rejected regardless of TTL, so a freeze",
+              "propagates on the next transfer without waiting for expiry."
+            ],
+            "type": "u64"
+          },
+          {
             "name": "paused",
             "docs": [
               "Per-mint peer-transfer freeze (rules 1–2 stay open — clawback/refunds)."
@@ -1318,6 +3629,48 @@
               "Required aegis schema id (meaningful only with REQUIRE_ATTESTATION)."
             ],
             "type": "u64"
+          },
+          {
+            "name": "capability_ttl_secs",
+            "docs": [
+              "Per-guard eligibility-capability TTL, seconds (0 = protocol default). A",
+              "strict mint sets this low to shrink the aegis-revocation-latency window;",
+              "`invalidate_capability` closes it immediately for a known revocation."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "governed",
+            "docs": [
+              "True once the mint adopts the governed policy lifecycle (spec 10 §4.1).",
+              "While set, `configure_policy` (free-tier live mutation) is rejected — all",
+              "policy changes must go through propose → approve → timelock → activate."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "active_policy_hash",
+            "docs": [
+              "Hash of the currently-active governed `PolicyVersion` (`[0;32]` for a",
+              "free-tier mint). Denormalized here so `execute` can stamp every decision",
+              "record with the exact deciding policy at zero hot-path cost (spec 10 §4.5)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "degrade_mode",
+            "docs": [
+              "Live trust-triangle posture (spec 10 §4.3), driven by the off-path",
+              "`reverify_accreditation` crank. `NORMAL` = flow per policy; any degraded",
+              "mode blocks peer gifts while keeping redemption/clawback open (never",
+              "strands assets). Denormalized so `execute` enforces it with no extra load."
+            ],
+            "type": "u8"
           },
           {
             "name": "bump",
@@ -1401,6 +3754,104 @@
           {
             "name": "attestation_schema",
             "type": "u64"
+          },
+          {
+            "name": "capability_ttl_secs",
+            "docs": [
+              "Eligibility-capability TTL, seconds (0 = protocol default). Lower =",
+              "tighter aegis-revocation latency."
+            ],
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LicensePurchased",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "payer",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_paid",
+            "type": "u64"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LicenseSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "tier",
+            "type": "u8"
+          },
+          {
+            "name": "entitlements",
+            "type": "u32"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LicenseState",
+      "docs": [
+        "Per-mint premium license (spec 10 §4.7), seeds `[\"license\", mint]`. Governs",
+        "access to premium features (governance/statements/trust/screening) via an",
+        "entitlement bitmap + expiry. Absent or expired ⇒ the mint runs at the free",
+        "tier — premium ops are refused but transfers/redemption never stop, so a",
+        "business-reason expiry can never strand holder assets."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "tier",
+            "type": "u8"
+          },
+          {
+            "name": "entitlements",
+            "type": "u32"
+          },
+          {
+            "name": "expires_at",
+            "docs": [
+              "Unix expiry (`0` = perpetual)."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
           }
         ]
       }
@@ -1421,6 +3872,76 @@
           {
             "name": "added",
             "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyActivated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "old_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "new_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "policy_epoch",
+            "type": "u64"
+          },
+          {
+            "name": "rollback",
+            "docs": [
+              "True when this activation was an expedited rollback to a prior version."
+            ],
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyApproved",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "policy_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "approver",
+            "type": "pubkey"
+          },
+          {
+            "name": "activate_after",
+            "type": "i64"
           }
         ]
       }
@@ -1470,6 +3991,59 @@
       }
     },
     {
+      "name": "PolicyDoc",
+      "docs": [
+        "The tunable policy fields under governance — the content that a",
+        "`PolicyVersion` hashes and that `activate_policy` writes onto `GuardConfig`",
+        "(spec 10 §4.1). Deliberately the retunable subset: the aegis *program* and",
+        "trusted issuer are bound immutably at guard init and are NOT governed here."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "flags",
+            "type": "u16"
+          },
+          {
+            "name": "daily_gift_cap",
+            "type": "u64"
+          },
+          {
+            "name": "per_tx_cap",
+            "type": "u64"
+          },
+          {
+            "name": "max_wallet_balance",
+            "type": "u64"
+          },
+          {
+            "name": "transfers_per_day_cap",
+            "type": "u16"
+          },
+          {
+            "name": "cooldown_secs",
+            "type": "u32"
+          },
+          {
+            "name": "attestation_schema",
+            "type": "u64"
+          },
+          {
+            "name": "capability_ttl_secs",
+            "type": "i64"
+          },
+          {
+            "name": "policy",
+            "docs": [
+              "aegis `Policy` to enforce (`Pubkey::default()` = legacy `Present` check)."
+            ],
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
       "name": "PolicyListEntry",
       "docs": [
         "Allow/deny list membership marker (spec §2.4). Existence under the argus",
@@ -1489,6 +4063,122 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyPinned",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "policy_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyPointer",
+      "docs": [
+        "Per-mint active-policy pointer + pending-change timelock (spec 10 §4.1, §5).",
+        "This is the governed replacement for silent live-mutation of `GuardConfig`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "active_hash",
+            "docs": [
+              "Hash of the currently-active `PolicyVersion`."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "pending_hash",
+            "docs": [
+              "Hash of a proposed version awaiting approval/timelock (`[0;32]` = none)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "pending_approved_at",
+            "docs": [
+              "Approval ts of the pending version (`0` = proposed-but-unapproved)."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "timelock_secs",
+            "docs": [
+              "Seconds that must elapse after approval before activation."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "pinned",
+            "docs": [
+              "Configurable immutability (spec 10 §4.1): once pinned, no propose/activate;",
+              "only the freeze (pause) authority stays alive."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyProposed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "policy_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "author",
+            "type": "pubkey"
           }
         ]
       }
@@ -1543,6 +4233,363 @@
             "type": {
               "option": "u64"
             }
+          },
+          {
+            "name": "capability_ttl_secs",
+            "type": {
+              "option": "i64"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyVersion",
+      "docs": [
+        "An immutable, content-addressed proposed/approved policy (spec 10 §4.1).",
+        "Seeds `[\"pver\", mint, policy_hash]` — the hash IS the identity, so a version",
+        "can never be silently rewritten. Lifecycle metadata (author/approver/times)",
+        "is appended; the `doc` itself is frozen at propose time."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "policy_hash",
+            "docs": [
+              "sha256 of `doc` — equals the PDA seed component."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "doc",
+            "type": {
+              "defined": {
+                "name": "PolicyDoc"
+              }
+            }
+          },
+          {
+            "name": "author",
+            "docs": [
+              "Role::Author key that proposed it."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "approver",
+            "docs": [
+              "Role::Approver key that approved it (`default()` until approved)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "proposed_at",
+            "type": "i64"
+          },
+          {
+            "name": "approved_at",
+            "docs": [
+              "Unix ts of approval (`0` until approved) — the timelock reference."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProtocolInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "license_fee_lamports",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RoleAssignment",
+      "docs": [
+        "All six role authorities assigned when a mint adopts governance. Any key may",
+        "be a multisig (e.g. a Squads PDA); argus treats it as one signer. Author and",
+        "Approver SHOULD be distinct — approval enforces `approver != author`, so a",
+        "mint that sets them equal can never activate a change."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "role_admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "author",
+            "type": "pubkey"
+          },
+          {
+            "name": "approver",
+            "type": "pubkey"
+          },
+          {
+            "name": "activator",
+            "type": "pubkey"
+          },
+          {
+            "name": "pause_operator",
+            "type": "pubkey"
+          },
+          {
+            "name": "reporter",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RoleChangeProposed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "role",
+            "type": "u8"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "apply_after",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RoleChanged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "role",
+            "type": "u8"
+          },
+          {
+            "name": "old",
+            "type": "pubkey"
+          },
+          {
+            "name": "new",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RoleRegistry",
+      "docs": [
+        "Per-mint role registry (spec 10 §4.2), seeds `[\"roles\", mint]`. A mint that",
+        "never adopts governance never creates this; free-tier stays single-authority."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "role_admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "author",
+            "type": "pubkey"
+          },
+          {
+            "name": "approver",
+            "type": "pubkey"
+          },
+          {
+            "name": "activator",
+            "type": "pubkey"
+          },
+          {
+            "name": "pause_operator",
+            "type": "pubkey"
+          },
+          {
+            "name": "reporter",
+            "type": "pubkey"
+          },
+          {
+            "name": "pending_role",
+            "docs": [
+              "A two-step, timelocked pending role change (spec 10 §4.2 \"timelocked\").",
+              "`pending_after == 0` means no change is queued."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "pending_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "pending_after",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ScreeningEpochBumped",
+      "docs": [
+        "The screening epoch was advanced — every cached capability of the mint is",
+        "now stale (spec 10 §4.4 SANCTIONS fast-freeze)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "screening_epoch",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "StatementAnchored",
+      "docs": [
+        "A period's decision statement was anchored on-chain (spec 10 §4.5)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "period",
+            "type": "u64"
+          },
+          {
+            "name": "merkle_root",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "decision_count",
+            "type": "u64"
+          },
+          {
+            "name": "reporter",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "StatementCommitment",
+      "docs": [
+        "Tamper-evident anchor for a period's decision records (spec 10 §4.5), seeds",
+        "`[\"statement\", mint, period_le]`. An off-chain indexer materializes the",
+        "canonical, reason-coded decisions for the period into a Merkle tree; the",
+        "Reporter role anchors its root here. `decision_count` makes the statement",
+        "**provably complete** — an omission changes the count and the root."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "period",
+            "docs": [
+              "Period identifier (e.g. a UTC-day index) — also the PDA seed component."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "merkle_root",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "decision_count",
+            "docs": [
+              "Number of decisions covered — completeness witness."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "reporter",
+            "type": "pubkey"
+          },
+          {
+            "name": "anchored_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
           }
         ]
       }
@@ -1550,8 +4597,10 @@
     {
       "name": "TransferDecision",
       "docs": [
-        "One event per `execute` call, carrying a stable reason code",
-        "(`crate::constants::reason`). The complete allow/deny audit trail."
+        "One event per `execute` call, carrying a stable canonical reason code",
+        "(`crate::constants::reason`) plus the exact deciding policy (`policy_epoch` +",
+        "`active_policy_hash`, spec 10 §4.5). The complete allow/deny audit trail —",
+        "an indexer folds these into period `StatementCommitment` roots."
       ],
       "type": {
         "kind": "struct",
@@ -1579,6 +4628,25 @@
           {
             "name": "reason",
             "type": "u16"
+          },
+          {
+            "name": "policy_epoch",
+            "docs": [
+              "Monotonic policy epoch in force at decision time."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "active_policy_hash",
+            "docs": [
+              "Hash of the active governed policy (`[0;32]` for a free-tier mint)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           }
         ]
       }
@@ -1599,6 +4667,119 @@
           {
             "name": "authority",
             "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TrustAnchor",
+      "docs": [
+        "The trust triangle (spec 10 §4.3), seeds `[\"trust\", mint]`. Binds the mint's",
+        "governing issuer to an aegis accreditation root: the permissionless",
+        "`reverify_accreditation` crank re-checks the chain and, after a grace window,",
+        "trips `GuardConfig.degrade_mode` to `degrade_target` — so a revoked issuer's",
+        "authority evaporates without any human key. Recovery auto-restores on the",
+        "next healthy crank."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "accreditation_root",
+            "docs": [
+              "aegis accreditation root the governing issuer must chain to."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "subject_issuer",
+            "docs": [
+              "The aegis issuer identity being continuously verified."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "required_schema",
+            "docs": [
+              "Required accreditation schema (\"accreditation type\")."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "aegis_program",
+            "docs": [
+              "aegis deployment (must equal `GuardConfig.aegis_program`)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "degrade_target",
+            "docs": [
+              "Posture to fall to on sustained failure (`REDEMPTION_ONLY` / `FROZEN`)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "grace_secs",
+            "docs": [
+              "Seconds a failing streak must persist before auto-degrade bites — the",
+              "tolerance for an aegis outage / transient false-negative (spec 10 §7)."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "failing_since",
+            "docs": [
+              "Unix ts the current failing streak began (`0` = healthy)."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "last_verified_at",
+            "docs": [
+              "Unix ts of the last successful reverify."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TrustAnchorSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "accreditation_root",
+            "type": "pubkey"
+          },
+          {
+            "name": "subject_issuer",
+            "type": "pubkey"
+          },
+          {
+            "name": "required_schema",
+            "type": "u64"
+          },
+          {
+            "name": "degrade_target",
+            "type": "u8"
           }
         ]
       }
@@ -1700,12 +4881,68 @@
       "value": "[103, 117, 97, 114, 100]"
     },
     {
+      "name": "LICENSE_SEED",
+      "docs": [
+        "Per-mint premium license (spec 10 §4.7): `[\"license\", mint]`."
+      ],
+      "type": "bytes",
+      "value": "[108, 105, 99, 101, 110, 115, 101]"
+    },
+    {
       "name": "LIST_ENTRY_SEED",
       "docs": [
         "Allow/deny list membership marker (spec §2.4)."
       ],
       "type": "bytes",
       "value": "[101, 110, 116, 114, 121]"
+    },
+    {
+      "name": "POLICY_POINTER_SEED",
+      "docs": [
+        "Per-mint active-policy pointer + timelock state (spec 10 §5): `[\"active\", mint]`."
+      ],
+      "type": "bytes",
+      "value": "[97, 99, 116, 105, 118, 101]"
+    },
+    {
+      "name": "POLICY_VERSION_SEED",
+      "docs": [
+        "Immutable, content-addressed policy version (spec 10 §5): `[\"pver\", mint, hash]`."
+      ],
+      "type": "bytes",
+      "value": "[112, 118, 101, 114]"
+    },
+    {
+      "name": "PROTOCOL_SEED",
+      "docs": [
+        "Protocol-wide config + fee treasury singleton (spec 10 §4.7): `[\"protocol\"]`."
+      ],
+      "type": "bytes",
+      "value": "[112, 114, 111, 116, 111, 99, 111, 108]"
+    },
+    {
+      "name": "ROLES_SEED",
+      "docs": [
+        "Per-mint separation-of-duties role registry (spec 10 §5): `[\"roles\", mint]`."
+      ],
+      "type": "bytes",
+      "value": "[114, 111, 108, 101, 115]"
+    },
+    {
+      "name": "STATEMENT_SEED",
+      "docs": [
+        "Per-(mint, period) decision-statement anchor (spec 10 §5): `[\"statement\", mint, period]`."
+      ],
+      "type": "bytes",
+      "value": "[115, 116, 97, 116, 101, 109, 101, 110, 116]"
+    },
+    {
+      "name": "TRUST_SEED",
+      "docs": [
+        "Per-mint trust-triangle anchor (spec 10 §5): `[\"trust\", mint]`."
+      ],
+      "type": "bytes",
+      "value": "[116, 114, 117, 115, 116]"
     },
     {
       "name": "WALLET_STATE_SEED",

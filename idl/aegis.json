@@ -981,6 +981,60 @@
       ]
     },
     {
+      "name": "set_root_active",
+      "docs": [
+        "Enable/disable a trust root — the atomic kill-switch that de-trusts every",
+        "issuer under it in one action (incident response / root-key compromise)."
+      ],
+      "discriminator": [
+        25,
+        54,
+        10,
+        132,
+        191,
+        33,
+        181,
+        60
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "trust_root"
+          ]
+        },
+        {
+          "name": "trust_root",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  111,
+                  111,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "active",
+          "type": "bool"
+        }
+      ]
+    },
+    {
       "name": "transfer_issuer_authority",
       "docs": [
         "Propose a new issuer authority (two-step, authority only)."
@@ -1508,6 +1562,19 @@
       ]
     },
     {
+      "name": "TrustRootActiveSet",
+      "discriminator": [
+        44,
+        54,
+        4,
+        113,
+        9,
+        74,
+        74,
+        61
+      ]
+    },
+    {
       "name": "TrustRootRegistered",
       "discriminator": [
         64,
@@ -1591,6 +1658,11 @@
       "code": 6013,
       "name": "UnknownPredicate",
       "msg": "Unknown or malformed predicate"
+    },
+    {
+      "code": 6014,
+      "name": "PermittedSchemasRequired",
+      "msg": "Accreditation must specify at least one permitted schema"
     }
   ],
   "types": [
@@ -2412,6 +2484,22 @@
       }
     },
     {
+      "name": "TrustRootActiveSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "root",
+            "type": "pubkey"
+          },
+          {
+            "name": "active",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
       "name": "TrustRootRegistered",
       "type": {
         "kind": "struct",
@@ -2430,8 +2518,14 @@
     {
       "name": "VerifyPredicate",
       "docs": [
-        "The predicate `verify` evaluates (spec 07 opcode set, phase-1 subset). More",
-        "opcodes (thresholds, accredited-by, ZK) are additive on this enum."
+        "The predicate `verify` evaluates (spec 07). Phase 1 ships `Present` only.",
+        "",
+        "Selective disclosure (`AttributeDisclosed`) was intentionally removed: a",
+        "caller-supplied Merkle leaf with no value-binding or leaf/internal domain",
+        "separation is unsound (an empty path returns the leaf verbatim, and the",
+        "public `attr_root` could be replayed as a leaf). It returns in wave 2 with a",
+        "value-bound, domain-separated (or ZK) construction. More opcodes",
+        "(thresholds, accredited-by) are additive on this enum."
       ],
       "type": {
         "kind": "enum",
@@ -2450,47 +2544,6 @@
               {
                 "name": "schema_id",
                 "type": "u64"
-              }
-            ]
-          },
-          {
-            "name": "AttributeDisclosed",
-            "fields": [
-              {
-                "name": "issuer",
-                "type": "pubkey"
-              },
-              {
-                "name": "subject",
-                "type": "pubkey"
-              },
-              {
-                "name": "schema_id",
-                "type": "u64"
-              },
-              {
-                "name": "index",
-                "type": "u32"
-              },
-              {
-                "name": "leaf",
-                "type": {
-                  "array": [
-                    "u8",
-                    32
-                  ]
-                }
-              },
-              {
-                "name": "path",
-                "type": {
-                  "vec": {
-                    "array": [
-                      "u8",
-                      32
-                    ]
-                  }
-                }
               }
             ]
           }

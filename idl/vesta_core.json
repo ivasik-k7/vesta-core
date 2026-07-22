@@ -2,7 +2,7 @@
   "address": "gaMq6BpH1aqC8ZCYtAxwZBjTa9AnfdWvYwURG6L4LDz",
   "metadata": {
     "name": "vesta_core",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "spec": "0.1.0",
     "description": "VESTA living loyalty protocol: merchants, campaigns, points, alliances, badges",
     "repository": "https://github.com/ivasik-k7/vesta-core"
@@ -67,6 +67,196 @@
         {
           "name": "alliance",
           "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "anchor_merchant_statement",
+      "docs": [
+        "Anchor a period's economic-decision Merkle root on-chain (owner) —",
+        "tamper-evident, provably complete (spec 13 §4.4)."
+      ],
+      "discriminator": [
+        91,
+        75,
+        29,
+        82,
+        11,
+        45,
+        246,
+        223
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "merchant",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "statement",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  115,
+                  116,
+                  109,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              },
+              {
+                "kind": "arg",
+                "path": "period"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "period",
+          "type": "u64"
+        },
+        {
+          "name": "merkle_root",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "decision_count",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "attest_reserve",
+      "docs": [
+        "Emit a permissionless proof-of-reserves snapshot."
+      ],
+      "discriminator": [
+        67,
+        148,
+        114,
+        40,
+        247,
+        214,
+        157,
+        238
+      ],
+      "accounts": [
+        {
+          "name": "merchant",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant.authority",
+                "account": "Merchant"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "point_mint",
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "merchant_reserve",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  114,
+                  101,
+                  115,
+                  101,
+                  114,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "reserve_ata",
+          "relations": [
+            "merchant_reserve"
+          ]
         }
       ],
       "args": []
@@ -1132,6 +1322,64 @@
           }
         },
         {
+          "name": "merchant_segments",
+          "docs": [
+            "Optional verified-segment definitions (spec 12). When present with a fresh",
+            "`customer_eligibility`, satisfied segments add their `boost_bps`."
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  103,
+                  109,
+                  101,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "customer_eligibility",
+          "docs": [
+            "Optional cached eligibility for `customer` (paired with `merchant_segments`)."
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  101,
+                  108,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              },
+              {
+                "kind": "account",
+                "path": "customer"
+              }
+            ]
+          }
+        },
+        {
           "name": "token_program",
           "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
         },
@@ -1502,6 +1750,111 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "fund_reserve",
+      "docs": [
+        "Deposit backing stablecoin into the reserve (owner-only)."
+      ],
+      "discriminator": [
+        17,
+        82,
+        71,
+        222,
+        117,
+        210,
+        58,
+        12
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "merchant",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "merchant_reserve",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  114,
+                  101,
+                  115,
+                  101,
+                  114,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "backing_mint",
+          "relations": [
+            "merchant_reserve"
+          ]
+        },
+        {
+          "name": "source_ata",
+          "writable": true
+        },
+        {
+          "name": "reserve_ata",
+          "writable": true,
+          "relations": [
+            "merchant_reserve"
+          ]
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
     },
     {
       "name": "grant_achievement",
@@ -1986,6 +2339,167 @@
       "args": []
     },
     {
+      "name": "open_reserve",
+      "docs": [
+        "Open a stablecoin-backed liability reserve for the merchant (owner-only)."
+      ],
+      "discriminator": [
+        33,
+        134,
+        5,
+        144,
+        32,
+        30,
+        176,
+        192
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "merchant",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "backing_mint"
+        },
+        {
+          "name": "merchant_reserve",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  114,
+                  101,
+                  115,
+                  101,
+                  114,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "reserve_ata",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "merchant_reserve"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "backing_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "unit_value",
+          "type": "u64"
+        },
+        {
+          "name": "target_ratio_bps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
       "name": "redeem_offer",
       "discriminator": [
         15,
@@ -2203,6 +2717,61 @@
           }
         },
         {
+          "name": "merchant_segments",
+          "docs": [
+            "Optional verified-segment gate accounts (spec 12 §4.5), required only when",
+            "the offer sets `required_segment`."
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  103,
+                  109,
+                  101,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "customer_eligibility",
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  101,
+                  108,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              },
+              {
+                "kind": "account",
+                "path": "customer"
+              }
+            ]
+          }
+        },
+        {
           "name": "token_program",
           "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
         },
@@ -2219,6 +2788,133 @@
         {
           "name": "max_raw_amount",
           "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "refresh_customer_eligibility",
+      "docs": [
+        "Permissionless: refresh a customer's cached verdict for one segment by",
+        "CPI-ing aegis `verify` off the hot path (spec 12 §4.1)."
+      ],
+      "discriminator": [
+        55,
+        53,
+        83,
+        41,
+        51,
+        27,
+        97,
+        119
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "merchant",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant.authority",
+                "account": "Merchant"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "customer"
+        },
+        {
+          "name": "merchant_segments",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  103,
+                  109,
+                  101,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "customer_eligibility",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  101,
+                  108,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              },
+              {
+                "kind": "account",
+                "path": "customer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "attestation",
+          "docs": [
+            "aegis re-derives and owner-checks it — a wrong/missing account yields a",
+            "negative verdict (fail safe)."
+          ]
+        },
+        {
+          "name": "aegis_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "segment_index",
+          "type": "u8"
         }
       ]
     },
@@ -2347,6 +3043,96 @@
       ]
     },
     {
+      "name": "reverify_merchant",
+      "docs": [
+        "Permissionless crank: re-check the merchant's aegis accreditation and",
+        "auto-degrade (after grace) or auto-restore its issuance posture."
+      ],
+      "discriminator": [
+        65,
+        168,
+        12,
+        132,
+        219,
+        100,
+        29,
+        193
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "signer": true
+        },
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant.authority",
+                "account": "Merchant"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "merchant_trust",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  116,
+                  114,
+                  117,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "aegis_trust_root",
+          "docs": [
+            "here from the anchor's own root so a crank cannot substitute accounts."
+          ]
+        },
+        {
+          "name": "aegis_accreditation"
+        },
+        {
+          "name": "aegis_program"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "set_admin",
       "discriminator": [
         251,
@@ -2466,6 +3252,72 @@
       ]
     },
     {
+      "name": "set_campaign_winback",
+      "docs": [
+        "Turn a campaign into a winback — pays only customers inactive for",
+        "`min_days_inactive` days (spec 12 §4.3). `0` disables."
+      ],
+      "discriminator": [
+        120,
+        222,
+        225,
+        213,
+        55,
+        9,
+        44,
+        241
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "merchant",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant.authority",
+                "account": "Merchant"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
+              }
+            ]
+          },
+          "relations": [
+            "campaign"
+          ]
+        },
+        {
+          "name": "campaign",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "min_days_inactive",
+          "type": "u16"
+        }
+      ]
+    },
+    {
       "name": "set_clawback_cap",
       "docs": [
         "Set the merchant's daily clawback cap (raw units; 0 = unlimited)."
@@ -2479,6 +3331,68 @@
         239,
         32,
         183
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "daily_cap_raw",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "set_daily_issue_cap",
+      "docs": [
+        "Set the merchant's daily issuance cap in raw points (0 = unlimited) —",
+        "the issuance-side blast-radius limiter (spec 13 §4.2)."
+      ],
+      "discriminator": [
+        79,
+        30,
+        146,
+        253,
+        213,
+        21,
+        212,
+        85
       ],
       "accounts": [
         {
@@ -2585,6 +3499,161 @@
         {
           "name": "active",
           "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "set_merchant_governance",
+      "docs": [
+        "Adopt/update/disable scoped operator roles — separation of duties",
+        "(spec 13 §4.1). Owner-only, opt-in."
+      ],
+      "discriminator": [
+        217,
+        210,
+        0,
+        210,
+        172,
+        96,
+        164,
+        211
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "enabled",
+          "type": "bool"
+        },
+        {
+          "name": "cashier",
+          "type": "pubkey"
+        },
+        {
+          "name": "campaign_manager",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_merchant_issue_status",
+      "docs": [
+        "Owner manual issuance-posture override — emergency freeze, or restore to",
+        "NORMAL after resolving a dispute."
+      ],
+      "discriminator": [
+        161,
+        129,
+        41,
+        2,
+        138,
+        71,
+        249,
+        130
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "merchant_trust",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  116,
+                  114,
+                  117,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "status",
+          "type": "u8"
         }
       ]
     },
@@ -2705,6 +3774,277 @@
         {
           "name": "paused",
           "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "set_merchant_segments",
+      "docs": [
+        "Define the merchant's verified segments (owner-only). Each segment is an",
+        "aegis `(issuer, schema)` predicate occupying one verdict-bitmap slot."
+      ],
+      "discriminator": [
+        34,
+        23,
+        233,
+        32,
+        118,
+        161,
+        250,
+        172
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "merchant",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "merchant_segments",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  103,
+                  109,
+                  101,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "segments",
+          "type": {
+            "vec": {
+              "defined": {
+                "name": "Segment"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_merchant_trust",
+      "docs": [
+        "Bind the merchant's authority-to-issue to an aegis accreditation root",
+        "(owner-only). Configures the fall-to posture + grace window."
+      ],
+      "discriminator": [
+        33,
+        184,
+        22,
+        123,
+        57,
+        200,
+        221,
+        138
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "merchant",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "merchant_trust",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  116,
+                  114,
+                  117,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "accreditation_root",
+          "type": "pubkey"
+        },
+        {
+          "name": "subject_issuer",
+          "type": "pubkey"
+        },
+        {
+          "name": "required_schema",
+          "type": "u64"
+        },
+        {
+          "name": "aegis_program",
+          "type": "pubkey"
+        },
+        {
+          "name": "degrade_target",
+          "type": "u8"
+        },
+        {
+          "name": "grace_secs",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "set_offer_segment",
+      "docs": [
+        "Gate/ungate an offer on a verified segment (spec 12 §4.5)."
+      ],
+      "discriminator": [
+        148,
+        222,
+        91,
+        134,
+        139,
+        234,
+        249,
+        138
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "merchant",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant.authority",
+                "account": "Merchant"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
+              }
+            ]
+          },
+          "relations": [
+            "offer"
+          ]
+        },
+        {
+          "name": "offer",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "required_segment",
+          "type": "u8"
         }
       ]
     },
@@ -3919,6 +5259,121 @@
           "type": "bool"
         }
       ]
+    },
+    {
+      "name": "withdraw_reserve",
+      "docs": [
+        "Withdraw from the reserve — rejected if it would drop below the coverage",
+        "required to back the point mint's current supply (owner-only)."
+      ],
+      "discriminator": [
+        165,
+        158,
+        228,
+        5,
+        114,
+        119,
+        194,
+        14
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "merchant",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "merchant.id",
+                "account": "Merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "point_mint",
+          "docs": [
+            "The point mint — its raw `supply` is the outstanding liability."
+          ],
+          "relations": [
+            "merchant"
+          ]
+        },
+        {
+          "name": "merchant_reserve",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  114,
+                  101,
+                  115,
+                  101,
+                  114,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "backing_mint",
+          "relations": [
+            "merchant_reserve"
+          ]
+        },
+        {
+          "name": "reserve_ata",
+          "writable": true,
+          "relations": [
+            "merchant_reserve"
+          ]
+        },
+        {
+          "name": "destination_ata",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
     }
   ],
   "accounts": [
@@ -4001,6 +5456,19 @@
       ]
     },
     {
+      "name": "CustomerEligibility",
+      "discriminator": [
+        46,
+        75,
+        193,
+        117,
+        19,
+        205,
+        212,
+        112
+      ]
+    },
+    {
       "name": "CustomerProfile",
       "discriminator": [
         230,
@@ -4037,6 +5505,58 @@
         21,
         32,
         64
+      ]
+    },
+    {
+      "name": "MerchantReserve",
+      "discriminator": [
+        115,
+        211,
+        173,
+        192,
+        72,
+        143,
+        86,
+        61
+      ]
+    },
+    {
+      "name": "MerchantSegments",
+      "discriminator": [
+        180,
+        23,
+        12,
+        45,
+        30,
+        188,
+        40,
+        232
+      ]
+    },
+    {
+      "name": "MerchantStatement",
+      "discriminator": [
+        66,
+        55,
+        11,
+        10,
+        201,
+        157,
+        56,
+        211
+      ]
+    },
+    {
+      "name": "MerchantTrust",
+      "discriminator": [
+        169,
+        129,
+        193,
+        20,
+        87,
+        12,
+        211,
+        113
       ]
     },
     {
@@ -4276,6 +5796,19 @@
       ]
     },
     {
+      "name": "CampaignWinbackSet",
+      "discriminator": [
+        210,
+        236,
+        150,
+        4,
+        58,
+        250,
+        8,
+        94
+      ]
+    },
+    {
       "name": "Clawback",
       "discriminator": [
         239,
@@ -4328,6 +5861,19 @@
       ]
     },
     {
+      "name": "CustomerEligibilityRefreshed",
+      "discriminator": [
+        253,
+        87,
+        114,
+        179,
+        220,
+        126,
+        206,
+        192
+      ]
+    },
+    {
       "name": "DecayRateUpdated",
       "discriminator": [
         95,
@@ -4338,6 +5884,19 @@
         213,
         192,
         234
+      ]
+    },
+    {
+      "name": "IssuanceCapSet",
+      "discriminator": [
+        0,
+        157,
+        33,
+        171,
+        134,
+        178,
+        252,
+        162
       ]
     },
     {
@@ -4364,6 +5923,32 @@
         79,
         53,
         89
+      ]
+    },
+    {
+      "name": "MerchantGovernanceSet",
+      "discriminator": [
+        75,
+        53,
+        121,
+        168,
+        12,
+        211,
+        241,
+        81
+      ]
+    },
+    {
+      "name": "MerchantIssueStatusSet",
+      "discriminator": [
+        46,
+        239,
+        221,
+        82,
+        94,
+        79,
+        86,
+        197
       ]
     },
     {
@@ -4416,6 +6001,58 @@
         239,
         17,
         83
+      ]
+    },
+    {
+      "name": "MerchantReverified",
+      "discriminator": [
+        95,
+        127,
+        123,
+        82,
+        117,
+        208,
+        20,
+        187
+      ]
+    },
+    {
+      "name": "MerchantSegmentsSet",
+      "discriminator": [
+        225,
+        46,
+        144,
+        57,
+        180,
+        33,
+        52,
+        33
+      ]
+    },
+    {
+      "name": "MerchantStatementAnchored",
+      "discriminator": [
+        89,
+        112,
+        159,
+        54,
+        249,
+        178,
+        129,
+        64
+      ]
+    },
+    {
+      "name": "MerchantTrustSet",
+      "discriminator": [
+        20,
+        163,
+        143,
+        87,
+        170,
+        15,
+        62,
+        149
       ]
     },
     {
@@ -4484,6 +6121,19 @@
       ]
     },
     {
+      "name": "OfferSegmentSet",
+      "discriminator": [
+        198,
+        198,
+        236,
+        189,
+        77,
+        49,
+        94,
+        58
+      ]
+    },
+    {
       "name": "PausedSet",
       "discriminator": [
         171,
@@ -4533,6 +6183,58 @@
         187,
         159,
         188
+      ]
+    },
+    {
+      "name": "ReserveAttested",
+      "discriminator": [
+        223,
+        244,
+        97,
+        196,
+        46,
+        168,
+        163,
+        229
+      ]
+    },
+    {
+      "name": "ReserveFunded",
+      "discriminator": [
+        15,
+        45,
+        175,
+        239,
+        65,
+        137,
+        203,
+        230
+      ]
+    },
+    {
+      "name": "ReserveOpened",
+      "discriminator": [
+        158,
+        236,
+        236,
+        182,
+        12,
+        243,
+        40,
+        150
+      ]
+    },
+    {
+      "name": "ReserveWithdrawn",
+      "discriminator": [
+        186,
+        11,
+        109,
+        7,
+        117,
+        246,
+        188,
+        249
       ]
     },
     {
@@ -4811,6 +6513,66 @@
       "code": 6041,
       "name": "ConversionFailed",
       "msg": "Conversion return data missing or malformed"
+    },
+    {
+      "code": 6042,
+      "name": "IssuanceFrozen",
+      "msg": "Issuance is frozen — merchant accreditation is degraded"
+    },
+    {
+      "code": 6043,
+      "name": "InvalidIssueStatus",
+      "msg": "Degrade target must be a real frozen posture"
+    },
+    {
+      "code": 6044,
+      "name": "MerchantTrustMissing",
+      "msg": "Merchant trust anchor is not configured"
+    },
+    {
+      "code": 6045,
+      "name": "AegisProgramMismatch",
+      "msg": "aegis program does not match the merchant's configured deployment"
+    },
+    {
+      "code": 6046,
+      "name": "InvalidGrace",
+      "msg": "Grace window is out of range"
+    },
+    {
+      "code": 6047,
+      "name": "InvalidReserveParams",
+      "msg": "Reserve parameters are invalid"
+    },
+    {
+      "code": 6048,
+      "name": "ReserveCoverageBreach",
+      "msg": "Withdrawal would drop the reserve below required coverage"
+    },
+    {
+      "code": 6049,
+      "name": "ReserveMintMismatch",
+      "msg": "Reserve backing mint mismatch"
+    },
+    {
+      "code": 6050,
+      "name": "DailyIssuanceCapExceeded",
+      "msg": "Daily issuance cap exceeded"
+    },
+    {
+      "code": 6051,
+      "name": "TooManySegments",
+      "msg": "Too many segments defined"
+    },
+    {
+      "code": 6052,
+      "name": "InvalidSegment",
+      "msg": "Segment index is invalid or inactive"
+    },
+    {
+      "code": 6053,
+      "name": "OfferSegmentGated",
+      "msg": "Offer is restricted to a verified segment the customer does not satisfy"
     }
   ],
   "types": [
@@ -5345,6 +7107,14 @@
           {
             "name": "bump",
             "type": "u8"
+          },
+          {
+            "name": "min_days_inactive",
+            "docs": [
+              "Winback targeting (spec 12 §4.3): when `> 0`, the campaign pays only",
+              "customers whose last visit was at least this many days ago. Appended."
+            ],
+            "type": "u16"
           }
         ]
       }
@@ -5567,6 +7337,26 @@
       }
     },
     {
+      "name": "CampaignWinbackSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "id",
+            "type": "u64"
+          },
+          {
+            "name": "min_days_inactive",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
       "name": "Clawback",
       "type": {
         "kind": "struct",
@@ -5681,6 +7471,109 @@
       }
     },
     {
+      "name": "CustomerEligibility",
+      "docs": [
+        "Cached per-customer segment verdicts (spec 12 §4.1) — the merchant-side twin",
+        "of argus's `EligibilityCapability`. `refresh_customer_eligibility` pays aegis's",
+        "`verify` CPI off the hot path and folds the result into `verdicts`; earn /",
+        "offers / campaigns then read the bitmap with no CPI. Fails closed on any",
+        "stale / epoch-mismatched / spoofed cache."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "customer",
+            "type": "pubkey"
+          },
+          {
+            "name": "verdicts",
+            "docs": [
+              "Bit `i` set = segment `i` predicate satisfied."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "kyc_tier",
+            "docs": [
+              "Provenance captured from the last verdict (spec 12 §4.1 CORRIDOR)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "jurisdiction",
+            "type": "u16"
+          },
+          {
+            "name": "issued_at",
+            "type": "i64"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          },
+          {
+            "name": "policy_epoch",
+            "docs": [
+              "`MerchantSegments.policy_epoch` at mint time; must still match to be valid."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "aegis_program",
+            "docs": [
+              "aegis deployment consulted."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CustomerEligibilityRefreshed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "customer",
+            "type": "pubkey"
+          },
+          {
+            "name": "segment_index",
+            "type": "u8"
+          },
+          {
+            "name": "satisfied",
+            "type": "bool"
+          },
+          {
+            "name": "verdicts",
+            "type": "u32"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
       "name": "CustomerProfile",
       "docs": [
         "Per merchant-customer pair."
@@ -5760,6 +7653,22 @@
           {
             "name": "new_rate_bps",
             "type": "i16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "IssuanceCapSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "daily_cap_raw",
+            "type": "u64"
           }
         ]
       }
@@ -5947,6 +7856,55 @@
           {
             "name": "mint_bump",
             "type": "u8"
+          },
+          {
+            "name": "issue_status",
+            "docs": [
+              "Live issuance posture (`issue_status::*`), driven by `reverify_merchant`.",
+              "`NORMAL` for a merchant that never adopts accreditation, so the earn gate",
+              "is a no-op until opt-in."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "daily_issue_cap_raw",
+            "docs": [
+              "Max raw points mintable per UTC day; `0` = unlimited. Symmetric to",
+              "`clawback_daily_cap_raw` — bounds the blast radius of a compromised",
+              "operator key on the *issuance* side (the far larger surface)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "issued_today",
+            "type": "u64"
+          },
+          {
+            "name": "issue_day",
+            "type": "u32"
+          },
+          {
+            "name": "governance_enabled",
+            "docs": [
+              "When set, the flat `operators`/`can_operate` model is replaced by scoped",
+              "roles below — the mint path needs the `cashier` key, campaign/offer/badge",
+              "creation needs `campaign_manager`. Opt-in; off = today's behavior."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "cashier",
+            "docs": [
+              "May run the mint path (`earn_points`, `earn_points_campaign`)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "campaign_manager",
+            "docs": [
+              "May create campaigns, offers, and achievements."
+            ],
+            "type": "pubkey"
           }
         ]
       }
@@ -5967,6 +7925,57 @@
           {
             "name": "authority",
             "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MerchantGovernanceSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "enabled",
+            "type": "bool"
+          },
+          {
+            "name": "cashier",
+            "type": "pubkey"
+          },
+          {
+            "name": "campaign_manager",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MerchantIssueStatusSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "old",
+            "type": "u8"
+          },
+          {
+            "name": "new",
+            "type": "u8"
+          },
+          {
+            "name": "automatic",
+            "docs": [
+              "True when set by the permissionless crank; false for a manual override."
+            ],
+            "type": "bool"
           }
         ]
       }
@@ -6048,6 +8057,349 @@
       }
     },
     {
+      "name": "MerchantReserve",
+      "docs": [
+        "Point-liability reserve (spec 11 §4.2), seeds `[\"mreserve\", merchant]`. Escrows",
+        "a caller-chosen stablecoin against outstanding point liability so issuance can",
+        "be shown solvent. Liability is measured on the point mint's **raw supply** —",
+        "exact and decay-conservative (as points decay, raw supply is unchanged, so",
+        "backing raw over-collateralizes rather than under)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "backing_mint",
+            "docs": [
+              "The escrowed backing mint (SPL or Token-2022 stablecoin)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "reserve_ata",
+            "docs": [
+              "PDA-owned escrow token account (authority = this reserve PDA)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "unit_value",
+            "docs": [
+              "Stable minor units backing one raw point (governance-set; no oracle)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "target_ratio_bps",
+            "docs": [
+              "Target reserve ratio, bps (10_000 = fully backed; below = fractional)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MerchantReverified",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "healthy",
+            "type": "bool"
+          },
+          {
+            "name": "issue_status",
+            "type": "u8"
+          },
+          {
+            "name": "reason_code",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MerchantSegments",
+      "docs": [
+        "Per-merchant verified-segment definitions (spec 12 §4.1), seeds",
+        "`[\"segments\", merchant]`. Bounded, versioned; `policy_epoch` bumps on any",
+        "change so stale eligibility caches are rejected."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "policy_epoch",
+            "type": "u64"
+          },
+          {
+            "name": "segments",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "Segment"
+                  }
+                },
+                8
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MerchantSegmentsSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "policy_epoch",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MerchantStatement",
+      "docs": [
+        "Tamper-evident anchor for a period's economic decisions (spec 13 §4.4),",
+        "seeds `[\"mstmt\", merchant, period_le]`. An off-chain indexer folds the",
+        "period's earns / redemptions / clawbacks into a Merkle tree; the merchant",
+        "owner anchors its root here. `decision_count` makes the statement provably",
+        "complete — an omission changes both the count and the root. The merchant-side",
+        "analogue of argus's `StatementCommitment`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "period",
+            "type": "u64"
+          },
+          {
+            "name": "merkle_root",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "decision_count",
+            "type": "u64"
+          },
+          {
+            "name": "reporter",
+            "type": "pubkey"
+          },
+          {
+            "name": "anchored_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MerchantStatementAnchored",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "period",
+            "type": "u64"
+          },
+          {
+            "name": "merkle_root",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "decision_count",
+            "type": "u64"
+          },
+          {
+            "name": "reporter",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MerchantTrust",
+      "docs": [
+        "Accredited merchant identity (spec 11 §4.1), seeds `[\"mtrust\", merchant]`.",
+        "The merchant-side analogue of argus's `TrustAnchor`: binds the merchant's",
+        "authority to *issue* to an aegis accreditation root. The permissionless",
+        "`reverify_merchant` crank re-checks the chain and, after a grace window,",
+        "trips `Merchant.issue_status` to `degrade_target` — freezing earn (never",
+        "redemption/clawback). Auto-restores on the next healthy crank."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "accreditation_root",
+            "docs": [
+              "aegis accreditation root the merchant's KYB identity must chain to."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "subject_issuer",
+            "docs": [
+              "The merchant's aegis subject/issuer identity being verified."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "required_schema",
+            "docs": [
+              "Required accreditation schema (\"KYB type\")."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "aegis_program",
+            "docs": [
+              "aegis deployment (verify_accreditation target)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "degrade_target",
+            "docs": [
+              "Posture to fall to on sustained failure (`EARN_FROZEN`/`REDEMPTION_ONLY`)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "grace_secs",
+            "docs": [
+              "Seconds a failing streak must persist before auto-degrade bites."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "failing_since",
+            "docs": [
+              "Unix ts the current failing streak began (`0` = healthy)."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "last_verified_at",
+            "type": "i64"
+          },
+          {
+            "name": "tier",
+            "docs": [
+              "Accreditation provenance captured from the verdict."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "jurisdiction",
+            "type": "u16"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MerchantTrustSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "accreditation_root",
+            "type": "pubkey"
+          },
+          {
+            "name": "subject_issuer",
+            "type": "pubkey"
+          },
+          {
+            "name": "required_schema",
+            "type": "u64"
+          },
+          {
+            "name": "degrade_target",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
       "name": "MerchantUpdated",
       "type": {
         "kind": "struct",
@@ -6114,6 +8466,14 @@
           {
             "name": "bump",
             "type": "u8"
+          },
+          {
+            "name": "required_segment",
+            "docs": [
+              "Verified-segment gate (spec 12 §4.5): `0` = open to all; else the customer",
+              "must satisfy segment index `required_segment - 1` to redeem. Appended."
+            ],
+            "type": "u8"
           }
         ]
       }
@@ -6178,6 +8538,26 @@
           {
             "name": "receipt",
             "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OfferSegmentSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "offer_id",
+            "type": "u64"
+          },
+          {
+            "name": "required_segment",
+            "type": "u8"
           }
         ]
       }
@@ -6329,6 +8709,147 @@
           {
             "name": "decimals",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ReserveAttested",
+      "docs": [
+        "Proof-of-reserves snapshot (spec 11 §4.2) — permissionless, examiner-facing."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "outstanding_raw",
+            "type": "u64"
+          },
+          {
+            "name": "reserve_stable",
+            "type": "u64"
+          },
+          {
+            "name": "required_stable",
+            "type": "u64"
+          },
+          {
+            "name": "solvent",
+            "type": "bool"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ReserveFunded",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "reserve_balance",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ReserveOpened",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "backing_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "unit_value",
+            "type": "u64"
+          },
+          {
+            "name": "target_ratio_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ReserveWithdrawn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "reserve_balance",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Segment",
+      "docs": [
+        "One verified-customer segment (spec 12 §4.1). A segment is satisfied when the",
+        "customer holds a valid aegis credential of `(issuer, schema_id)` — the merchant",
+        "learns only that the predicate holds, never the underlying PII. (A follow-on",
+        "upgrades `issuer/schema_id` to a named aegis `Policy` consumed via",
+        "`verify_policy`; the cache shape is unchanged.)"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "issuer",
+            "type": "pubkey"
+          },
+          {
+            "name": "schema_id",
+            "type": "u64"
+          },
+          {
+            "name": "ttl_secs",
+            "docs": [
+              "Cache TTL for this segment's verdict (0 = protocol default)."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "boost_bps",
+            "docs": [
+              "Additive earn boost (bps) applied when a customer satisfies this segment;",
+              "composed with streak, jointly re-clamped to the ×2.4 ceiling."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "active",
+            "type": "bool"
           }
         ]
       }
@@ -6511,6 +9032,14 @@
       "value": "[99, 111, 110, 102, 105, 103]"
     },
     {
+      "name": "CUSTOMER_ELIGIBILITY_SEED",
+      "docs": [
+        "Per-(merchant, customer) cached eligibility verdict (spec 12 §4.1): `[\"celig\", merchant, customer]`."
+      ],
+      "type": "bytes",
+      "value": "[99, 101, 108, 105, 103]"
+    },
+    {
       "name": "CUSTOMER_SEED",
       "type": "bytes",
       "value": "[99, 117, 115, 116, 111, 109, 101, 114]"
@@ -6580,9 +9109,33 @@
       "value": "[109, 101, 109, 98, 101, 114]"
     },
     {
+      "name": "MERCHANT_RESERVE_SEED",
+      "docs": [
+        "Per-merchant point-liability reserve (spec 11 §4.2): `[\"mreserve\", merchant]`."
+      ],
+      "type": "bytes",
+      "value": "[109, 114, 101, 115, 101, 114, 118, 101]"
+    },
+    {
       "name": "MERCHANT_SEED",
       "type": "bytes",
       "value": "[109, 101, 114, 99, 104, 97, 110, 116]"
+    },
+    {
+      "name": "MERCHANT_STATEMENT_SEED",
+      "docs": [
+        "Per-(merchant, period) decision-statement anchor (spec 13 §4.4): `[\"mstmt\", merchant, period]`."
+      ],
+      "type": "bytes",
+      "value": "[109, 115, 116, 109, 116]"
+    },
+    {
+      "name": "MERCHANT_TRUST_SEED",
+      "docs": [
+        "Per-merchant accreditation anchor (spec 11): `[\"mtrust\", merchant]`."
+      ],
+      "type": "bytes",
+      "value": "[109, 116, 114, 117, 115, 116]"
     },
     {
       "name": "MINT_SEED",
@@ -6606,6 +9159,14 @@
       "name": "RECEIPT_SEED",
       "type": "bytes",
       "value": "[114, 101, 99, 101, 105, 112, 116]"
+    },
+    {
+      "name": "SEGMENTS_SEED",
+      "docs": [
+        "Per-merchant verified-segment definitions (spec 12 §4.1): `[\"segments\", merchant]`."
+      ],
+      "type": "bytes",
+      "value": "[115, 101, 103, 109, 101, 110, 116, 115]"
     },
     {
       "name": "STREAK_BPS_PER_DAY",
