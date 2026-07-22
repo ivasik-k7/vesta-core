@@ -110,10 +110,10 @@ flowchart LR
     style enforce fill:#7c2d12,stroke:#fb923c,color:#fff
 ```
 
-| # | Spec | Layer | Depends on |
-|---|---|---|---|
-| 09 | [Policy VM + Verdict Capability (aegis-compatible core)](09-argus-policy-vm.md) | Core / the implementable slice | 06, 07 |
-| 10 | [Enterprise Governance & Multi-Tenancy](10-argus-enterprise-governance.md) | Governance / moat / monetization | 09, 08 |
+| # | Spec | Layer | Depends on | Status |
+|---|---|---|---|---|
+| 09 | [Policy VM + Verdict Capability (aegis-compatible core)](09-argus-policy-vm.md) | Core / the implementable slice | 06, 07 | ◒ Core shipped (v2.1.0); rule-tape VM deferred by design |
+| 10 | [Enterprise Governance & Multi-Tenancy](10-argus-enterprise-governance.md) | Governance / moat / monetization | 09, 08 | ✅ All 5 phases shipped (v2.1.0); travel-rule/corridor-matrix deferred |
 
 **Recommended delivery order:** 06 + 07 + **09 together** (they are one coherent
 migration — aegis stops publishing the field, argus stops reading it, both move to

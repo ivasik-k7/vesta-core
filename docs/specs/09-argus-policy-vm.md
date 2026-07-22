@@ -1,6 +1,6 @@
 # 09 · argus — Policy VM + Verdict Capability (aegis-compatible core)
 
-> **Status:** ◒ Phase 1–2a implemented (v2.0.0 — capability + aegis migration; guard now enforces aegis `verify_policy` so rules are data with no redeploy. Full data-driven mechanical-rule interpreter + dynamic EAML deferred: low value / high risk) · **Track:** C (Transfer Policy) · **Layer:** Core · **Depends on:** 06, 07
+> **Status:** ◒ Core implemented (v2.1.0 — capability + aegis migration; guard enforces aegis `verify_policy` so rules are data with no redeploy; capability now carries `screening_epoch`/`jurisdiction`/`tier` per §4.1, completed with spec 10 phase 4. The full data-driven mechanical-rule **interpreter + dynamic EAML** (§4.2 phase 2) remains deliberately deferred — low value / high risk: rules-as-data is already delivered via aegis `verify_policy`, so a bytecode VM in the fail-closed hot path buys nothing and adds attack surface) · **Track:** C (Transfer Policy) · **Layer:** Core · **Depends on:** 06, 07
 > **Unlocks:** 10 (enterprise governance); is the migration that lets Track B ship
 > Inherits all [shared conventions](README.md#shared-conventions-normative-for-all-specs), incl. [Track B conventions](README.md#track-b-conventions-aegis--sas--crypto--normative-for-specs-0608).
 

@@ -1,7 +1,31 @@
 # 10 · argus — Enterprise Governance & Multi-Tenancy
 
-> **Status:** Draft / Proposed · **Track:** C · **Layer:** Governance / moat / monetization (wave 2) · **Depends on:** 09 (VM + capability), 08 (accreditation)
+> **Status:** ✅ Implemented (argus v2.1.0) · **Track:** C · **Layer:** Governance / moat / monetization · **Depends on:** 09 (VM + capability), 08 (accreditation)
 > Inherits all [shared conventions](README.md#shared-conventions-normative-for-all-specs).
+>
+> **Implemented (all five phases):** (1) governed policy lifecycle — `PolicyVersion`
+> (content-addressed) / `PolicyPointer` / `RoleRegistry` with propose → approve
+> (≠ author) → timelock → activate → rollback → pin, and two-step timelocked role
+> changes; (2) decision statements — `TransferDecision` carries `policy_epoch` +
+> `active_policy_hash`, and `StatementCommitment` (Reporter) anchors a period's
+> Merkle root with a `decision_count` completeness witness; (3) trust triangle —
+> `TrustAnchor` + permissionless `reverify_accreditation` crank (CPIs aegis
+> `verify_accreditation`) with grace-window auto-degrade / auto-restore, enforced
+> as `GuardConfig.degrade_mode` (peer gifts blocked, redemption/clawback open —
+> never strands assets); (4) SANCTIONS fast-freeze — `screening_epoch` on the
+> capability + `bump_screening_epoch` for TTL-independent near-real-time freeze,
+> and verdict `jurisdiction`/`tier` provenance on the capability; (5) multi-tenancy
+> + licensing — `ArgusProtocol` fee treasury + per-mint `LicenseState` (entitlement
+> bitmap + expiry), `purchase_license` (fee on a licensing event, never per
+> transfer), `anchor_statement` gated on a live STATEMENTS entitlement, expiry
+> degrades to free tier without stranding assets.
+>
+> **Deferred to wave 2 (documented, not built):** `TRAVEL_RULE` (dual-party payload
+> commitment + EAML recipient-identity delivery) and the full `CORRIDOR` jurisdiction
+> matrix — both need aegis-side screening-issuer accreditation types and
+> jurisdiction-corridor policies that do not yet exist. The `SANCTIONS` freeze lever
+> and jurisdiction/tier provenance (phase 4) are the safe, shipped slice. Shadow
+> mode and the on-chain `IncidentState` state machine (§4.6) are also deferred.
 
 ## 1. Summary
 
