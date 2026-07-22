@@ -68,6 +68,13 @@ pub struct Merchant {
     /// `NORMAL` for a merchant that never adopts accreditation, so the earn gate
     /// is a no-op until opt-in.
     pub issue_status: u8,
+    // ── issuance circuit breaker (spec 13 §4.2) ──────────────────────────────
+    /// Max raw points mintable per UTC day; `0` = unlimited. Symmetric to
+    /// `clawback_daily_cap_raw` — bounds the blast radius of a compromised
+    /// operator key on the *issuance* side (the far larger surface).
+    pub daily_issue_cap_raw: u64,
+    pub issued_today: u64,
+    pub issue_day: u32,
 }
 
 impl Merchant {

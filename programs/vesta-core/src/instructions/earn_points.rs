@@ -65,6 +65,24 @@ fn accrue(
         .lifetime_points_issued
         .checked_add(u128::from(minted))
         .ok_or(VestaError::Overflow)?;
+
+    // Issuance circuit breaker (spec 13 §4.2): bound raw points minted per UTC
+    // day. `0` = unlimited (default), so a merchant that never sets a cap is
+    // unaffected. Symmetric to the clawback daily cap.
+    if merchant.issue_day != unix_day {
+        merchant.issue_day = unix_day;
+        merchant.issued_today = 0;
+    }
+    merchant.issued_today = merchant
+        .issued_today
+        .checked_add(minted)
+        .ok_or(VestaError::Overflow)?;
+    if merchant.daily_issue_cap_raw > 0 {
+        require!(
+            merchant.issued_today <= merchant.daily_issue_cap_raw,
+            VestaError::DailyIssuanceCapExceeded
+        );
+    }
     profile.tier = u8::try_from(
         TIER_THRESHOLDS
             .iter()

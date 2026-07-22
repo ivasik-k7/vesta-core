@@ -189,6 +189,12 @@ pub struct MerchantIssueStatusSet {
 }
 
 #[event]
+pub struct IssuanceCapSet {
+    pub merchant: Pubkey,
+    pub daily_cap_raw: u64,
+}
+
+#[event]
 pub struct ReserveOpened {
     pub merchant: Pubkey,
     pub backing_mint: Pubkey,

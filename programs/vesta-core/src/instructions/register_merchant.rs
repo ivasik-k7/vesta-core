@@ -330,6 +330,9 @@ pub fn handle_register_merchant(
     merchant.bump = ctx.bumps.merchant;
     merchant.mint_bump = ctx.bumps.mint;
     merchant.issue_status = crate::constants::issue_status::NORMAL;
+    merchant.daily_issue_cap_raw = 0;
+    merchant.issued_today = 0;
+    merchant.issue_day = 0;
 
     emit!(MerchantRegistered {
         merchant: merchant_key,

@@ -221,6 +221,12 @@ pub mod vesta_core {
         instructions::merchant_admin::handle_set_clawback_cap(ctx, daily_cap_raw)
     }
 
+    /// Set the merchant's daily issuance cap in raw points (0 = unlimited) —
+    /// the issuance-side blast-radius limiter (spec 13 §4.2).
+    pub fn set_daily_issue_cap(ctx: Context<MerchantOwnerOnly>, daily_cap_raw: u64) -> Result<()> {
+        instructions::merchant_admin::handle_set_daily_issue_cap(ctx, daily_cap_raw)
+    }
+
     pub fn create_achievement(
         ctx: Context<CreateAchievement>,
         id: u64,

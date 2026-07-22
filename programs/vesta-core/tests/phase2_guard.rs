@@ -3948,3 +3948,53 @@ fn merchant_reserve_coverage_and_attestation() {
     )
     .unwrap();
 }
+
+// ── Issuance circuit breaker (spec 13, phase 1) ──────────────────────────────
+
+fn set_daily_issue_cap(
+    w: &mut World,
+    cap: u64,
+) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+    let authority = w.merchant_authority.insecure_clone();
+    let ix = Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::MerchantOwnerOnly {
+            authority: authority.pubkey(),
+            merchant: w.merchant,
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::SetDailyIssueCap { daily_cap_raw: cap }.data(),
+    };
+    w.send(&[ix], &[&authority], &authority.pubkey())
+}
+
+#[test]
+fn merchant_daily_issuance_cap_bounds_minting() {
+    let mut w = setup();
+    let alice = Keypair::new();
+    w.svm.airdrop(&alice.pubkey(), 5_000_000_000).unwrap();
+
+    // No cap by default → a large earn works and shows us the per-earn mint size.
+    try_earn(&mut w, alice.pubkey(), 10).unwrap();
+    let minted_one = point_supply(&w);
+    assert!(minted_one > 0);
+
+    // Cap at 1.5× a single earn (per merchant, per day). Warp to a fresh day so
+    // alice's earn above doesn't pre-fill today's counter.
+    set_daily_issue_cap(&mut w, minted_one + minted_one / 2).unwrap();
+    w.warp_days(1);
+
+    let bob = Keypair::new();
+    w.svm.airdrop(&bob.pubkey(), 5_000_000_000).unwrap();
+    // First earn of the day fits under the cap.
+    try_earn(&mut w, bob.pubkey(), 10).unwrap();
+    // Second same-day earn pushes cumulative issuance over the cap → rejected.
+    assert!(
+        try_earn(&mut w, bob.pubkey(), 10).is_err(),
+        "issuance exceeded the daily cap"
+    );
+
+    // A new UTC day resets the counter → earn flows again.
+    w.warp_days(1);
+    try_earn(&mut w, bob.pubkey(), 10).unwrap();
+}

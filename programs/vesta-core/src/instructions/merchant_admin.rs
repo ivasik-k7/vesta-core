@@ -4,8 +4,8 @@ use crate::{
     constants::{CONFIG_SEED, MAX_METADATA_URI_LEN, MERCHANT_SEED},
     error::VestaError,
     events::{
-        ClawbackCapSet, MerchantOperatorSet, MerchantPausedSet, MerchantProfileUpdated,
-        MerchantVerifiedSet,
+        ClawbackCapSet, IssuanceCapSet, MerchantOperatorSet, MerchantPausedSet,
+        MerchantProfileUpdated, MerchantVerifiedSet,
     },
     state::{Config, Merchant, MAX_OPERATORS},
 };
@@ -91,6 +91,21 @@ pub fn handle_set_clawback_cap(ctx: Context<MerchantOwnerOnly>, daily_cap_raw: u
     let m = &mut ctx.accounts.merchant;
     m.clawback_daily_cap_raw = daily_cap_raw;
     emit!(ClawbackCapSet {
+        merchant: m.key(),
+        daily_cap_raw,
+    });
+    Ok(())
+}
+
+/// Set the merchant's daily issuance cap in raw points (0 = unlimited) — the
+/// issuance-side blast-radius limiter (spec 13 §4.2).
+pub fn handle_set_daily_issue_cap(
+    ctx: Context<MerchantOwnerOnly>,
+    daily_cap_raw: u64,
+) -> Result<()> {
+    let m = &mut ctx.accounts.merchant;
+    m.daily_issue_cap_raw = daily_cap_raw;
+    emit!(IssuanceCapSet {
         merchant: m.key(),
         daily_cap_raw,
     });

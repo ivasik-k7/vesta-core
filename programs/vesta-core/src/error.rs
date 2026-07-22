@@ -103,4 +103,6 @@ pub enum VestaError {
     ReserveCoverageBreach,
     #[msg("Reserve backing mint mismatch")]
     ReserveMintMismatch,
+    #[msg("Daily issuance cap exceeded")]
+    DailyIssuanceCapExceeded,
 }
