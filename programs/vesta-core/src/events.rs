@@ -189,6 +189,39 @@ pub struct MerchantIssueStatusSet {
 }
 
 #[event]
+pub struct ReserveOpened {
+    pub merchant: Pubkey,
+    pub backing_mint: Pubkey,
+    pub unit_value: u64,
+    pub target_ratio_bps: u16,
+}
+
+#[event]
+pub struct ReserveFunded {
+    pub merchant: Pubkey,
+    pub amount: u64,
+    pub reserve_balance: u64,
+}
+
+#[event]
+pub struct ReserveWithdrawn {
+    pub merchant: Pubkey,
+    pub amount: u64,
+    pub reserve_balance: u64,
+}
+
+/// Proof-of-reserves snapshot (spec 11 §4.2) — permissionless, examiner-facing.
+#[event]
+pub struct ReserveAttested {
+    pub merchant: Pubkey,
+    pub outstanding_raw: u64,
+    pub reserve_stable: u64,
+    pub required_stable: u64,
+    pub solvent: bool,
+    pub ts: i64,
+}
+
+#[event]
 pub struct AlliancePausedSet {
     pub alliance: Pubkey,
     pub paused: bool,

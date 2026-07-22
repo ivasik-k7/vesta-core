@@ -110,6 +110,39 @@ pub struct MerchantTrust {
     pub bump: u8,
 }
 
+/// Point-liability reserve (spec 11 §4.2), seeds `["mreserve", merchant]`. Escrows
+/// a caller-chosen stablecoin against outstanding point liability so issuance can
+/// be shown solvent. Liability is measured on the point mint's **raw supply** —
+/// exact and decay-conservative (as points decay, raw supply is unchanged, so
+/// backing raw over-collateralizes rather than under).
+#[account]
+#[derive(InitSpace)]
+pub struct MerchantReserve {
+    pub version: u8,
+    pub merchant: Pubkey,
+    /// The escrowed backing mint (SPL or Token-2022 stablecoin).
+    pub backing_mint: Pubkey,
+    /// PDA-owned escrow token account (authority = this reserve PDA).
+    pub reserve_ata: Pubkey,
+    /// Stable minor units backing one raw point (governance-set; no oracle).
+    pub unit_value: u64,
+    /// Target reserve ratio, bps (10_000 = fully backed; below = fractional).
+    pub target_ratio_bps: u16,
+    pub bump: u8,
+}
+
+impl MerchantReserve {
+    /// Stable minor units required to back `supply_raw` outstanding points at the
+    /// configured unit value and ratio. `None` on overflow (caller fails closed).
+    pub fn required_reserve(&self, supply_raw: u64) -> Option<u64> {
+        u128::from(supply_raw)
+            .checked_mul(u128::from(self.unit_value))?
+            .checked_mul(u128::from(self.target_ratio_bps))?
+            .checked_div(u128::from(crate::constants::BPS_DENOMINATOR))
+            .and_then(|v| u64::try_from(v).ok())
+    }
+}
+
 /// Per merchant-customer pair.
 #[account]
 #[derive(InitSpace)]

@@ -97,4 +97,10 @@ pub enum VestaError {
     AegisProgramMismatch,
     #[msg("Grace window is out of range")]
     InvalidGrace,
+    #[msg("Reserve parameters are invalid")]
+    InvalidReserveParams,
+    #[msg("Withdrawal would drop the reserve below required coverage")]
+    ReserveCoverageBreach,
+    #[msg("Reserve backing mint mismatch")]
+    ReserveMintMismatch,
 }

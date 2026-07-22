@@ -3762,3 +3762,189 @@ fn merchant_reverify_grace_absorbs_transient_failure() {
         vesta_core::constants::issue_status::EARN_FROZEN
     );
 }
+
+// ── Merchant liability reserve (spec 11, phase 2) ────────────────────────────
+
+fn merchant_reserve_pda(w: &World) -> Pubkey {
+    Pubkey::find_program_address(&[b"mreserve", w.merchant.as_ref()], &vesta_core::id()).0
+}
+
+fn point_supply(w: &World) -> u64 {
+    let d = w.svm.get_account(&w.mint).unwrap().data;
+    StateWithExtensions::<MintState>::unpack(&d)
+        .unwrap()
+        .base
+        .supply
+}
+
+fn token_amount(w: &World, ata: &Pubkey) -> u64 {
+    let d = w.svm.get_account(ata).unwrap().data;
+    u64::from_le_bytes(d[64..72].try_into().unwrap())
+}
+
+/// Create a Token-2022 "stablecoin" mint and mint `amount` to `recipient`.
+fn mint_stable(w: &mut World, authority: &Keypair, recipient: Pubkey, amount: u64) -> Pubkey {
+    use anchor_lang::solana_program::system_instruction;
+    let mint = Keypair::new();
+    let create = system_instruction::create_account(
+        &authority.pubkey(),
+        &mint.pubkey(),
+        5_000_000,
+        82, // base Token-2022 mint size
+        &TOKEN_2022_ID,
+    );
+    let init = spl_token_2022_interface::instruction::initialize_mint2(
+        &TOKEN_2022_ID,
+        &mint.pubkey(),
+        &authority.pubkey(),
+        None,
+        6,
+    )
+    .unwrap();
+    w.send(&[create, init], &[authority, &mint], &authority.pubkey())
+        .unwrap();
+
+    let ata =
+        get_associated_token_address_with_program_id(&recipient, &mint.pubkey(), &TOKEN_2022_ID);
+    let create_ata = spl_associated_token_account_interface::instruction::create_associated_token_account_idempotent(
+        &authority.pubkey(),
+        &recipient,
+        &mint.pubkey(),
+        &TOKEN_2022_ID,
+    );
+    let mint_to = spl_token_2022_interface::instruction::mint_to(
+        &TOKEN_2022_ID,
+        &mint.pubkey(),
+        &ata,
+        &authority.pubkey(),
+        &[],
+        amount,
+    )
+    .unwrap();
+    w.send(&[create_ata, mint_to], &[authority], &authority.pubkey())
+        .unwrap();
+    mint.pubkey()
+}
+
+#[test]
+fn merchant_reserve_coverage_and_attestation() {
+    let mut w = setup();
+    let owner = w.merchant_authority.insecure_clone();
+    let stable = mint_stable(&mut w, &owner, owner.pubkey(), 10_000);
+
+    let reserve = merchant_reserve_pda(&w);
+    let reserve_ata =
+        get_associated_token_address_with_program_id(&reserve, &stable, &TOKEN_2022_ID);
+    let owner_ata =
+        get_associated_token_address_with_program_id(&owner.pubkey(), &stable, &TOKEN_2022_ID);
+
+    // Open a fully-backed reserve: 1 stable minor unit per raw point.
+    w.send(
+        &[Instruction {
+            program_id: vesta_core::id(),
+            accounts: vesta_core::accounts::OpenReserve {
+                authority: owner.pubkey(),
+                merchant: w.merchant,
+                backing_mint: stable,
+                merchant_reserve: reserve,
+                reserve_ata,
+                token_program: TOKEN_2022_ID,
+                associated_token_program: ATA_PROGRAM_ID,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: vesta_core::instruction::OpenReserve {
+                unit_value: 1,
+                target_ratio_bps: 10_000,
+            }
+            .data(),
+        }],
+        &[&owner],
+        &owner.pubkey(),
+    )
+    .unwrap();
+
+    // Fund 5_000.
+    let fund = |w: &mut World, amount: u64| {
+        w.send(
+            &[Instruction {
+                program_id: vesta_core::id(),
+                accounts: vesta_core::accounts::FundReserve {
+                    authority: owner.pubkey(),
+                    merchant: w.merchant,
+                    merchant_reserve: reserve,
+                    backing_mint: stable,
+                    source_ata: owner_ata,
+                    reserve_ata,
+                    token_program: TOKEN_2022_ID,
+                }
+                .to_account_metas(None),
+                data: vesta_core::instruction::FundReserve { amount }.data(),
+            }],
+            &[&owner],
+            &owner.pubkey(),
+        )
+    };
+    fund(&mut w, 5_000).unwrap();
+    assert_eq!(token_amount(&w, &reserve_ata), 5_000);
+
+    // Mint some point liability so coverage is non-trivial.
+    let alice = Keypair::new();
+    w.svm.airdrop(&alice.pubkey(), 5_000_000_000).unwrap();
+    w.earn(alice.pubkey(), 10);
+    let supply = point_supply(&w); // required = supply (unit_value 1, full ratio)
+    assert!(supply > 0 && supply < 5_000);
+
+    let withdraw = |w: &mut World, amount: u64| {
+        w.send(
+            &[Instruction {
+                program_id: vesta_core::id(),
+                accounts: vesta_core::accounts::WithdrawReserve {
+                    authority: owner.pubkey(),
+                    merchant: w.merchant,
+                    point_mint: w.mint,
+                    merchant_reserve: reserve,
+                    backing_mint: stable,
+                    reserve_ata,
+                    destination_ata: owner_ata,
+                    token_program: TOKEN_2022_ID,
+                }
+                .to_account_metas(None),
+                data: vesta_core::instruction::WithdrawReserve { amount }.data(),
+            }],
+            &[&owner],
+            &owner.pubkey(),
+        )
+    };
+
+    // Withdraw down to exactly the required coverage: OK.
+    let available = 5_000 - supply;
+    withdraw(&mut w, available).unwrap();
+    assert_eq!(token_amount(&w, &reserve_ata), supply);
+
+    // One more unit would breach coverage: rejected.
+    assert!(
+        withdraw(&mut w, 1).is_err(),
+        "withdrawal breached reserve coverage"
+    );
+
+    // attest_reserve is permissionless and succeeds (solvent).
+    let cranker = Keypair::new();
+    w.svm.airdrop(&cranker.pubkey(), 1_000_000_000).unwrap();
+    w.send(
+        &[Instruction {
+            program_id: vesta_core::id(),
+            accounts: vesta_core::accounts::AttestReserve {
+                merchant: w.merchant,
+                point_mint: w.mint,
+                merchant_reserve: reserve,
+                reserve_ata,
+            }
+            .to_account_metas(None),
+            data: vesta_core::instruction::AttestReserve {}.data(),
+        }],
+        &[&cranker],
+        &cranker.pubkey(),
+    )
+    .unwrap();
+}

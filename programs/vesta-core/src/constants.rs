@@ -35,6 +35,13 @@ pub const MEMBER_SEED: &[u8] = b"member";
 #[constant]
 pub const MERCHANT_TRUST_SEED: &[u8] = b"mtrust";
 
+/// Per-merchant point-liability reserve (spec 11 §4.2): `["mreserve", merchant]`.
+#[constant]
+pub const MERCHANT_RESERVE_SEED: &[u8] = b"mreserve";
+
+/// Basis-points denominator for reserve ratios.
+pub const BPS_DENOMINATOR: u64 = 10_000;
+
 /// Default merchant accreditation grace window, seconds — a failing streak must
 /// persist this long before issuance auto-degrades (absorbs a transient aegis
 /// outage). Configurable per merchant on the `MerchantTrust`.

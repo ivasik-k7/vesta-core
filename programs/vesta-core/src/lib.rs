@@ -189,6 +189,33 @@ pub mod vesta_core {
         instructions::merchant_trust::handle_set_merchant_issue_status(ctx, status)
     }
 
+    // ── Point-liability reserve (spec 11, phase 2) ───────────────────────────
+
+    /// Open a stablecoin-backed liability reserve for the merchant (owner-only).
+    pub fn open_reserve(
+        ctx: Context<OpenReserve>,
+        unit_value: u64,
+        target_ratio_bps: u16,
+    ) -> Result<()> {
+        instructions::merchant_reserve::handle_open_reserve(ctx, unit_value, target_ratio_bps)
+    }
+
+    /// Deposit backing stablecoin into the reserve (owner-only).
+    pub fn fund_reserve(ctx: Context<FundReserve>, amount: u64) -> Result<()> {
+        instructions::merchant_reserve::handle_fund_reserve(ctx, amount)
+    }
+
+    /// Withdraw from the reserve — rejected if it would drop below the coverage
+    /// required to back the point mint's current supply (owner-only).
+    pub fn withdraw_reserve(ctx: Context<WithdrawReserve>, amount: u64) -> Result<()> {
+        instructions::merchant_reserve::handle_withdraw_reserve(ctx, amount)
+    }
+
+    /// Emit a permissionless proof-of-reserves snapshot.
+    pub fn attest_reserve(ctx: Context<AttestReserve>) -> Result<()> {
+        instructions::merchant_reserve::handle_attest_reserve(ctx)
+    }
+
     /// Set the merchant's daily clawback cap (raw units; 0 = unlimited).
     pub fn set_clawback_cap(ctx: Context<MerchantOwnerOnly>, daily_cap_raw: u64) -> Result<()> {
         instructions::merchant_admin::handle_set_clawback_cap(ctx, daily_cap_raw)
