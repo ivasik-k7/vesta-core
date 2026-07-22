@@ -14,7 +14,7 @@ use anchor_lang::{prelude::*, solana_program::program::get_return_data};
 use crate::{
     constants::{degrade, GUARD_SEED, STATE_VERSION, TRUST_SEED},
     error::GuardError,
-    events::{AccreditationReverified, DegradeModeSet, TrustAnchorSet},
+    events::{AccreditationReverified, DegradeModeSet, ScreeningEpochBumped, TrustAnchorSet},
     state::{GuardConfig, TrustAnchor},
 };
 
@@ -256,6 +256,39 @@ pub fn handle_set_degrade_mode(ctx: Context<SetDegradeMode>, mode: u8) -> Result
         old,
         new: mode,
         automatic: false,
+    });
+    Ok(())
+}
+
+// ── bump_screening_epoch (SANCTIONS fast-freeze) ─────────────────────────────
+
+#[derive(Accounts)]
+pub struct BumpScreeningEpoch<'info> {
+    pub authority: Signer<'info>,
+
+    /// CHECK: the hooked mint — PDA seed only.
+    pub mint: UncheckedAccount<'info>,
+
+    #[account(
+        mut,
+        has_one = authority @ GuardError::Unauthorized,
+        seeds = [GUARD_SEED, mint.key().as_ref()],
+        bump = guard_config.bump,
+    )]
+    pub guard_config: Account<'info, GuardConfig>,
+}
+
+/// Advance the screening epoch (spec 10 §4.4). Every cached `EligibilityCapability`
+/// of this mint instantly becomes stale — the next transfer that requires
+/// eligibility fails closed until a fresh `refresh_eligibility` re-runs aegis's
+/// (sanctions-aware) `verify`/`verify_policy`. This is the near-real-time
+/// freeze lever: it does not wait for TTL and does not touch policy_epoch.
+pub fn handle_bump_screening_epoch(ctx: Context<BumpScreeningEpoch>) -> Result<()> {
+    let config = &mut ctx.accounts.guard_config;
+    config.screening_epoch = config.screening_epoch.saturating_add(1);
+    emit!(ScreeningEpochBumped {
+        mint: config.mint,
+        screening_epoch: config.screening_epoch,
     });
     Ok(())
 }

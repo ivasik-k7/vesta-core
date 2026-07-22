@@ -157,6 +157,14 @@ pub struct DegradeModeSet {
     pub automatic: bool,
 }
 
+/// The screening epoch was advanced — every cached capability of the mint is
+/// now stale (spec 10 §4.4 SANCTIONS fast-freeze).
+#[event]
+pub struct ScreeningEpochBumped {
+    pub mint: Pubkey,
+    pub screening_epoch: u64,
+}
+
 // ── Per-transfer decision (spec §10) ─────────────────────────────────────────
 
 /// One event per `execute` call, carrying a stable canonical reason code

@@ -210,6 +210,12 @@ pub mod argus {
         instructions::trust::handle_set_degrade_mode(ctx, mode)
     }
 
+    /// Advance the screening epoch (spec 10 phase 4 SANCTIONS): instantly stale
+    /// every cached capability of the mint for near-real-time freeze propagation.
+    pub fn bump_screening_epoch(ctx: Context<BumpScreeningEpoch>) -> Result<()> {
+        instructions::trust::handle_bump_screening_epoch(ctx)
+    }
+
     /// Invoked by Token-2022 on every transfer of a hooked mint (spec §5).
     #[instruction(discriminator = ExecuteInstruction::SPL_DISCRIMINATOR_SLICE)]
     pub fn execute(ctx: Context<Execute>, amount: u64) -> Result<()> {

@@ -32,6 +32,11 @@ pub struct GuardConfig {
     /// Bumped on any policy change; stamped into capabilities so a config change
     /// invalidates stale eligibility regardless of TTL (spec 09 §4.4).
     pub policy_epoch: u64,
+    /// Fast-revocation clock (spec 10 §4.4 SANCTIONS). Bumped by
+    /// `bump_screening_epoch` on a screening/sanctions event; a capability whose
+    /// `screening_epoch` differs is rejected regardless of TTL, so a freeze
+    /// propagates on the next transfer without waiting for expiry.
+    pub screening_epoch: u64,
     /// Per-mint peer-transfer freeze (rules 1–2 stay open — clawback/refunds).
     pub paused: bool,
     /// Policy bitset — see `crate::constants::flags`.
@@ -129,6 +134,14 @@ pub struct EligibilityCapability {
     pub aegis_program: Pubkey,
     /// `GuardConfig.policy_epoch` at mint time; must still match to be valid.
     pub policy_epoch: u64,
+    /// `GuardConfig.screening_epoch` at mint time (spec 10 §4.4 SANCTIONS). A
+    /// screening-epoch bump invalidates every capability of the mint regardless
+    /// of TTL — near-real-time sanctions/freeze propagation with no polling.
+    pub screening_epoch: u64,
+    /// Accreditation provenance carried from the aegis verdict (spec 10 §4.4
+    /// CORRIDOR): the issuer's jurisdiction and tier at verification time.
+    pub jurisdiction: u16,
+    pub tier: u8,
     pub issued_at: i64,
     /// Unix expiry; the capability is stale once `now >= expires_at`.
     pub expires_at: i64,

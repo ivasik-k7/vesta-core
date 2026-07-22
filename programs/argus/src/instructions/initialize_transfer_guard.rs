@@ -132,6 +132,7 @@ pub fn handle_initialize_transfer_guard(
     config.attestation_issuer = policy.attestation_issuer;
     config.policy = policy.policy;
     config.policy_epoch = 0;
+    config.screening_epoch = 0;
     config.paused = false;
     config.flags = policy.flags;
     config.daily_gift_cap = policy.daily_gift_cap;

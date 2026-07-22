@@ -121,7 +121,10 @@ pub fn handle_refresh_eligibility(ctx: Context<RefreshEligibility>) -> Result<()
     let subject = ctx.accounts.subject.key();
     let aegis_program = gc.aegis_program;
     let policy_epoch = gc.policy_epoch;
+    let screening_epoch = gc.screening_epoch;
     let bump = ctx.bumps.capability;
+    let jurisdiction = verdict.jurisdiction;
+    let tier = verdict.tier;
 
     let cap = &mut ctx.accounts.capability;
     cap.version = STATE_VERSION;
@@ -130,6 +133,9 @@ pub fn handle_refresh_eligibility(ctx: Context<RefreshEligibility>) -> Result<()
     cap.verdicts = verdicts;
     cap.aegis_program = aegis_program;
     cap.policy_epoch = policy_epoch;
+    cap.screening_epoch = screening_epoch;
+    cap.jurisdiction = jurisdiction;
+    cap.tier = tier;
     cap.issued_at = now;
     cap.expires_at = expires_at;
     cap.bump = bump;

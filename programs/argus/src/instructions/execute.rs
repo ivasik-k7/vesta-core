@@ -304,6 +304,7 @@ fn capability_ok(ctx: &Context<Execute>, destination_owner: Pubkey) -> Result<bo
         || cap.subject != destination_owner
         || cap.aegis_program != a.guard_config.aegis_program
         || cap.policy_epoch != a.guard_config.policy_epoch
+        || cap.screening_epoch != a.guard_config.screening_epoch
     {
         return Ok(false);
     }

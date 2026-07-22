@@ -649,6 +649,23 @@ impl World {
         self.send(&[ix], &[cranker], &cranker.pubkey())
     }
 
+    fn bump_screening_epoch(
+        &mut self,
+    ) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+        let authority = self.merchant_authority.insecure_clone();
+        let ix = Instruction {
+            program_id: argus::id(),
+            accounts: argus::accounts::BumpScreeningEpoch {
+                authority: authority.pubkey(),
+                mint: self.mint,
+                guard_config: self.guard_config(),
+            }
+            .to_account_metas(None),
+            data: argus::instruction::BumpScreeningEpoch {}.data(),
+        };
+        self.send(&[ix], &[&authority], &authority.pubkey())
+    }
+
     fn set_degrade(
         &mut self,
         mode: u8,
@@ -3134,4 +3151,137 @@ fn argus_trust_grace_window_absorbs_transient_failure() {
         w.config_of().degrade_mode,
         argus::constants::degrade::REDEMPTION_ONLY
     );
+}
+
+// ── Semantic predicates: SANCTIONS fast-freeze (spec 10, phase 4) ─────────────
+
+#[test]
+fn argus_screening_epoch_freezes_capabilities() {
+    let issuer_authority = Keypair::new();
+    let issuer = Pubkey::find_program_address(
+        &[
+            b"issuer",
+            issuer_authority.pubkey().as_ref(),
+            &0u64.to_le_bytes(),
+        ],
+        &aegis::id(),
+    )
+    .0;
+
+    let mut policy = base_policy();
+    policy.flags |= argus::constants::flags::REQUIRE_ATTESTATION;
+    policy.aegis_program = aegis::id();
+    policy.attestation_issuer = issuer;
+    policy.attestation_schema = aegis::constants::well_known_schema::REGION;
+    let mut w = setup_with_policy(policy);
+    w.svm
+        .airdrop(&issuer_authority.pubkey(), 5_000_000_000)
+        .unwrap();
+
+    let alice = Keypair::new();
+    let bob = Keypair::new();
+    prime_sender(&mut w, &alice, bob.pubkey(), 5_000);
+
+    let schema_id = aegis::constants::well_known_schema::REGION;
+    let attestation = Pubkey::find_program_address(
+        &[
+            b"attestation",
+            issuer.as_ref(),
+            bob.pubkey().as_ref(),
+            &schema_id.to_le_bytes(),
+        ],
+        &aegis::id(),
+    )
+    .0;
+
+    // Init issuer + issue bob a credential + refresh → capability is fresh.
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::InitIssuer {
+                authority: issuer_authority.pubkey(),
+                issuer,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::InitIssuer {
+                id: 0,
+                name: "GeoOracle".into(),
+            }
+            .data(),
+        }],
+        &[&issuer_authority],
+        &issuer_authority.pubkey(),
+    )
+    .unwrap();
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::IssueAttestation {
+                signer: issuer_authority.pubkey(),
+                issuer,
+                attestation,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::IssueAttestation {
+                subject: bob.pubkey(),
+                data: aegis::instructions::attestation::AttestationData {
+                    schema_id,
+                    commitment: [7u8; 32],
+                    attr_root: [0u8; 32],
+                    valid_from: 0,
+                    expires_at: 0,
+                },
+            }
+            .data(),
+        }],
+        &[&issuer_authority],
+        &issuer_authority.pubkey(),
+    )
+    .unwrap();
+    w.refresh_eligibility(&alice, bob.pubkey(), issuer, schema_id)
+        .unwrap();
+
+    // Fresh capability → gift flows.
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        1_000,
+        issuer,
+        true,
+    );
+    w.send(&[ix], &[&alice], &alice.pubkey()).unwrap();
+
+    // A screening/sanctions event bumps the epoch → the cached capability is
+    // instantly stale, even though its TTL has not elapsed.
+    w.bump_screening_epoch().unwrap();
+    assert_eq!(w.config_of().screening_epoch, 1);
+    w.warp_days(1); // fresh day so only the screening gate can block
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        1_000,
+        issuer,
+        true,
+    );
+    assert!(
+        w.send(&[ix], &[&alice], &alice.pubkey()).is_err(),
+        "gift passed on a capability stale by screening epoch"
+    );
+
+    // Re-screening (refresh) re-stamps the current epoch → gift flows again.
+    w.refresh_eligibility(&alice, bob.pubkey(), issuer, schema_id)
+        .unwrap();
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        1_000,
+        issuer,
+        true,
+    );
+    w.send(&[ix], &[&alice], &alice.pubkey()).unwrap();
 }
