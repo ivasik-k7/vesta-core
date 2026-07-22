@@ -1,15 +1,19 @@
-# VESTA Enterprise Specifications — Campaigns & Alliances v2
+# VESTA Enterprise Specifications
 
-This directory holds the implementation-grade technical specifications for the
-next evolution of VESTA's **campaigns** and **alliances** — turning them from
-single-merchant, notional features into a **provably-funded, cross-brand,
-self-settling coalition product**.
+Implementation-grade technical specifications for the next evolution of the VESTA
+protocol, organized into two tracks:
 
-The five specifications were derived from three independent design studies
-(loyalty-product, Solana-native, and enterprise/network-economics lenses); the
-directions below are the points where all three converged.
+- **Track A — Campaigns & Alliances** (specs 01–05): turning single-merchant,
+  notional features into a **provably-funded, cross-brand, self-settling coalition
+  product**.
+- **Track B — Identity & Trust / aegis** (specs 06–08): turning the attestation
+  program from a public-PII shell into a **privacy-preserving verification & trust
+  layer** for Solana.
 
-## The program, at a glance
+Each track was derived from three independent design studies; the directions
+below are the points where all three lenses converged.
+
+## Track A — Campaigns & Alliances, at a glance
 
 ```mermaid
 flowchart TB
@@ -41,6 +45,44 @@ flowchart TB
 
 **Recommended delivery order:** 01 → 02 → 03, then 04, then 05.
 
+## Track B — Identity & Trust (aegis), at a glance
+
+Repositions aegis from a credential *store* into the **enforcement + trust layer**
+that the [Solana Attestation Service (SAS)](https://solana.com/docs/tools/attestations)
+deliberately leaves thin. aegis does **not** rebuild SAS storage; it integrates
+over it.
+
+```mermaid
+flowchart TB
+    A6["<b>06 · Commitment Substrate + Typed Multi-Credential</b><br/>PII off-chain; on-chain commitment; GDPR-erasable<br/>SAS-compatible schema registry"]
+    A7["<b>07 · verify Interface + Policy Engine</b><br/>CPI verdict any program calls (over aegis + SAS)<br/>jurisdiction-aware policies; argus becomes a consumer"]
+    A8["<b>08 · Issuer Accreditation Trust Graph</b><br/>recursive accreditation + DID/PKI binding<br/>the un-forkable moat"]
+
+    A6 --> A7
+    A8 --> A7
+    A6 -.credentials.-> A8
+
+    style A6 fill:#7c2d12,stroke:#fb923c,color:#fff
+    style A7 fill:#1e3a8a,stroke:#60a5fa,color:#fff
+    style A8 fill:#14532d,stroke:#4ade80,color:#fff
+```
+
+| # | Spec | Layer | Depends on |
+|---|---|---|---|
+| 06 | [Commitment Substrate + Typed Multi-Credential](06-aegis-commitment-substrate.md) | Foundation (price of entry) | — |
+| 07 | [verify Interface + Policy Engine](07-aegis-verify-and-policy.md) | Composability / enforcement | 06 |
+| 08 | [Issuer Accreditation Trust Graph](08-aegis-issuer-accreditation.md) | Moat | 06 (07 to enforce) |
+
+**Recommended delivery order:** 06 → 07 → 08. ZK predicate gating, scalable
+revocation, and the trust-marketplace (metering/audit/delegation) are **wave 2**
+(higher risk / trusted-setup / liability) and are noted in each spec's roadmap,
+not specified here.
+
+**Thesis (Track B):** *aegis is a privacy-preserving verification & trust layer —
+issuers publish only commitments + accreditation, holders keep their data, and any
+program gates via a `verify` verdict over revocable credentials (aegis-native and
+SAS), learning that a rule holds and nothing about the person.*
+
 ---
 
 ## Shared conventions (normative for all specs)
@@ -68,6 +110,28 @@ otherwise. New cross-program reads follow the **pinned-derivation** rule (§Secu
 
 New seeds introduced by these specs are namespaced with fresh, distinct prefixes
 and listed per spec. No new seed may share a prefix with the above.
+
+### Track B conventions (aegis / SAS / crypto) — normative for specs 06–08
+- **Integrate, don't rebuild.** aegis does not duplicate SAS's Credential→Schema→
+  Attestation *storage*. `verify` (spec 07) reads both aegis-native attestation
+  accounts **and** SAS attestation PDAs; aegis schemas may alias a SAS schema.
+  SDKs to interop with: `sas-lib` (TS), `solana-attestation-service-client` (Rust).
+- **PII never on-chain.** On-chain stores only commitments (hiding + binding),
+  Merkle roots, validity, revocation, and non-identifying policy metadata. Real
+  claims live off-chain with the holder/issuer (W3C-VC-shaped).
+- **Available Solana crypto (verified):** `sol_poseidon` (BN254-field ZK-friendly
+  hash), `alt_bn128` add/mul/**pairing** (Groth16/BN254 verification — wave 2),
+  the **secp256r1 precompile** (P-256/ES256 → mDL, WebAuthn, national PKI/eIDAS),
+  the Ed25519 precompile, and **state compression** (concurrent Merkle trees).
+  **Not** available: BLS12-381 pairings (so BBS+ selective disclosure stays
+  off-chain). Any spec naming a proof states its curve, hash, and where it runs.
+- **`verify` is read-only & parallelizable.** It mutates nothing and writes its
+  verdict via `sol_set_return_data`; it must not take write locks (no shared
+  counter) so verifications don't serialize.
+- **Versioned account header.** Every aegis account carries `version: u8`
+  immediately after the discriminator; readers/`verify` gate on it, so storage can
+  evolve without breaking integrators (this replaces argus's current fragile
+  fixed-offset reads — audit-adjacent robustness).
 
 ### Money model
 - Points are **Token-2022** mints with `InterestBearingConfig` (negative rate =
@@ -132,7 +196,7 @@ and `cargo test` are the merge gate. On-chain SBF binaries must be rebuilt
 (`anchor build`) before the LiteSVM suite (it loads `target/deploy/*.so`).
 
 ### Spec status
-All five are **Draft / Proposed** — design agreed, not yet scheduled. Each
+All specs are **Draft / Proposed** — design agreed, not yet scheduled. Each
 carries an Open Questions section to resolve before implementation.
 
 ---
