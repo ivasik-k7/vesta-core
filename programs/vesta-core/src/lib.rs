@@ -227,6 +227,22 @@ pub mod vesta_core {
         instructions::merchant_admin::handle_set_daily_issue_cap(ctx, daily_cap_raw)
     }
 
+    /// Adopt/update/disable scoped operator roles — separation of duties
+    /// (spec 13 §4.1). Owner-only, opt-in.
+    pub fn set_merchant_governance(
+        ctx: Context<MerchantOwnerOnly>,
+        enabled: bool,
+        cashier: Pubkey,
+        campaign_manager: Pubkey,
+    ) -> Result<()> {
+        instructions::merchant_admin::handle_set_merchant_governance(
+            ctx,
+            enabled,
+            cashier,
+            campaign_manager,
+        )
+    }
+
     pub fn create_achievement(
         ctx: Context<CreateAchievement>,
         id: u64,

@@ -169,7 +169,7 @@ pub fn handle_earn_points(
     require!(
         ctx.accounts
             .merchant
-            .can_operate(&ctx.accounts.merchant_authority.key()),
+            .may_earn(&ctx.accounts.merchant_authority.key()),
         VestaError::Unauthorized
     );
     require!(amount_base > 0, VestaError::InvalidAmount);
@@ -291,7 +291,7 @@ pub fn handle_earn_points_campaign(
     require!(
         ctx.accounts
             .merchant
-            .can_operate(&ctx.accounts.merchant_authority.key()),
+            .may_earn(&ctx.accounts.merchant_authority.key()),
         VestaError::Unauthorized
     );
     require!(amount_base > 0, VestaError::InvalidAmount);

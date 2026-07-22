@@ -3998,3 +3998,103 @@ fn merchant_daily_issuance_cap_bounds_minting() {
     w.warp_days(1);
     try_earn(&mut w, bob.pubkey(), 10).unwrap();
 }
+
+// ── Operator RBAC / separation of duties (spec 13, phase 1b) ─────────────────
+
+fn set_merchant_governance(
+    w: &mut World,
+    enabled: bool,
+    cashier: Pubkey,
+    campaign_manager: Pubkey,
+) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+    let authority = w.merchant_authority.insecure_clone();
+    let ix = Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::MerchantOwnerOnly {
+            authority: authority.pubkey(),
+            merchant: w.merchant,
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::SetMerchantGovernance {
+            enabled,
+            cashier,
+            campaign_manager,
+        }
+        .data(),
+    };
+    w.send(&[ix], &[&authority], &authority.pubkey())
+}
+
+/// Earn signed by an arbitrary operator (not necessarily the owner).
+fn try_earn_as(
+    w: &mut World,
+    signer: &Keypair,
+    customer: Pubkey,
+    amount_base: u64,
+) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+    let visit_day = (w.svm.get_sysvar::<Clock>().unix_timestamp / 86_400) as u32;
+    let profile = Pubkey::find_program_address(
+        &[CUSTOMER_SEED, w.merchant.as_ref(), customer.as_ref()],
+        &vesta_core::id(),
+    )
+    .0;
+    let ata = get_associated_token_address_with_program_id(&customer, &w.mint, &TOKEN_2022_ID);
+    let ix = Instruction {
+        program_id: vesta_core::id(),
+        accounts: vesta_core::accounts::EarnPoints {
+            merchant_authority: signer.pubkey(),
+            merchant: w.merchant,
+            customer,
+            customer_profile: profile,
+            point_mint: w.mint,
+            customer_ata: ata,
+            config: w.config,
+            token_program: TOKEN_2022_ID,
+            associated_token_program: ATA_PROGRAM_ID,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+        data: vesta_core::instruction::EarnPoints {
+            amount_base,
+            visit_day,
+        }
+        .data(),
+    };
+    w.send(&[ix], &[signer], &signer.pubkey())
+}
+
+#[test]
+fn merchant_rbac_separates_cashier_from_owner() {
+    let mut w = setup();
+    let owner = w.merchant_authority.insecure_clone();
+    let cashier = Keypair::new();
+    let manager = Keypair::new();
+    for k in [&cashier, &manager] {
+        w.svm.airdrop(&k.pubkey(), 5_000_000_000).unwrap();
+    }
+    let alice = Keypair::new();
+    w.svm.airdrop(&alice.pubkey(), 5_000_000_000).unwrap();
+
+    // Before governance, the owner can earn (flat model).
+    try_earn_as(&mut w, &owner, alice.pubkey(), 5).unwrap();
+
+    // Adopt SoD: cashier mints, campaign_manager manages.
+    set_merchant_governance(&mut w, true, cashier.pubkey(), manager.pubkey()).unwrap();
+
+    // The owner is no longer a cashier → cannot earn.
+    assert!(
+        try_earn_as(&mut w, &owner, alice.pubkey(), 5).is_err(),
+        "owner minted without the cashier role"
+    );
+    // A random operator cannot earn either.
+    assert!(
+        try_earn_as(&mut w, &manager, alice.pubkey(), 5).is_err(),
+        "campaign_manager minted without the cashier role"
+    );
+    // The cashier can.
+    try_earn_as(&mut w, &cashier, alice.pubkey(), 5).unwrap();
+
+    // Disabling governance restores the flat model (owner can earn again).
+    set_merchant_governance(&mut w, false, Pubkey::default(), Pubkey::default()).unwrap();
+    try_earn_as(&mut w, &owner, alice.pubkey(), 5).unwrap();
+}

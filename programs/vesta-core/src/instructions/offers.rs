@@ -50,7 +50,7 @@ pub fn handle_create_offer(
     require!(
         ctx.accounts
             .merchant
-            .can_operate(&ctx.accounts.authority.key()),
+            .may_manage(&ctx.accounts.authority.key()),
         VestaError::Unauthorized
     );
     require!(price_points > 0, VestaError::InvalidAmount);
@@ -112,7 +112,7 @@ pub struct RedeemOffer<'info> {
         bump = merchant.bump,
         has_one = point_mint @ VestaError::MintMismatch,
     )]
-    pub merchant: Account<'info, Merchant>,
+    pub merchant: Box<Account<'info, Merchant>>,
 
     #[account(mut, has_one = merchant @ VestaError::MerchantMismatch)]
     pub offer: Account<'info, Offer>,
@@ -147,7 +147,7 @@ pub struct RedeemOffer<'info> {
         seeds = [MINT_SEED, merchant.key().as_ref()],
         bump = merchant.mint_bump,
     )]
-    pub point_mint: InterfaceAccount<'info, Mint>,
+    pub point_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
@@ -155,7 +155,7 @@ pub struct RedeemOffer<'info> {
         associated_token::authority = customer,
         associated_token::token_program = token_program,
     )]
-    pub customer_ata: InterfaceAccount<'info, TokenAccount>,
+    pub customer_ata: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(seeds = [CONFIG_SEED], bump = config.bump)]
     pub config: Account<'info, Config>,

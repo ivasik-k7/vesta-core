@@ -195,6 +195,14 @@ pub struct IssuanceCapSet {
 }
 
 #[event]
+pub struct MerchantGovernanceSet {
+    pub merchant: Pubkey,
+    pub enabled: bool,
+    pub cashier: Pubkey,
+    pub campaign_manager: Pubkey,
+}
+
+#[event]
 pub struct ReserveOpened {
     pub merchant: Pubkey,
     pub backing_mint: Pubkey,

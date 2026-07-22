@@ -333,6 +333,9 @@ pub fn handle_register_merchant(
     merchant.daily_issue_cap_raw = 0;
     merchant.issued_today = 0;
     merchant.issue_day = 0;
+    merchant.governance_enabled = false;
+    merchant.cashier = Pubkey::default();
+    merchant.campaign_manager = Pubkey::default();
 
     emit!(MerchantRegistered {
         merchant: merchant_key,

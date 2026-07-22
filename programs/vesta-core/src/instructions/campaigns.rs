@@ -107,7 +107,7 @@ pub fn handle_create_campaign(
     require!(
         ctx.accounts
             .merchant
-            .can_operate(&ctx.accounts.authority.key()),
+            .may_manage(&ctx.accounts.authority.key()),
         VestaError::Unauthorized
     );
     validate(&args)?;

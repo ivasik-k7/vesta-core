@@ -75,6 +75,15 @@ pub struct Merchant {
     pub daily_issue_cap_raw: u64,
     pub issued_today: u64,
     pub issue_day: u32,
+    // ── separation of duties (spec 13 §4.1) ──────────────────────────────────
+    /// When set, the flat `operators`/`can_operate` model is replaced by scoped
+    /// roles below — the mint path needs the `cashier` key, campaign/offer/badge
+    /// creation needs `campaign_manager`. Opt-in; off = today's behavior.
+    pub governance_enabled: bool,
+    /// May run the mint path (`earn_points`, `earn_points_campaign`).
+    pub cashier: Pubkey,
+    /// May create campaigns, offers, and achievements.
+    pub campaign_manager: Pubkey,
 }
 
 impl Merchant {
@@ -82,6 +91,26 @@ impl Merchant {
     pub fn can_operate(&self, signer: &Pubkey) -> bool {
         *signer == self.authority
             || self.operators[..usize::from(self.operator_count)].contains(signer)
+    }
+
+    /// Authorized to run the mint path. Under governance, requires the `cashier`
+    /// role (separation of duties); otherwise falls back to `can_operate`.
+    pub fn may_earn(&self, signer: &Pubkey) -> bool {
+        if self.governance_enabled {
+            *signer == self.cashier
+        } else {
+            self.can_operate(signer)
+        }
+    }
+
+    /// Authorized to create campaigns / offers / achievements. Under governance,
+    /// requires the `campaign_manager` role; otherwise falls back to `can_operate`.
+    pub fn may_manage(&self, signer: &Pubkey) -> bool {
+        if self.governance_enabled {
+            *signer == self.campaign_manager
+        } else {
+            self.can_operate(signer)
+        }
     }
 }
 

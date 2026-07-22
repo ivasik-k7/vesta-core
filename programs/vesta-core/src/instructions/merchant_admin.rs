@@ -4,8 +4,8 @@ use crate::{
     constants::{CONFIG_SEED, MAX_METADATA_URI_LEN, MERCHANT_SEED},
     error::VestaError,
     events::{
-        ClawbackCapSet, IssuanceCapSet, MerchantOperatorSet, MerchantPausedSet,
-        MerchantProfileUpdated, MerchantVerifiedSet,
+        ClawbackCapSet, IssuanceCapSet, MerchantGovernanceSet, MerchantOperatorSet,
+        MerchantPausedSet, MerchantProfileUpdated, MerchantVerifiedSet,
     },
     state::{Config, Merchant, MAX_OPERATORS},
 };
@@ -108,6 +108,37 @@ pub fn handle_set_daily_issue_cap(
     emit!(IssuanceCapSet {
         merchant: m.key(),
         daily_cap_raw,
+    });
+    Ok(())
+}
+
+/// Adopt (or update / disable) scoped operator roles — separation of duties
+/// (spec 13 §4.1). Owner-only. While `enabled`, the mint path requires the
+/// `cashier` key and campaign/offer/badge creation requires `campaign_manager`,
+/// replacing the flat `operators`/`can_operate` model.
+pub fn handle_set_merchant_governance(
+    ctx: Context<MerchantOwnerOnly>,
+    enabled: bool,
+    cashier: Pubkey,
+    campaign_manager: Pubkey,
+) -> Result<()> {
+    // A live governance config must name both roles, or an action would be
+    // permanently unreachable (fail-closed by default-key mismatch).
+    if enabled {
+        require!(
+            cashier != Pubkey::default() && campaign_manager != Pubkey::default(),
+            VestaError::Unauthorized
+        );
+    }
+    let m = &mut ctx.accounts.merchant;
+    m.governance_enabled = enabled;
+    m.cashier = cashier;
+    m.campaign_manager = campaign_manager;
+    emit!(MerchantGovernanceSet {
+        merchant: m.key(),
+        enabled,
+        cashier,
+        campaign_manager,
     });
     Ok(())
 }
