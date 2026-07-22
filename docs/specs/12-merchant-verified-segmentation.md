@@ -1,7 +1,23 @@
 # 12 · vesta_core — Verified Customer Segmentation & Programmable Growth
 
-> **Status:** Draft / Proposed · **Track:** D (Merchant) · **Layer:** Growth engine / the differentiator · **Codename:** PROSOPON · **Depends on:** 06 (commitments), 07 (verify/policy), argus capability model (shipped v2.1.0); (11) for merchant trust
+> **Status:** ◒ Core shipped (vesta_core v2.1.0) · **Track:** D (Merchant) · **Layer:** Growth engine / the differentiator · **Codename:** PROSOPON · **Depends on:** 06 (commitments), 07 (verify/policy), argus capability model (shipped v2.1.0); (11) for merchant trust
 > Inherits all [shared conventions](README.md#shared-conventions-normative-for-all-specs).
+>
+> **Implemented:** (§4.1) `MerchantSegments` + `CustomerEligibility` verdict cache
+> + `set_merchant_segments` / permissionless `refresh_customer_eligibility` (CPIs
+> aegis `verify`, privacy-preserving bitmap) — the moat foundation. (§4.2)
+> segment-boosted earn: `Segment.boost_bps` composed into the earn multiplier via
+> optional accounts on `earn_points`, re-clamped to the ×2.4 ceiling. (§4.3)
+> winback campaigns: `Campaign.min_days_inactive` + `set_campaign_winback`, gated
+> on the pre-earn `last_visit_day`. (§4.5) segment-gated offers:
+> `Offer.required_segment` + `set_offer_segment`, enforced in `redeem_offer`.
+>
+> **Backlog (documented, not built):** the full `EarnPolicy` rule tape (§4.2) —
+> largely subsumed by campaigns + segment boost + winback already shipped; and
+> sybil-gated referral (§4.4) — a heavy multi-mint instruction deferred for its
+> stack/complexity cost relative to marginal value. Segments currently use aegis
+> `verify` over `(issuer, schema)`; upgrading to named `Policy` (`verify_policy`)
+> is a field swap with the cache shape unchanged.
 
 ## 1. Summary
 

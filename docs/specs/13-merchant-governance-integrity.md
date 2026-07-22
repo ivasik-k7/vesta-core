@@ -1,7 +1,24 @@
 # 13 · vesta_core — Merchant Governance & Operational Integrity
 
-> **Status:** Draft / Proposed · **Track:** D (Merchant) · **Layer:** Integrity / separation-of-duties / audit · **Codename:** EPHORATE · **Depends on:** argus governance model (shipped v2.1.0); (11) for trust status
+> **Status:** ◒ Core shipped (vesta_core v2.1.0) · **Track:** D (Merchant) · **Layer:** Integrity / separation-of-duties / audit · **Codename:** EPHORATE · **Depends on:** argus governance model (shipped v2.1.0); (11) for trust status
 > Inherits all [shared conventions](README.md#shared-conventions-normative-for-all-specs).
+>
+> **Implemented:** (§4.1) operator RBAC / separation of duties — `Merchant`
+> `governance_enabled` + `cashier` / `campaign_manager` role keys, gating the
+> mint path and campaign/offer/badge creation (`may_earn` / `may_manage`), set via
+> `set_merchant_governance`. (§4.2) issuance circuit breaker —
+> `Merchant.daily_issue_cap_raw` enforced in `accrue` (symmetric to the clawback
+> cap), set via `set_daily_issue_cap`. (§4.4) decision statements —
+> `MerchantStatement` + `anchor_merchant_statement` (owner-anchored Merkle root +
+> completeness witness).
+>
+> **Backlog (documented, not built):** the governed config lifecycle (§4.3) — a
+> large port of argus `PolicyVersion`/`PolicyPointer`; the shipped RBAC + issuance
+> cap already bound the concrete insider-risk it targets. Dual-control clawback +
+> owner recovery (§4.5) — deferred for stack-frame risk on the already-tight
+> clawback instruction relative to marginal value over the shipped owner-only +
+> daily-cap controls. Role management is owner-set (timelocked role changes not
+> yet ported).
 
 ## 1. Summary
 
