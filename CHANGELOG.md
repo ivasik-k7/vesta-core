@@ -3,6 +3,35 @@
 All notable changes to the VESTA on-chain programs are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — Identity & Trust rework (specs 06/07/09, phase 1)
+
+Crates bumped to **2.0.0** (breaking on-chain layout changes; devnet redeploy).
+
+### Changed — aegis (privacy-preserving attestations, [spec 06](docs/specs/06-aegis-commitment-substrate.md)/[07](docs/specs/07-aegis-verify-and-policy.md))
+- `Attestation` no longer stores a public `value` bitmask. It stores a hiding
+  **commitment** + per-attribute Merkle root; PII lives off-chain (GDPR-safe).
+- **Multi-credential**: PDA re-seeded `["attestation", issuer, subject, schema_id]`.
+- New **`Schema` registry** (`register_schema`/`deprecate_schema`), SAS-aliasable.
+- New terminal **`erase_attestation`** (cryptographic erasure) + `status` enum.
+- New **`verify(subject, predicate) → Verdict`** interface (return-data;
+  `Present` + `AttributeDisclosed`/sha256 Merkle), the stable way to consume aegis.
+- Every account carries a `version` header.
+
+### Changed — argus (capability-based eligibility, [spec 09](docs/specs/09-argus-policy-vm.md))
+- `execute` no longer reads aegis by fixed byte offset. It reads a cached
+  **`EligibilityCapability`** (`["cap", mint, subject]`) — no hot-path CPI.
+- New off-path **`refresh_eligibility`** CPIs aegis `verify` once and caches the
+  verdict bitmap; `GuardConfig` gains `version`/`policy_epoch`/`aegis_program`,
+  `attestation_schema` widened to `u64`, `attestation_mask` removed.
+- Capability invalidation via `policy_epoch` bump + TTL; fail-closed
+  (`EligibilityStale`) on a missing/stale capability. ExtraAccountMetaList swaps
+  the aegis program/issuer/attestation trio for the single capability account.
+
+### Migration
+- Breaking: aegis + argus account layouts changed; ship 06+07+09 together
+  (guard/clawback tests migrated to the commitment + capability flow). ZK
+  predicates, accreditation (08), and enterprise governance (10) remain wave 2.
+
 ## [2.0.0] — 2026-07 (devnet)
 
 Current live deployment. Program IDs in [README → Deployments](README.md#deployments).

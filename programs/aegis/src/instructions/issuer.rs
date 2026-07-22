@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 
 use crate::{
-    constants::{ISSUER_SEED, MAX_NAME_LEN},
+    constants::{ISSUER_SEED, MAX_NAME_LEN, STATE_VERSION},
     error::AegisError,
     events::{
         IssuerAuthorityChanged, IssuerAuthorityProposed, IssuerInitialized, IssuerOperatorSet,
@@ -34,6 +34,7 @@ pub fn handle_init_issuer(ctx: Context<InitIssuer>, id: u64, name: String) -> Re
         AegisError::InvalidName
     );
     let issuer = &mut ctx.accounts.issuer;
+    issuer.version = STATE_VERSION;
     issuer.id = id;
     issuer.authority = ctx.accounts.authority.key();
     issuer.pending_authority = None;

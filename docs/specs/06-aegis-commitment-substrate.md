@@ -1,6 +1,6 @@
 # 06 · aegis — Commitment Substrate + Typed Multi-Credential
 
-> **Status:** Draft / Proposed · **Track:** B (Identity & Trust) · **Layer:** Foundation (price of entry) · **Depends on:** —
+> **Status:** ✅ Phase 1 implemented (v2.0.0) · **Track:** B (Identity & Trust) · **Layer:** Foundation (price of entry) · **Depends on:** —
 > **Unlocks:** 07 (verify/policy), 08 (accreditation)
 > Inherits all [shared conventions](README.md#shared-conventions-normative-for-all-specs), incl. [Track B conventions](README.md#track-b-conventions-aegis--sas--crypto--normative-for-specs-0608).
 

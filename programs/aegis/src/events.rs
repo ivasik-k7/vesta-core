@@ -33,11 +33,23 @@ pub struct IssuerAuthorityChanged {
 }
 
 #[event]
+pub struct SchemaRegistered {
+    pub schema: Pubkey,
+    pub registrar: Pubkey,
+    pub id: u64,
+}
+
+#[event]
+pub struct SchemaDeprecated {
+    pub schema: Pubkey,
+    pub successor: Option<Pubkey>,
+}
+
+#[event]
 pub struct AttestationIssued {
     pub issuer: Pubkey,
     pub subject: Pubkey,
-    pub schema: u16,
-    pub value: u64,
+    pub schema_id: u64,
     pub valid_from: i64,
     pub expires_at: i64,
 }
@@ -46,8 +58,7 @@ pub struct AttestationIssued {
 pub struct AttestationUpdated {
     pub issuer: Pubkey,
     pub subject: Pubkey,
-    pub schema: u16,
-    pub value: u64,
+    pub schema_id: u64,
     pub valid_from: i64,
     pub expires_at: i64,
 }
@@ -56,11 +67,20 @@ pub struct AttestationUpdated {
 pub struct AttestationRevoked {
     pub issuer: Pubkey,
     pub subject: Pubkey,
+    pub schema_id: u64,
     pub reason_code: u16,
+}
+
+#[event]
+pub struct AttestationErased {
+    pub issuer: Pubkey,
+    pub subject: Pubkey,
+    pub schema_id: u64,
 }
 
 #[event]
 pub struct AttestationClosed {
     pub issuer: Pubkey,
     pub subject: Pubkey,
+    pub schema_id: u64,
 }

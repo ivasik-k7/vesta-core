@@ -1,6 +1,6 @@
 # 07 · aegis — `verify` Interface + Policy Engine
 
-> **Status:** Draft / Proposed · **Track:** B · **Layer:** Composability / enforcement · **Depends on:** 06
+> **Status:** ◒ Phase 1 partial (v2.0.0 — `verify` shipped; policy engine wave 2) · **Track:** B · **Layer:** Composability / enforcement · **Depends on:** 06
 > **Unlocks:** any program (argus first) gating on credentials; enforces 08
 > Inherits all [shared conventions](README.md#shared-conventions-normative-for-all-specs), incl. [Track B conventions](README.md#track-b-conventions-aegis--sas--crypto--normative-for-specs-0608).
 

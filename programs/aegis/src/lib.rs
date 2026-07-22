@@ -65,7 +65,33 @@ pub mod aegis {
         instructions::issuer::handle_accept_issuer_authority(ctx)
     }
 
-    /// Issue a fresh attestation for a subject wallet (authority or operator).
+    /// Register a typed, versioned credential schema (a shape, no subject data).
+    pub fn register_schema(
+        ctx: Context<RegisterSchema>,
+        id: u64,
+        content_hash: [u8; 32],
+        standard_uri: String,
+        sas_schema: Option<Pubkey>,
+    ) -> Result<()> {
+        instructions::schema::handle_register_schema(
+            ctx,
+            id,
+            content_hash,
+            standard_uri,
+            sas_schema,
+        )
+    }
+
+    /// Deprecate a schema, optionally pointing at a successor (registrar only).
+    pub fn deprecate_schema(
+        ctx: Context<DeprecateSchema>,
+        successor: Option<Pubkey>,
+    ) -> Result<()> {
+        instructions::schema::handle_deprecate_schema(ctx, successor)
+    }
+
+    /// Issue a fresh attestation for a subject (authority or operator). The
+    /// chain stores only a commitment + Merkle root — never plaintext claims.
     pub fn issue_attestation(
         ctx: Context<IssueAttestation>,
         subject: Pubkey,
@@ -88,8 +114,21 @@ pub mod aegis {
         instructions::attestation::handle_revoke_attestation(ctx, reason_code)
     }
 
+    /// Cryptographically erase an attestation (GDPR): off-chain PII + salt
+    /// destroyed, the commitment is now unopenable. Terminal.
+    pub fn erase_attestation(ctx: Context<ManageAttestation>) -> Result<()> {
+        instructions::attestation::handle_erase_attestation(ctx)
+    }
+
     /// Close an attestation and reclaim rent to the issuer authority.
     pub fn close_attestation(ctx: Context<CloseAttestation>) -> Result<()> {
         instructions::attestation::handle_close_attestation(ctx)
+    }
+
+    /// Stateless verdict primitive (spec 07): evaluate a predicate over an
+    /// attestation and return a `Verdict` via return-data. Any program CPIs
+    /// this instead of reading aegis accounts by layout.
+    pub fn verify(ctx: Context<Verify>, predicate: VerifyPredicate) -> Result<()> {
+        instructions::verify::handle_verify(ctx, predicate)
     }
 }

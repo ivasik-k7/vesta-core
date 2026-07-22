@@ -4,6 +4,8 @@ use anchor_lang::prelude::*;
 pub enum AegisError {
     #[msg("Issuer name is empty or exceeds the maximum length")]
     InvalidName,
+    #[msg("String exceeds the maximum length")]
+    StringTooLong,
     #[msg("Not authorized for this issuer (authority or operator required)")]
     Unauthorized,
     #[msg("Only the issuer authority may perform this action")]
@@ -16,6 +18,16 @@ pub enum AegisError {
     InvalidExpiry,
     #[msg("valid_from must be zero or a sane (non-negative) timestamp")]
     InvalidValidFrom,
-    #[msg("Attestation already revoked")]
+    #[msg("Attestation is revoked or erased — terminal, cannot be modified")]
     AlreadyRevoked,
+    #[msg("Schema is deprecated")]
+    SchemaDeprecated,
+    #[msg("Schema id mismatch between the attestation and the schema account")]
+    SchemaMismatch,
+    #[msg("Merkle disclosure path exceeds the maximum depth")]
+    DisclosureTooDeep,
+    #[msg("Account layout version is not supported")]
+    UnsupportedVersion,
+    #[msg("Unknown or malformed predicate")]
+    UnknownPredicate,
 }

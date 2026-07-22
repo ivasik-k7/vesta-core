@@ -1,7 +1,7 @@
 [package]
 name = "aegis"
-version = "0.1.0"
-description = "VESTA attestation issuer: signed region/tier/KYC credentials that argus and vesta_core gate on"
+version = "2.0.0"
+description = "VESTA attestation & trust layer: privacy-preserving commitments + verify interface"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -24,6 +24,7 @@ custom-panic = []
 [dependencies]
 anchor-lang = "1.1.2"
 solana-security-txt = "1.1.1"
+solana-sha256-hasher = "3.1.0"
 
 [lints]
 workspace = true

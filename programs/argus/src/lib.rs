@@ -88,6 +88,13 @@ pub mod argus {
         instructions::open_wallet_state::handle_open_wallet_state(ctx)
     }
 
+    /// Off-hot-path: cache a subject's aegis eligibility as a capability that
+    /// `execute` reads with no CPI (spec 09). Permissionless; bundle before a
+    /// transfer when the capability is missing or stale.
+    pub fn refresh_eligibility(ctx: Context<RefreshEligibility>) -> Result<()> {
+        instructions::refresh_eligibility::handle_refresh_eligibility(ctx)
+    }
+
     /// Invoked by Token-2022 on every transfer of a hooked mint (spec §5).
     #[instruction(discriminator = ExecuteInstruction::SPL_DISCRIMINATOR_SLICE)]
     pub fn execute(ctx: Context<Execute>, amount: u64) -> Result<()> {

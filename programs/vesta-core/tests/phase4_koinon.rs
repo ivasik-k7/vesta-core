@@ -823,9 +823,9 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
                 max_wallet_balance: 0,
                 transfers_per_day_cap: 0,
                 cooldown_secs: 0,
+                aegis_program: Pubkey::default(),
                 attestation_issuer: Pubkey::default(),
                 attestation_schema: 0,
-                attestation_mask: 0,
             },
         }
         .data(),
@@ -845,15 +845,11 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
     let g = |seeds: &[&[u8]]| Pubkey::find_program_address(seeds, &argus::id()).0;
     let clawback_ix =
         |actor: Pubkey, amount: u64, destination: Pubkey, dest_owner: Pubkey, reason: u16| {
-            let attestation = Pubkey::find_program_address(
-                &[
-                    b"attestation",
-                    Pubkey::default().as_ref(),
-                    dest_owner.as_ref(),
-                ],
-                &aegis::id(),
-            )
-            .0;
+            // v2 EAML: argus resolves its own EligibilityCapability for the
+            // destination owner (index 9) — never aegis accounts. Clawback hits
+            // argus rule 1 (permanent delegate) and returns before reading it,
+            // but Token-2022 still resolves every EAML extra, so it must be here.
+            let capability = g(&[b"cap", kavarna.mint.as_ref(), dest_owner.as_ref()]);
             let customer_profile = Pubkey::find_program_address(
                 &[
                     CUSTOMER_SEED,
@@ -887,9 +883,7 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
                     g(&[b"entry", kavarna.mint.as_ref(), dest_owner.as_ref()]),
                     false,
                 ),
-                AccountMeta::new_readonly(aegis::id(), false),
-                AccountMeta::new_readonly(Pubkey::default(), false),
-                AccountMeta::new_readonly(attestation, false),
+                AccountMeta::new_readonly(capability, false),
                 AccountMeta::new_readonly(argus::id(), false),
                 AccountMeta::new_readonly(eaml, false),
             ]);

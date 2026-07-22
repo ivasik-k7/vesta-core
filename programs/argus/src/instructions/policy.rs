@@ -2,9 +2,9 @@ use anchor_lang::prelude::*;
 
 use crate::{constants::flags, error::GuardError, state::GuardConfig};
 
-/// Full policy supplied at guard init. The attestation issuer/program are
-/// fixed here for the life of the guard (baked into the meta list); everything
-/// else is retunable via `configure_policy`.
+/// Full policy supplied at guard init. The aegis program + issuer are fixed
+/// here for the life of the guard; everything else is retunable via
+/// `configure_policy`.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct InitialPolicy {
     pub flags: u16,
@@ -13,14 +13,15 @@ pub struct InitialPolicy {
     pub max_wallet_balance: u64,
     pub transfers_per_day_cap: u16,
     pub cooldown_secs: u32,
+    /// aegis deployment to consult (`verify`); default to the canonical AEGIS_ID.
+    pub aegis_program: Pubkey,
     /// aegis issuer to trust; `Pubkey::default()` when attestation is unused.
     pub attestation_issuer: Pubkey,
-    pub attestation_schema: u16,
-    pub attestation_mask: u64,
+    pub attestation_schema: u64,
 }
 
 /// Partial retune. Every field is optional; `None` leaves the value untouched.
-/// The attestation issuer is intentionally absent — it is immutable post-init.
+/// The aegis program/issuer are intentionally absent — immutable post-init.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, Default)]
 pub struct PolicyUpdate {
     pub flags: Option<u16>,
@@ -29,12 +30,12 @@ pub struct PolicyUpdate {
     pub max_wallet_balance: Option<u64>,
     pub transfers_per_day_cap: Option<u16>,
     pub cooldown_secs: Option<u32>,
-    pub attestation_schema: Option<u16>,
-    pub attestation_mask: Option<u64>,
+    pub attestation_schema: Option<u64>,
 }
 
 impl PolicyUpdate {
-    /// Apply the set fields onto `config`, then validate the result as a whole.
+    /// Apply the set fields onto `config`, bump the policy epoch (invalidating
+    /// cached eligibility), then validate the result as a whole.
     pub fn apply(&self, config: &mut GuardConfig) -> Result<()> {
         if let Some(v) = self.flags {
             config.flags = v;
@@ -57,13 +58,12 @@ impl PolicyUpdate {
         if let Some(v) = self.attestation_schema {
             config.attestation_schema = v;
         }
-        if let Some(v) = self.attestation_mask {
-            config.attestation_mask = v;
-        }
+        config.policy_epoch = config.policy_epoch.saturating_add(1);
         validate_policy(
             config.flags,
             config.daily_gift_cap,
             config.per_tx_cap,
+            config.aegis_program,
             config.attestation_issuer,
         )
     }
@@ -82,6 +82,7 @@ pub fn validate_policy(
     flags: u16,
     daily_gift_cap: u64,
     per_tx_cap: u64,
+    aegis_program: Pubkey,
     attestation_issuer: Pubkey,
 ) -> Result<()> {
     require!(flags & !flags::KNOWN == 0, GuardError::UnknownFlag);
@@ -89,10 +90,11 @@ pub fn validate_policy(
     if daily_gift_cap != 0 && per_tx_cap != 0 {
         require!(per_tx_cap <= daily_gift_cap, GuardError::InvalidPolicy);
     }
-    // Requiring attestation without naming an issuer can never pass — fail loud.
+    // Requiring attestation without a trusted aegis program + issuer can never
+    // pass — fail loud at configure time.
     if flags & flags::REQUIRE_ATTESTATION != 0 {
         require!(
-            attestation_issuer != Pubkey::default(),
+            aegis_program != Pubkey::default() && attestation_issuer != Pubkey::default(),
             GuardError::InvalidPolicy
         );
     }

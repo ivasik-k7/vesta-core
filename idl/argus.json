@@ -2,9 +2,9 @@
   "address": "9zJEWrk47z1ACT3ySMwzmUrMsQzFC8afBSFcsCzsz3rx",
   "metadata": {
     "name": "argus",
-    "version": "0.1.0",
+    "version": "2.0.0",
     "spec": "0.1.0",
-    "description": "VESTA transfer hook guard: validates point transfers (whitelisted flows, gift limits)",
+    "description": "VESTA transfer-hook policy engine: aegis-verified eligibility + velocity/list controls",
     "repository": "https://github.com/ivasik-k7/vesta-core"
   },
   "instructions": [
@@ -289,13 +289,10 @@
           "name": "list_entry"
         },
         {
-          "name": "aegis_program"
-        },
-        {
-          "name": "aegis_issuer"
-        },
-        {
-          "name": "attestation"
+          "name": "capability",
+          "docs": [
+            "argus; read only on the REQUIRE_ATTESTATION path (spec 09) — no aegis CPI."
+          ]
         }
       ],
       "args": [
@@ -467,6 +464,97 @@
               }
             ]
           }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "refresh_eligibility",
+      "docs": [
+        "Off-hot-path: cache a subject's aegis eligibility as a capability that",
+        "`execute` reads with no CPI (spec 09). Permissionless; bundle before a",
+        "transfer when the capability is missing or stale."
+      ],
+      "discriminator": [
+        18,
+        227,
+        118,
+        61,
+        5,
+        162,
+        20,
+        209
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "guard_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "subject"
+        },
+        {
+          "name": "capability",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              },
+              {
+                "kind": "account",
+                "path": "subject"
+              }
+            ]
+          }
+        },
+        {
+          "name": "attestation",
+          "docs": [
+            "through to aegis `verify`, which re-derives and owner-checks it; a wrong",
+            "or missing account yields a negative verdict (fail safe), not an error."
+          ]
+        },
+        {
+          "name": "aegis_program"
         },
         {
           "name": "system_program",
@@ -658,6 +746,19 @@
   ],
   "accounts": [
     {
+      "name": "EligibilityCapability",
+      "discriminator": [
+        72,
+        210,
+        114,
+        118,
+        221,
+        205,
+        252,
+        79
+      ]
+    },
+    {
       "name": "GuardConfig",
       "discriminator": [
         95,
@@ -698,6 +799,19 @@
     }
   ],
   "events": [
+    {
+      "name": "EligibilityRefreshed",
+      "discriminator": [
+        153,
+        97,
+        71,
+        25,
+        140,
+        20,
+        27,
+        176
+      ]
+    },
     {
       "name": "GuardAuthorityChanged",
       "discriminator": [
@@ -911,11 +1025,115 @@
     },
     {
       "code": 6021,
+      "name": "EligibilityStale",
+      "msg": "Eligibility capability missing or stale — run refresh_eligibility"
+    },
+    {
+      "code": 6022,
+      "name": "AegisProgramMismatch",
+      "msg": "aegis program does not match the guard's configured aegis deployment"
+    },
+    {
+      "code": 6023,
+      "name": "UnsupportedVersion",
+      "msg": "Account layout version is not supported"
+    },
+    {
+      "code": 6024,
       "name": "Overflow",
       "msg": "Arithmetic overflow"
     }
   ],
   "types": [
+    {
+      "name": "EligibilityCapability",
+      "docs": [
+        "Cached eligibility verdict for a subject (spec 09 §4.1). `refresh_eligibility`",
+        "pays aegis's `verify` CPI once, off the transfer path, and stamps the result",
+        "here; `execute` then does an O(1) freshness + bitmap read with NO CPI. A",
+        "missing/stale capability fails the transfer closed (client must refresh)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "subject",
+            "type": "pubkey"
+          },
+          {
+            "name": "verdicts",
+            "docs": [
+              "Bit `i` set = predicate `i` satisfied (see `crate::constants` bits)."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "aegis_program",
+            "docs": [
+              "aegis deployment consulted when this capability was minted."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "policy_epoch",
+            "docs": [
+              "`GuardConfig.policy_epoch` at mint time; must still match to be valid."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "issued_at",
+            "type": "i64"
+          },
+          {
+            "name": "expires_at",
+            "docs": [
+              "Unix expiry; the capability is stale once `now >= expires_at`."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EligibilityRefreshed",
+      "docs": [
+        "A subject's eligibility was (re)computed via aegis `verify` and cached."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "subject",
+            "type": "pubkey"
+          },
+          {
+            "name": "verdicts",
+            "type": "u32"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
     {
       "name": "GuardAuthorityChanged",
       "type": {
@@ -961,14 +1179,22 @@
       "docs": [
         "Per-mint transfer policy — the tunable heart of the guard (spec §2.1).",
         "",
-        "One account, read once in `execute`, holds the whole policy. The guard",
-        "authority (the merchant PDA) may retune every field except the attestation",
-        "issuer/program, which are baked into the ExtraAccountMetaList at init and",
-        "therefore fixed for the life of the guard (spec §7, §16)."
+        "One account, read once in `execute`. The guard authority (the merchant PDA)",
+        "retunes fields via `configure_policy`; the trusted aegis issuer/program are",
+        "bound at init. Eligibility is no longer read from aegis by byte offset —",
+        "`execute` reads a cached `EligibilityCapability` (spec 09) minted off the hot",
+        "path by `refresh_eligibility`, which consumes aegis's `verify` interface."
       ],
       "type": {
         "kind": "struct",
         "fields": [
+          {
+            "name": "version",
+            "docs": [
+              "Layout version (Track B convention)."
+            ],
+            "type": "u8"
+          },
           {
             "name": "mint",
             "docs": [
@@ -979,7 +1205,7 @@
           {
             "name": "authority",
             "docs": [
-              "Who may retune policy — the vesta_core Merchant PDA."
+              "Who may retune policy — the vesta_core Merchant PDA (rotatable two-step)."
             ],
             "type": "pubkey"
           },
@@ -1000,12 +1226,26 @@
             "type": "pubkey"
           },
           {
-            "name": "attestation_issuer",
+            "name": "aegis_program",
             "docs": [
-              "aegis issuer whose attestations this guard trusts (spec §7). Baked into",
-              "the meta list at init; `Pubkey::default()` when attestation is unused."
+              "aegis deployment this guard trusts (the `verify` program)."
             ],
             "type": "pubkey"
+          },
+          {
+            "name": "attestation_issuer",
+            "docs": [
+              "aegis issuer whose credentials this guard trusts (spec §7)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "policy_epoch",
+            "docs": [
+              "Bumped on any policy change; stamped into capabilities so a config change",
+              "invalidates stale eligibility regardless of TTL (spec 09 §4.4)."
+            ],
+            "type": "u64"
           },
           {
             "name": "paused",
@@ -1059,14 +1299,7 @@
           {
             "name": "attestation_schema",
             "docs": [
-              "Required attestation schema id (meaningful only with REQUIRE_ATTESTATION)."
-            ],
-            "type": "u16"
-          },
-          {
-            "name": "attestation_mask",
-            "docs": [
-              "Required attestation value bitmask; allow iff `value & mask != 0`."
+              "Required aegis schema id (meaningful only with REQUIRE_ATTESTATION)."
             ],
             "type": "u64"
           },
@@ -1096,9 +1329,9 @@
     {
       "name": "InitialPolicy",
       "docs": [
-        "Full policy supplied at guard init. The attestation issuer/program are",
-        "fixed here for the life of the guard (baked into the meta list); everything",
-        "else is retunable via `configure_policy`."
+        "Full policy supplied at guard init. The aegis program + issuer are fixed",
+        "here for the life of the guard; everything else is retunable via",
+        "`configure_policy`."
       ],
       "type": {
         "kind": "struct",
@@ -1128,6 +1361,13 @@
             "type": "u32"
           },
           {
+            "name": "aegis_program",
+            "docs": [
+              "aegis deployment to consult (`verify`); default to the canonical AEGIS_ID."
+            ],
+            "type": "pubkey"
+          },
+          {
             "name": "attestation_issuer",
             "docs": [
               "aegis issuer to trust; `Pubkey::default()` when attestation is unused."
@@ -1136,10 +1376,6 @@
           },
           {
             "name": "attestation_schema",
-            "type": "u16"
-          },
-          {
-            "name": "attestation_mask",
             "type": "u64"
           }
         ]
@@ -1200,10 +1436,10 @@
           },
           {
             "name": "attestation_schema",
-            "type": "u16"
+            "type": "u64"
           },
           {
-            "name": "attestation_mask",
+            "name": "policy_epoch",
             "type": "u64"
           }
         ]
@@ -1213,8 +1449,7 @@
       "name": "PolicyListEntry",
       "docs": [
         "Allow/deny list membership marker (spec §2.4). Existence under the argus",
-        "program == membership; the account carries no payload beyond identity, so",
-        "`execute` never scans — a single PDA derivation answers the question."
+        "program == membership; the account carries no payload beyond identity."
       ],
       "type": {
         "kind": "struct",
@@ -1238,7 +1473,7 @@
       "name": "PolicyUpdate",
       "docs": [
         "Partial retune. Every field is optional; `None` leaves the value untouched.",
-        "The attestation issuer is intentionally absent — it is immutable post-init."
+        "The aegis program/issuer are intentionally absent — immutable post-init."
       ],
       "type": {
         "kind": "struct",
@@ -1281,12 +1516,6 @@
           },
           {
             "name": "attestation_schema",
-            "type": {
-              "option": "u16"
-            }
-          },
-          {
-            "name": "attestation_mask",
             "type": {
               "option": "u64"
             }
@@ -1353,9 +1582,9 @@
     {
       "name": "WalletPolicyState",
       "docs": [
-        "Per-(mint, source-owner) velocity counters (spec §2.2). Supersedes v1's",
-        "`GiftLedger`. Deliberately non-closable: closing and reopening would reset",
-        "the daily counters, so the locked rent is the anti-reset bond."
+        "Per-(mint, source-owner) velocity counters (spec §2.2). Deliberately",
+        "non-closable: closing and reopening would reset the daily counters, so the",
+        "locked rent is the anti-reset bond."
       ],
       "type": {
         "kind": "struct",
@@ -1414,12 +1643,12 @@
   ],
   "constants": [
     {
-      "name": "ATTESTATION_SEED",
+      "name": "CAP_SEED",
       "docs": [
-        "aegis attestation PDA seed (spec §7). Kept in sync with the aegis program."
+        "Per-(mint, subject) cached eligibility verdict (spec 09 §4.1)."
       ],
       "type": "bytes",
-      "value": "[97, 116, 116, 101, 115, 116, 97, 116, 105, 111, 110]"
+      "value": "[99, 97, 112]"
     },
     {
       "name": "DEFAULT_DAILY_GIFT_CAP_RAW",

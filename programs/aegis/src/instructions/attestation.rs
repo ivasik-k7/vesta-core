@@ -1,17 +1,23 @@
 use anchor_lang::prelude::*;
 
 use crate::{
-    constants::ATTESTATION_SEED,
+    constants::{ATTESTATION_SEED, STATE_VERSION},
     error::AegisError,
-    events::{AttestationClosed, AttestationIssued, AttestationRevoked, AttestationUpdated},
-    state::{Attestation, Issuer},
+    events::{
+        AttestationClosed, AttestationErased, AttestationIssued, AttestationRevoked,
+        AttestationUpdated,
+    },
+    state::{attestation_status, Attestation, Issuer},
 };
 
-/// Payload shared by issue/update — one struct, one validation path.
+/// Payload shared by issue/update — the chain receives only commitments, never
+/// plaintext claims (spec 06). The issuer computes the commitment and the
+/// per-attribute Merkle root off-chain from the real credential + salt.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct AttestationData {
-    pub schema: u16,
-    pub value: u64,
+    pub schema_id: u64,
+    pub commitment: [u8; 32],
+    pub attr_root: [u8; 32],
     /// Unix "not-before"; 0 = valid immediately.
     pub valid_from: i64,
     /// Unix expiry; 0 = never.
@@ -29,7 +35,7 @@ fn validate(data: &AttestationData) -> Result<()> {
 }
 
 #[derive(Accounts)]
-#[instruction(subject: Pubkey)]
+#[instruction(subject: Pubkey, data: AttestationData)]
 pub struct IssueAttestation<'info> {
     /// Authority or the issuer's hot operator.
     #[account(mut)]
@@ -42,7 +48,7 @@ pub struct IssueAttestation<'info> {
         init,
         payer = signer,
         space = 8 + Attestation::INIT_SPACE,
-        seeds = [ATTESTATION_SEED, issuer.key().as_ref(), subject.as_ref()],
+        seeds = [ATTESTATION_SEED, issuer.key().as_ref(), subject.as_ref(), &data.schema_id.to_le_bytes()],
         bump,
     )]
     pub attestation: Account<'info, Attestation>,
@@ -66,14 +72,16 @@ pub fn handle_issue_attestation(
 
     let now = Clock::get()?.unix_timestamp;
     let att = &mut ctx.accounts.attestation;
+    att.version = STATE_VERSION;
     att.issuer = ctx.accounts.issuer.key();
     att.subject = subject;
-    att.schema = data.schema;
-    att.value = data.value;
+    att.schema_id = data.schema_id;
+    att.commitment = data.commitment;
+    att.attr_root = data.attr_root;
     att.issued_at = now;
     att.valid_from = data.valid_from;
     att.expires_at = data.expires_at;
-    att.revoked = false;
+    att.status = attestation_status::ACTIVE;
     att.bump = ctx.bumps.attestation;
 
     let issuer = &mut ctx.accounts.issuer;
@@ -82,15 +90,14 @@ pub fn handle_issue_attestation(
     emit!(AttestationIssued {
         issuer: att.issuer,
         subject,
-        schema: data.schema,
-        value: data.value,
+        schema_id: data.schema_id,
         valid_from: data.valid_from,
         expires_at: data.expires_at,
     });
     Ok(())
 }
 
-/// Context for operating on an existing attestation (update / revoke).
+/// Context for operating on an existing attestation (update / revoke / erase).
 #[derive(Accounts)]
 pub struct ManageAttestation<'info> {
     pub signer: Signer<'info>,
@@ -100,7 +107,12 @@ pub struct ManageAttestation<'info> {
     #[account(
         mut,
         has_one = issuer @ AegisError::Unauthorized,
-        seeds = [ATTESTATION_SEED, issuer.key().as_ref(), attestation.subject.as_ref()],
+        seeds = [
+            ATTESTATION_SEED,
+            issuer.key().as_ref(),
+            attestation.subject.as_ref(),
+            &attestation.schema_id.to_le_bytes(),
+        ],
         bump = attestation.bump,
     )]
     pub attestation: Account<'info, Attestation>,
@@ -117,25 +129,29 @@ pub fn handle_update_attestation(
         AegisError::Unauthorized
     );
     require!(!ctx.accounts.issuer.paused, AegisError::IssuerPaused);
-    // Revocation is terminal — a revoked credential cannot be silently
+    // Revocation / erasure is terminal — a dead credential cannot be silently
     // reinstated by an update; the issuer must close and re-issue.
     require!(
-        !ctx.accounts.attestation.revoked,
+        ctx.accounts.attestation.status == attestation_status::ACTIVE,
         AegisError::AlreadyRevoked
+    );
+    // The schema of a credential is fixed at issuance (it is a PDA seed).
+    require!(
+        data.schema_id == ctx.accounts.attestation.schema_id,
+        AegisError::SchemaMismatch
     );
     validate(&data)?;
 
     let att = &mut ctx.accounts.attestation;
-    att.schema = data.schema;
-    att.value = data.value;
+    att.commitment = data.commitment;
+    att.attr_root = data.attr_root;
     att.valid_from = data.valid_from;
     att.expires_at = data.expires_at;
 
     emit!(AttestationUpdated {
         issuer: att.issuer,
         subject: att.subject,
-        schema: data.schema,
-        value: data.value,
+        schema_id: att.schema_id,
         valid_from: data.valid_from,
         expires_at: data.expires_at,
     });
@@ -150,12 +166,36 @@ pub fn handle_revoke_attestation(ctx: Context<ManageAttestation>, reason_code: u
         AegisError::Unauthorized
     );
     let att = &mut ctx.accounts.attestation;
-    require!(!att.revoked, AegisError::AlreadyRevoked);
-    att.revoked = true;
+    require!(
+        att.status == attestation_status::ACTIVE,
+        AegisError::AlreadyRevoked
+    );
+    att.status = attestation_status::REVOKED;
     emit!(AttestationRevoked {
         issuer: att.issuer,
         subject: att.subject,
+        schema_id: att.schema_id,
         reason_code,
+    });
+    Ok(())
+}
+
+/// Cryptographic erasure (GDPR): the issuer has destroyed the off-chain PII +
+/// salt, rendering the on-chain commitment permanently unopenable. Distinct
+/// from revoke (credential withdrawal) — both are terminal.
+pub fn handle_erase_attestation(ctx: Context<ManageAttestation>) -> Result<()> {
+    require!(
+        ctx.accounts
+            .issuer
+            .is_signer_authorized(&ctx.accounts.signer.key()),
+        AegisError::Unauthorized
+    );
+    let att = &mut ctx.accounts.attestation;
+    att.status = attestation_status::ERASED;
+    emit!(AttestationErased {
+        issuer: att.issuer,
+        subject: att.subject,
+        schema_id: att.schema_id,
     });
     Ok(())
 }
@@ -177,7 +217,12 @@ pub struct CloseAttestation<'info> {
         mut,
         close = authority,
         has_one = issuer @ AegisError::Unauthorized,
-        seeds = [ATTESTATION_SEED, issuer.key().as_ref(), attestation.subject.as_ref()],
+        seeds = [
+            ATTESTATION_SEED,
+            issuer.key().as_ref(),
+            attestation.subject.as_ref(),
+            &attestation.schema_id.to_le_bytes(),
+        ],
         bump = attestation.bump,
     )]
     pub attestation: Account<'info, Attestation>,
@@ -193,6 +238,7 @@ pub fn handle_close_attestation(ctx: Context<CloseAttestation>) -> Result<()> {
     emit!(AttestationClosed {
         issuer: ctx.accounts.issuer.key(),
         subject: ctx.accounts.attestation.subject,
+        schema_id: ctx.accounts.attestation.schema_id,
     });
     Ok(())
 }

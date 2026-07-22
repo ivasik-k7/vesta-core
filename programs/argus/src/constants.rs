@@ -1,5 +1,9 @@
 use anchor_lang::prelude::*;
 
+/// Account layout version (Track B convention) stamped into GuardConfig /
+/// EligibilityCapability; readers fail closed on an unknown version.
+pub const STATE_VERSION: u8 = 1;
+
 /// Per-mint policy account (spec §2.1).
 #[constant]
 pub const GUARD_SEED: &[u8] = b"guard";
@@ -16,9 +20,19 @@ pub const LIST_ENTRY_SEED: &[u8] = b"entry";
 #[constant]
 pub const EXTRA_ACCOUNT_METAS_SEED: &[u8] = b"extra-account-metas";
 
-/// aegis attestation PDA seed (spec §7). Kept in sync with the aegis program.
+/// Per-(mint, subject) cached eligibility verdict (spec 09 §4.1).
 #[constant]
-pub const ATTESTATION_SEED: &[u8] = b"attestation";
+pub const CAP_SEED: &[u8] = b"cap";
+
+/// How long a minted `EligibilityCapability` stays valid, seconds. A shorter
+/// window means fresher revocation at the cost of more refreshes; a config
+/// `policy_epoch` bump invalidates all capabilities immediately regardless.
+pub const CAPABILITY_TTL_SECS: i64 = 86_400;
+
+/// `EligibilityCapability.verdicts` bit for the guard's REQUIRE_ATTESTATION
+/// predicate (the destination holds a valid aegis credential of the configured
+/// schema from the trusted issuer).
+pub const PREDICATE_ATTESTATION_BIT: u32 = 1 << 0;
 
 /// Default daily gift velocity cap seeded at guard init, raw units
 /// (= 500.00 pts at issue). Retunable via `configure_policy` thereafter.
@@ -41,24 +55,6 @@ pub const MERCHANT_DISCRIMINATOR: [u8; 8] = [71, 235, 30, 40, 231, 21, 32, 64];
 /// feature-unification reason; the Attestation layout below is verified by an
 /// integration test. Rotated via `anchor keys sync` at deploy time.
 pub const AEGIS_ID: Pubkey = pubkey!("AcCdMQC1rj4KukjhFzf4S8metEAXpnt9gzvMThsu15e1");
-
-/// Anchor discriminator of aegis's Attestation account
-/// (sha256("account:Attestation")[..8]); asserted in tests.
-pub const ATTESTATION_DISCRIMINATOR: [u8; 8] = [152, 125, 183, 86, 36, 146, 121, 73];
-
-/// Byte offsets into an aegis Attestation account (verified in tests):
-/// disc(8) · issuer(32) · subject(32) · schema(u16) · value(u64) ·
-/// issued_at(i64) · valid_from(i64) · expires_at(i64) · revoked(bool) · bump(u8).
-pub mod attestation_offset {
-    pub const ISSUER: core::ops::Range<usize> = 8..40;
-    pub const SUBJECT: core::ops::Range<usize> = 40..72;
-    pub const SCHEMA: core::ops::Range<usize> = 72..74;
-    pub const VALUE: core::ops::Range<usize> = 74..82;
-    pub const VALID_FROM: core::ops::Range<usize> = 90..98;
-    pub const EXPIRES_AT: core::ops::Range<usize> = 98..106;
-    pub const REVOKED: usize = 106;
-    pub const MIN_LEN: usize = 108;
-}
 
 /// Policy bitset stored in `GuardConfig.flags` (spec §2.1, §5).
 pub mod flags {
@@ -97,4 +93,6 @@ pub mod reason {
     pub const DAILY_CAP: u16 = 20;
     pub const CONFIG_ERROR: u16 = 21;
     pub const STATE_MISSING: u16 = 22;
+    /// Destination has no fresh eligibility capability (client must refresh).
+    pub const ELIGIBILITY_STALE: u16 = 23;
 }

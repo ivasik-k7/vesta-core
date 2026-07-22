@@ -2,7 +2,7 @@
   "address": "gaMq6BpH1aqC8ZCYtAxwZBjTa9AnfdWvYwURG6L4LDz",
   "metadata": {
     "name": "vesta_core",
-    "version": "0.1.0",
+    "version": "2.0.0",
     "spec": "0.1.0",
     "description": "VESTA living loyalty protocol: merchants, campaigns, points, alliances, badges",
     "repository": "https://github.com/ivasik-k7/vesta-core"

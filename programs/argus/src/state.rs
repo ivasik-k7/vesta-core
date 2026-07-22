@@ -2,24 +2,31 @@ use anchor_lang::prelude::*;
 
 /// Per-mint transfer policy — the tunable heart of the guard (spec §2.1).
 ///
-/// One account, read once in `execute`, holds the whole policy. The guard
-/// authority (the merchant PDA) may retune every field except the attestation
-/// issuer/program, which are baked into the ExtraAccountMetaList at init and
-/// therefore fixed for the life of the guard (spec §7, §16).
+/// One account, read once in `execute`. The guard authority (the merchant PDA)
+/// retunes fields via `configure_policy`; the trusted aegis issuer/program are
+/// bound at init. Eligibility is no longer read from aegis by byte offset —
+/// `execute` reads a cached `EligibilityCapability` (spec 09) minted off the hot
+/// path by `refresh_eligibility`, which consumes aegis's `verify` interface.
 #[account]
 #[derive(InitSpace)]
 pub struct GuardConfig {
+    /// Layout version (Track B convention).
+    pub version: u8,
     /// The hooked mint this config governs.
     pub mint: Pubkey,
-    /// Who may retune policy — the vesta_core Merchant PDA.
+    /// Who may retune policy — the vesta_core Merchant PDA (rotatable two-step).
     pub authority: Pubkey,
     /// Two-step authority rotation target.
     pub pending_authority: Option<Pubkey>,
     /// Always-allowed destination (rule 2): the merchant treasury ATA.
     pub treasury: Pubkey,
-    /// aegis issuer whose attestations this guard trusts (spec §7). Baked into
-    /// the meta list at init; `Pubkey::default()` when attestation is unused.
+    /// aegis deployment this guard trusts (the `verify` program).
+    pub aegis_program: Pubkey,
+    /// aegis issuer whose credentials this guard trusts (spec §7).
     pub attestation_issuer: Pubkey,
+    /// Bumped on any policy change; stamped into capabilities so a config change
+    /// invalidates stale eligibility regardless of TTL (spec 09 §4.4).
+    pub policy_epoch: u64,
     /// Per-mint peer-transfer freeze (rules 1–2 stay open — clawback/refunds).
     pub paused: bool,
     /// Policy bitset — see `crate::constants::flags`.
@@ -34,16 +41,14 @@ pub struct GuardConfig {
     pub transfers_per_day_cap: u16,
     /// Minimum seconds between a wallet's peer transfers (0 = no cooldown).
     pub cooldown_secs: u32,
-    /// Required attestation schema id (meaningful only with REQUIRE_ATTESTATION).
-    pub attestation_schema: u16,
-    /// Required attestation value bitmask; allow iff `value & mask != 0`.
-    pub attestation_mask: u64,
+    /// Required aegis schema id (meaningful only with REQUIRE_ATTESTATION).
+    pub attestation_schema: u64,
     pub bump: u8,
 }
 
-/// Per-(mint, source-owner) velocity counters (spec §2.2). Supersedes v1's
-/// `GiftLedger`. Deliberately non-closable: closing and reopening would reset
-/// the daily counters, so the locked rent is the anti-reset bond.
+/// Per-(mint, source-owner) velocity counters (spec §2.2). Deliberately
+/// non-closable: closing and reopening would reset the daily counters, so the
+/// locked rent is the anti-reset bond.
 #[account]
 #[derive(InitSpace)]
 pub struct WalletPolicyState {
@@ -59,12 +64,33 @@ pub struct WalletPolicyState {
 }
 
 /// Allow/deny list membership marker (spec §2.4). Existence under the argus
-/// program == membership; the account carries no payload beyond identity, so
-/// `execute` never scans — a single PDA derivation answers the question.
+/// program == membership; the account carries no payload beyond identity.
 #[account]
 #[derive(InitSpace)]
 pub struct PolicyListEntry {
     pub mint: Pubkey,
     pub target: Pubkey,
+    pub bump: u8,
+}
+
+/// Cached eligibility verdict for a subject (spec 09 §4.1). `refresh_eligibility`
+/// pays aegis's `verify` CPI once, off the transfer path, and stamps the result
+/// here; `execute` then does an O(1) freshness + bitmap read with NO CPI. A
+/// missing/stale capability fails the transfer closed (client must refresh).
+#[account]
+#[derive(InitSpace)]
+pub struct EligibilityCapability {
+    pub version: u8,
+    pub mint: Pubkey,
+    pub subject: Pubkey,
+    /// Bit `i` set = predicate `i` satisfied (see `crate::constants` bits).
+    pub verdicts: u32,
+    /// aegis deployment consulted when this capability was minted.
+    pub aegis_program: Pubkey,
+    /// `GuardConfig.policy_epoch` at mint time; must still match to be valid.
+    pub policy_epoch: u64,
+    pub issued_at: i64,
+    /// Unix expiry; the capability is stale once `now >= expires_at`.
+    pub expires_at: i64,
     pub bump: u8,
 }

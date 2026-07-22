@@ -11,7 +11,7 @@ use spl_transfer_hook_interface::instruction::ExecuteInstruction;
 
 use crate::{
     constants::{
-        AEGIS_ID, ATTESTATION_SEED, EXTRA_ACCOUNT_METAS_SEED, GUARD_SEED, LIST_ENTRY_SEED,
+        CAP_SEED, EXTRA_ACCOUNT_METAS_SEED, GUARD_SEED, LIST_ENTRY_SEED, STATE_VERSION,
         WALLET_STATE_SEED,
     },
     error::GuardError,
@@ -114,6 +114,7 @@ pub fn handle_initialize_transfer_guard(
         policy.flags,
         policy.daily_gift_cap,
         policy.per_tx_cap,
+        policy.aegis_program,
         policy.attestation_issuer,
     )?;
 
@@ -121,11 +122,14 @@ pub fn handle_initialize_transfer_guard(
 
     // Persist the policy.
     let config = &mut ctx.accounts.guard_config;
+    config.version = STATE_VERSION;
     config.mint = mint_key;
     config.authority = ctx.accounts.merchant_authority.key();
     config.pending_authority = None;
     config.treasury = merchant_treasury;
+    config.aegis_program = policy.aegis_program;
     config.attestation_issuer = policy.attestation_issuer;
+    config.policy_epoch = 0;
     config.paused = false;
     config.flags = policy.flags;
     config.daily_gift_cap = policy.daily_gift_cap;
@@ -134,7 +138,6 @@ pub fn handle_initialize_transfer_guard(
     config.transfers_per_day_cap = policy.transfers_per_day_cap;
     config.cooldown_secs = policy.cooldown_secs;
     config.attestation_schema = policy.attestation_schema;
-    config.attestation_mask = policy.attestation_mask;
     config.bump = ctx.bumps.guard_config;
 
     let eaml_info = ctx.accounts.extra_account_meta_list.to_account_info();
@@ -145,7 +148,7 @@ pub fn handle_initialize_transfer_guard(
     );
 
     // Execute account order (spec §5): 0 source · 1 mint · 2 destination ·
-    // 3 authority · 4 meta-list · then these extras, indices 5..12.
+    // 3 authority · 4 meta-list · then these extras, indices 5..10.
     let metas = [
         // 5 GuardConfig — self PDA ["guard", mint], read.
         ExtraAccountMeta::new_with_seeds(
@@ -206,22 +209,16 @@ pub fn handle_initialize_transfer_guard(
             false,
         )
         .map_err(|_| GuardError::MetaListMismatch)?,
-        // 9 aegis program id, pinned as a literal so the attestation meta can
-        // derive a PDA under it (spec §7).
-        ExtraAccountMeta::new_with_pubkey(&AEGIS_ID, false, false)
-            .map_err(|_| GuardError::MetaListMismatch)?,
-        // 10 aegis issuer this guard trusts, pinned at init (immutable).
-        ExtraAccountMeta::new_with_pubkey(&policy.attestation_issuer, false, false)
-            .map_err(|_| GuardError::MetaListMismatch)?,
-        // 11 attestation — external PDA under aegis (account 9):
-        // ["attestation", issuer (account 10), destination owner], read.
-        ExtraAccountMeta::new_external_pda_with_seeds(
-            9,
+        // 9 EligibilityCapability — self PDA ["cap", mint, destination owner
+        // (account 2, offset 32)], read. Minted off-path by refresh_eligibility
+        // from aegis `verify`; `execute` reads the cached verdict, never aegis
+        // by offset (spec 09). Only consulted when REQUIRE_ATTESTATION is set.
+        ExtraAccountMeta::new_with_seeds(
             &[
                 Seed::Literal {
-                    bytes: ATTESTATION_SEED.to_vec(),
+                    bytes: CAP_SEED.to_vec(),
                 },
-                Seed::AccountKey { index: 10 },
+                Seed::AccountKey { index: 1 },
                 Seed::AccountData {
                     account_index: 2,
                     data_index: 32,

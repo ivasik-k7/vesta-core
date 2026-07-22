@@ -18,8 +18,17 @@ pub struct PolicyConfigured {
     pub max_wallet_balance: u64,
     pub transfers_per_day_cap: u16,
     pub cooldown_secs: u32,
-    pub attestation_schema: u16,
-    pub attestation_mask: u64,
+    pub attestation_schema: u64,
+    pub policy_epoch: u64,
+}
+
+/// A subject's eligibility was (re)computed via aegis `verify` and cached.
+#[event]
+pub struct EligibilityRefreshed {
+    pub mint: Pubkey,
+    pub subject: Pubkey,
+    pub verdicts: u32,
+    pub expires_at: i64,
 }
 
 #[event]

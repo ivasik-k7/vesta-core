@@ -45,7 +45,7 @@ pub fn handle_configure_policy(
         transfers_per_day_cap: config.transfers_per_day_cap,
         cooldown_secs: config.cooldown_secs,
         attestation_schema: config.attestation_schema,
-        attestation_mask: config.attestation_mask,
+        policy_epoch: config.policy_epoch,
     });
     Ok(())
 }

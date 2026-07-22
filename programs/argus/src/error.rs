@@ -44,6 +44,12 @@ pub enum GuardError {
     MetaListMismatch,
     #[msg("execute invoked outside a genuine Token-2022 transfer")]
     NotTransferring,
+    #[msg("Eligibility capability missing or stale — run refresh_eligibility")]
+    EligibilityStale,
+    #[msg("aegis program does not match the guard's configured aegis deployment")]
+    AegisProgramMismatch,
+    #[msg("Account layout version is not supported")]
+    UnsupportedVersion,
     #[msg("Arithmetic overflow")]
     Overflow,
 }

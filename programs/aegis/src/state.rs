@@ -1,18 +1,19 @@
 use anchor_lang::prelude::*;
 
-use crate::constants::MAX_NAME_LEN;
+use crate::constants::{MAX_NAME_LEN, MAX_STANDARD_URI_LEN, STATE_VERSION};
 
 /// An attestation authority. Issues credentials for subjects that downstream
-/// programs (argus, vesta_core campaigns) gate on.
+/// programs (argus, vesta_core campaigns) gate on via the `verify` interface.
 ///
 /// Two keys, by design (hot/cold separation): `authority` is the cold admin —
 /// it rotates authority, pauses, and sets the operator. `operator` is an
 /// optional hot signing key that may issue / update / revoke / close
-/// attestations but can never touch admin state. High-volume issuers keep the
-/// authority offline and rotate the operator freely.
+/// attestations but can never touch admin state.
 #[account]
 #[derive(InitSpace)]
 pub struct Issuer {
+    /// Layout version (Track B convention) — first field after the discriminator.
+    pub version: u8,
     /// Per-(authority, id) — a wallet may run many issuers.
     pub id: u64,
     pub authority: Pubkey,
@@ -35,26 +36,75 @@ impl Issuer {
     }
 }
 
-/// A signed credential binding a subject wallet to a value under a schema.
+/// A typed, versioned credential schema (spec 06). Schemas are shapes, not
+/// instances — they carry NO subject data. `content_hash` anchors the off-chain
+/// schema document (Arweave/IPFS); `sas_schema` optionally aliases a Solana
+/// Attestation Service schema so the two namespaces reconcile.
+#[account]
+#[derive(InitSpace)]
+pub struct Schema {
+    pub version: u8,
+    pub registrar: Pubkey,
+    pub id: u64,
+    /// Content hash of the off-chain schema document.
+    pub content_hash: [u8; 32],
+    #[max_len(MAX_STANDARD_URI_LEN)]
+    pub standard_uri: String,
+    /// Optional alias to a SAS schema account.
+    pub sas_schema: Option<Pubkey>,
+    pub deprecated: bool,
+    pub successor: Option<Pubkey>,
+    pub bump: u8,
+}
+
+/// Attestation lifecycle status. `Revoked` and `Erased` are terminal.
+pub mod attestation_status {
+    pub const ACTIVE: u8 = 0;
+    /// Credential withdrawn by the issuer (terminal).
+    pub const REVOKED: u8 = 1;
+    /// Off-chain PII + salt destroyed (GDPR cryptographic erasure, terminal).
+    pub const ERASED: u8 = 2;
+}
+
+/// A privacy-preserving credential (spec 06): the chain holds only a hiding +
+/// binding COMMITMENT and a per-attribute Merkle root, never plaintext claims.
+/// The real (W3C-VC-shaped) credential lives off-chain with the holder; the
+/// chain is the integrity / freshness / revocation anchor.
 ///
-/// FIELD ORDER IS AN ABI. argus reads this account by fixed byte offset
-/// (`argus::constants::attestation_offset`) rather than linking the aegis
-/// crate. The layout below MUST stay: disc(8) · issuer(32) · subject(32) ·
-/// schema(u16) · value(u64) · issued_at(i64) · valid_from(i64) · expires_at(i64)
-/// · revoked(bool) · bump(u8). Reordering breaks every guard that gates on it.
+/// Multi-credential: keyed by (issuer, subject, schema_id), a subject holds
+/// many independent credentials from one issuer. This replaces the v1 public
+/// `value: u64` bitmask that argus read by fixed offset — consumers now go
+/// through the `verify` interface, not raw offsets.
 #[account]
 #[derive(InitSpace)]
 pub struct Attestation {
+    pub version: u8,
     pub issuer: Pubkey,
+    /// Holder-binding handle (not necessarily the payment wallet).
     pub subject: Pubkey,
-    pub schema: u16,
-    /// Schema-defined payload — typically a bitmask (regions, tiers).
-    pub value: u64,
+    pub schema_id: u64,
+    /// Commitment `H(claims ‖ holder_binding ‖ salt)` (sha256 in phase 1;
+    /// Poseidon is the wave-2 target for ZK-circuit field compatibility).
+    pub commitment: [u8; 32],
+    /// Per-attribute Merkle root, for single-attribute selective disclosure.
+    pub attr_root: [u8; 32],
     pub issued_at: i64,
-    /// Unix "not-before"; 0 means valid immediately. Enables pre-issuance.
+    /// Unix "not-before"; 0 = valid immediately.
     pub valid_from: i64,
-    /// Unix expiry; 0 means never expires.
+    /// Unix expiry; 0 = never.
     pub expires_at: i64,
-    pub revoked: bool,
+    /// `attestation_status::*`.
+    pub status: u8,
     pub bump: u8,
+}
+
+impl Attestation {
+    pub const VERSION: u8 = STATE_VERSION;
+
+    /// Live = active status and within the validity window at `now`.
+    pub fn is_live(&self, now: i64) -> bool {
+        self.status == attestation_status::ACTIVE
+            && (self.valid_from == 0 || now >= self.valid_from)
+            && (self.expires_at == 0 || now < self.expires_at)
+    }
 }

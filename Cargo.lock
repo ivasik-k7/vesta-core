@@ -14,10 +14,11 @@ dependencies = [
 
 [[package]]
 name = "aegis"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "anchor-lang",
  "solana-security-txt",
+ "solana-sha256-hasher",
 ]
 
 [[package]]
@@ -383,8 +384,9 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "argus"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
+ "aegis",
  "anchor-lang",
  "litesvm",
  "solana-keypair",
@@ -4293,7 +4295,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vesta-core"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "aegis",
  "anchor-lang",

@@ -1,7 +1,7 @@
 [package]
 name = "argus"
-version = "0.1.0"
-description = "VESTA transfer hook guard: validates point transfers (whitelisted flows, gift limits)"
+version = "2.0.0"
+description = "VESTA transfer-hook policy engine: aegis-verified eligibility + velocity/list controls"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -22,12 +22,15 @@ custom-heap = []
 custom-panic = []
 
 [dependencies]
-anchor-lang = "1.1.2"
+anchor-lang = { version = "1.1.2", features = ["init-if-needed"] }
 solana-security-txt = "1.1.1"
 spl-discriminator = "0.5.2"
 spl-tlv-account-resolution = "0.11.1"
 spl-token-2022-interface = "2.1.0"
 spl-transfer-hook-interface = "2.1.0"
+# argus consumes aegis's stable `verify` CPI (spec 07/09) — linked as a
+# no-entrypoint lib (via the `cpi` feature) so only argus carries an entrypoint.
+aegis = { path = "../aegis", default-features = false, features = ["cpi"] }
 
 [dev-dependencies]
 litesvm = "0.10.0"

@@ -59,9 +59,9 @@ fn base_policy() -> InitialPolicy {
         max_wallet_balance: 0,
         transfers_per_day_cap: 0,
         cooldown_secs: 0,
+        aegis_program: Pubkey::default(),
         attestation_issuer: Pubkey::default(),
         attestation_schema: 0,
-        attestation_mask: 0,
     }
 }
 
@@ -253,28 +253,73 @@ impl World {
         &self,
         source_owner: Pubkey,
         dest_wallet: Pubkey,
-        issuer: Pubkey,
+        _issuer: Pubkey,
     ) -> Vec<AccountMeta> {
         let g = |seeds: &[&[u8]]| Pubkey::find_program_address(seeds, &argus::id()).0;
         let guard_config = g(&[b"guard", self.mint.as_ref()]);
         let wallet_state = g(&[b"wstate", self.mint.as_ref(), source_owner.as_ref()]);
         let list_entry = g(&[b"entry", self.mint.as_ref(), dest_wallet.as_ref()]);
-        let attestation = Pubkey::find_program_address(
-            &[b"attestation", issuer.as_ref(), dest_wallet.as_ref()],
-            &aegis::id(),
-        )
-        .0;
+        // v2: the aegis program/issuer/attestation trio is replaced by argus's
+        // own cached EligibilityCapability for the destination owner (spec 09).
+        let capability = g(&[b"cap", self.mint.as_ref(), dest_wallet.as_ref()]);
         vec![
             AccountMeta::new_readonly(guard_config, false),
             AccountMeta::new(wallet_state, false),
             AccountMeta::new_readonly(dest_wallet, false),
             AccountMeta::new_readonly(list_entry, false),
-            AccountMeta::new_readonly(aegis::id(), false),
-            AccountMeta::new_readonly(issuer, false),
-            AccountMeta::new_readonly(attestation, false),
+            AccountMeta::new_readonly(capability, false),
             AccountMeta::new_readonly(argus::id(), false),
             AccountMeta::new_readonly(self.eaml, false),
         ]
+    }
+
+    /// Derive an argus EligibilityCapability PDA for (mint, subject).
+    fn capability_pda(&self, subject: Pubkey) -> Pubkey {
+        Pubkey::find_program_address(
+            &[b"cap", self.mint.as_ref(), subject.as_ref()],
+            &argus::id(),
+        )
+        .0
+    }
+
+    /// Refresh a subject's eligibility capability by CPI-ing aegis `verify`.
+    fn refresh_eligibility(
+        &mut self,
+        payer: &Keypair,
+        subject: Pubkey,
+        issuer: Pubkey,
+        schema_id: u64,
+    ) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+        let attestation = Pubkey::find_program_address(
+            &[
+                b"attestation",
+                issuer.as_ref(),
+                subject.as_ref(),
+                &schema_id.to_le_bytes(),
+            ],
+            &aegis::id(),
+        )
+        .0;
+        let ix = Instruction {
+            program_id: argus::id(),
+            accounts: argus::accounts::RefreshEligibility {
+                payer: payer.pubkey(),
+                mint: self.mint,
+                guard_config: Pubkey::find_program_address(
+                    &[b"guard", self.mint.as_ref()],
+                    &argus::id(),
+                )
+                .0,
+                subject,
+                capability: self.capability_pda(subject),
+                attestation,
+                aegis_program: aegis::id(),
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: argus::instruction::RefreshEligibility {}.data(),
+        };
+        self.send(&[ix], &[payer], &payer.pubkey())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -933,9 +978,9 @@ fn attestation_gating_composes_with_aegis() {
 
     let mut policy = base_policy();
     policy.flags |= argus::constants::flags::REQUIRE_ATTESTATION;
+    policy.aegis_program = aegis::id();
     policy.attestation_issuer = issuer;
-    policy.attestation_schema = aegis::constants::schema::REGION;
-    policy.attestation_mask = 0b0010;
+    policy.attestation_schema = aegis::constants::well_known_schema::REGION;
 
     let mut w = setup_with_policy(policy);
     w.svm
@@ -967,7 +1012,19 @@ fn attestation_gating_composes_with_aegis() {
     )
     .unwrap();
 
-    // No attestation on bob yet → gift rejected.
+    let schema_id = aegis::constants::well_known_schema::REGION;
+    let attestation = Pubkey::find_program_address(
+        &[
+            b"attestation",
+            issuer.as_ref(),
+            bob.pubkey().as_ref(),
+            &schema_id.to_le_bytes(),
+        ],
+        &aegis::id(),
+    )
+    .0;
+
+    // No credential / capability on bob yet → gift rejected (fail closed).
     let ix = w.hooked_transfer_ix(
         alice.pubkey(),
         alice.pubkey(),
@@ -978,15 +1035,28 @@ fn attestation_gating_composes_with_aegis() {
     );
     assert!(
         w.send(&[ix], &[&alice], &alice.pubkey()).is_err(),
-        "gift passed without attestation"
+        "gift passed without eligibility"
     );
 
-    let attestation = Pubkey::find_program_address(
-        &[b"attestation", issuer.as_ref(), bob.pubkey().as_ref()],
-        &aegis::id(),
-    )
-    .0;
-    let issue = |value: u64, expires_at: i64| Instruction {
+    // Refreshing before any credential exists → aegis returns a negative
+    // verdict → capability minted with the bit UNSET → still rejected.
+    w.refresh_eligibility(&alice, bob.pubkey(), issuer, schema_id)
+        .unwrap();
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        1_000,
+        issuer,
+        true,
+    );
+    assert!(
+        w.send(&[ix], &[&alice], &alice.pubkey()).is_err(),
+        "gift passed with an empty (negative) capability"
+    );
+
+    // Issue bob a region credential (commitment model — no plaintext on-chain).
+    let issue = Instruction {
         program_id: aegis::id(),
         accounts: aegis::accounts::IssueAttestation {
             signer: issuer_authority.pubkey(),
@@ -998,21 +1068,19 @@ fn attestation_gating_composes_with_aegis() {
         data: aegis::instruction::IssueAttestation {
             subject: bob.pubkey(),
             data: aegis::instructions::attestation::AttestationData {
-                schema: aegis::constants::schema::REGION,
-                value,
+                schema_id,
+                commitment: [7u8; 32],
+                attr_root: [0u8; 32],
                 valid_from: 0,
-                expires_at,
+                expires_at: 0,
             },
         }
         .data(),
     };
-    // Wrong region bit → still rejected.
-    w.send(
-        &[issue(0b0001, 0)],
-        &[&issuer_authority],
-        &issuer_authority.pubkey(),
-    )
-    .unwrap();
+    w.send(&[issue], &[&issuer_authority], &issuer_authority.pubkey())
+        .unwrap();
+
+    // Still stale until refreshed — the capability predates the credential.
     let ix = w.hooked_transfer_ix(
         alice.pubkey(),
         alice.pubkey(),
@@ -1023,29 +1091,11 @@ fn attestation_gating_composes_with_aegis() {
     );
     assert!(
         w.send(&[ix], &[&alice], &alice.pubkey()).is_err(),
-        "wrong-region attestation passed"
+        "gift passed on a stale capability"
     );
 
-    // Update to include the required bit → now allowed.
-    let update = Instruction {
-        program_id: aegis::id(),
-        accounts: aegis::accounts::ManageAttestation {
-            signer: issuer_authority.pubkey(),
-            issuer,
-            attestation,
-        }
-        .to_account_metas(None),
-        data: aegis::instruction::UpdateAttestation {
-            data: aegis::instructions::attestation::AttestationData {
-                schema: aegis::constants::schema::REGION,
-                value: 0b0011,
-                valid_from: 0,
-                expires_at: 0,
-            },
-        }
-        .data(),
-    };
-    w.send(&[update], &[&issuer_authority], &issuer_authority.pubkey())
+    // Refresh → aegis `verify` now returns ok → capability bit set → allowed.
+    w.refresh_eligibility(&alice, bob.pubkey(), issuer, schema_id)
         .unwrap();
     let ix = w.hooked_transfer_ix(
         alice.pubkey(),
@@ -1058,7 +1108,8 @@ fn attestation_gating_composes_with_aegis() {
     w.send(&[ix], &[&alice], &alice.pubkey()).unwrap();
     assert_eq!(w.state_of(alice.pubkey()).sent_today, 1_000);
 
-    // Revoke → gate closes again (fresh day to dodge the daily cap).
+    // Revoke the credential + refresh → verdict flips negative → gate closes
+    // (fresh day to dodge the daily cap).
     let revoke = Instruction {
         program_id: aegis::id(),
         accounts: aegis::accounts::ManageAttestation {
@@ -1072,6 +1123,8 @@ fn attestation_gating_composes_with_aegis() {
     w.send(&[revoke], &[&issuer_authority], &issuer_authority.pubkey())
         .unwrap();
     w.warp_days(1);
+    w.refresh_eligibility(&alice, bob.pubkey(), issuer, schema_id)
+        .unwrap();
     let ix = w.hooked_transfer_ix(
         alice.pubkey(),
         alice.pubkey(),
@@ -1082,7 +1135,7 @@ fn attestation_gating_composes_with_aegis() {
     );
     assert!(
         w.send(&[ix], &[&alice], &alice.pubkey()).is_err(),
-        "revoked attestation passed"
+        "revoked credential still passed"
     );
 }
 
@@ -1122,7 +1175,12 @@ fn aegis_issuer_authority_pause_and_expiry() {
     .unwrap();
 
     let attestation = Pubkey::find_program_address(
-        &[b"attestation", issuer.as_ref(), subject.as_ref()],
+        &[
+            b"attestation",
+            issuer.as_ref(),
+            subject.as_ref(),
+            &aegis::constants::well_known_schema::REGION.to_le_bytes(),
+        ],
         &aegis::id(),
     )
     .0;
@@ -1138,8 +1196,9 @@ fn aegis_issuer_authority_pause_and_expiry() {
         data: aegis::instruction::IssueAttestation {
             subject,
             data: aegis::instructions::attestation::AttestationData {
-                schema: aegis::constants::schema::REGION,
-                value: 0b0001,
+                schema_id: aegis::constants::well_known_schema::REGION,
+                commitment: [1u8; 32],
+                attr_root: [0u8; 32],
                 valid_from: 0,
                 expires_at,
             },
@@ -1195,7 +1254,12 @@ fn aegis_issuer_authority_pause_and_expiry() {
     )
     .unwrap();
     let attestation2 = Pubkey::find_program_address(
-        &[b"attestation", issuer.as_ref(), subject2.as_ref()],
+        &[
+            b"attestation",
+            issuer.as_ref(),
+            subject2.as_ref(),
+            &aegis::constants::well_known_schema::REGION.to_le_bytes(),
+        ],
         &aegis::id(),
     )
     .0;
@@ -1211,8 +1275,9 @@ fn aegis_issuer_authority_pause_and_expiry() {
         data: aegis::instruction::IssueAttestation {
             subject: subject2,
             data: aegis::instructions::attestation::AttestationData {
-                schema: aegis::constants::schema::REGION,
-                value: 0b0001,
+                schema_id: aegis::constants::well_known_schema::REGION,
+                commitment: [1u8; 32],
+                attr_root: [0u8; 32],
                 valid_from: 0,
                 expires_at: 0,
             },
@@ -1282,7 +1347,12 @@ fn aegis_operator_issues_but_cannot_administer() {
 
     // Operator issues — allowed.
     let attestation = Pubkey::find_program_address(
-        &[b"attestation", issuer.as_ref(), subject.as_ref()],
+        &[
+            b"attestation",
+            issuer.as_ref(),
+            subject.as_ref(),
+            &aegis::constants::well_known_schema::REGION.to_le_bytes(),
+        ],
         &aegis::id(),
     )
     .0;
@@ -1299,8 +1369,9 @@ fn aegis_operator_issues_but_cannot_administer() {
             data: aegis::instruction::IssueAttestation {
                 subject,
                 data: aegis::instructions::attestation::AttestationData {
-                    schema: aegis::constants::schema::REGION,
-                    value: 0b0001,
+                    schema_id: aegis::constants::well_known_schema::REGION,
+                    commitment: [1u8; 32],
+                    attr_root: [0u8; 32],
                     valid_from: 0,
                     expires_at: 0,
                 },
@@ -1366,7 +1437,12 @@ fn aegis_close_reclaims_rent() {
     .unwrap();
 
     let attestation = Pubkey::find_program_address(
-        &[b"attestation", issuer.as_ref(), subject.as_ref()],
+        &[
+            b"attestation",
+            issuer.as_ref(),
+            subject.as_ref(),
+            &aegis::constants::well_known_schema::REGION.to_le_bytes(),
+        ],
         &aegis::id(),
     )
     .0;
@@ -1383,8 +1459,9 @@ fn aegis_close_reclaims_rent() {
             data: aegis::instruction::IssueAttestation {
                 subject,
                 data: aegis::instructions::attestation::AttestationData {
-                    schema: aegis::constants::schema::REGION,
-                    value: 0b0001,
+                    schema_id: aegis::constants::well_known_schema::REGION,
+                    commitment: [1u8; 32],
+                    attr_root: [0u8; 32],
                     valid_from: 0,
                     expires_at: 0,
                 },
@@ -1441,9 +1518,9 @@ fn aegis_valid_from_gates_until_active() {
 
     let mut policy = base_policy();
     policy.flags |= argus::constants::flags::REQUIRE_ATTESTATION;
+    policy.aegis_program = aegis::id();
     policy.attestation_issuer = issuer;
-    policy.attestation_schema = aegis::constants::schema::REGION;
-    policy.attestation_mask = 0b0001;
+    policy.attestation_schema = aegis::constants::well_known_schema::REGION;
 
     let mut w = setup_with_policy(policy);
     w.svm
@@ -1451,6 +1528,7 @@ fn aegis_valid_from_gates_until_active() {
         .unwrap();
     let alice = Keypair::new();
     let bob = Keypair::new();
+    let schema_id = aegis::constants::well_known_schema::REGION;
     prime_sender(&mut w, &alice, bob.pubkey(), 5_000);
 
     w.send(
@@ -1476,7 +1554,12 @@ fn aegis_valid_from_gates_until_active() {
     // Pre-issue with valid_from one day out.
     let now = w.svm.get_sysvar::<Clock>().unix_timestamp;
     let attestation = Pubkey::find_program_address(
-        &[b"attestation", issuer.as_ref(), bob.pubkey().as_ref()],
+        &[
+            b"attestation",
+            issuer.as_ref(),
+            bob.pubkey().as_ref(),
+            &schema_id.to_le_bytes(),
+        ],
         &aegis::id(),
     )
     .0;
@@ -1493,8 +1576,9 @@ fn aegis_valid_from_gates_until_active() {
             data: aegis::instruction::IssueAttestation {
                 subject: bob.pubkey(),
                 data: aegis::instructions::attestation::AttestationData {
-                    schema: aegis::constants::schema::REGION,
-                    value: 0b0001,
+                    schema_id,
+                    commitment: [1u8; 32],
+                    attr_root: [0u8; 32],
                     valid_from: now + 86_400,
                     expires_at: 0,
                 },
@@ -1506,7 +1590,9 @@ fn aegis_valid_from_gates_until_active() {
     )
     .unwrap();
 
-    // Not yet valid → rejected.
+    // Not yet valid → `verify` returns out-of-window → capability bit unset → rejected.
+    w.refresh_eligibility(&alice, bob.pubkey(), issuer, schema_id)
+        .unwrap();
     let ix = w.hooked_transfer_ix(
         alice.pubkey(),
         alice.pubkey(),
@@ -1520,8 +1606,10 @@ fn aegis_valid_from_gates_until_active() {
         "pre-active attestation passed"
     );
 
-    // After the window opens → allowed.
+    // After the window opens → refresh flips positive → allowed.
     w.warp_days(1);
+    w.refresh_eligibility(&alice, bob.pubkey(), issuer, schema_id)
+        .unwrap();
     let ix = w.hooked_transfer_ix(
         alice.pubkey(),
         alice.pubkey(),
@@ -1547,7 +1635,12 @@ fn aegis_revocation_is_sticky() {
     )
     .0;
     let attestation = Pubkey::find_program_address(
-        &[b"attestation", issuer.as_ref(), subject.as_ref()],
+        &[
+            b"attestation",
+            issuer.as_ref(),
+            subject.as_ref(),
+            &aegis::constants::well_known_schema::REGION.to_le_bytes(),
+        ],
         &aegis::id(),
     )
     .0;
@@ -1571,8 +1664,9 @@ fn aegis_revocation_is_sticky() {
     )
     .unwrap();
     let data = aegis::instructions::attestation::AttestationData {
-        schema: aegis::constants::schema::REGION,
-        value: 0b0001,
+        schema_id: aegis::constants::well_known_schema::REGION,
+        commitment: [1u8; 32],
+        attr_root: [0u8; 32],
         valid_from: 0,
         expires_at: 0,
     };
@@ -1642,8 +1736,4 @@ fn argus_hardcoded_constants_match_dependencies() {
         vesta_core::state::Merchant::DISCRIMINATOR
     );
     assert_eq!(argus::constants::AEGIS_ID, aegis::id());
-    assert_eq!(
-        argus::constants::ATTESTATION_DISCRIMINATOR,
-        aegis::state::Attestation::DISCRIMINATOR
-    );
 }

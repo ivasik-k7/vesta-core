@@ -2,9 +2,9 @@
   "address": "AcCdMQC1rj4KukjhFzf4S8metEAXpnt9gzvMThsu15e1",
   "metadata": {
     "name": "aegis",
-    "version": "0.1.0",
+    "version": "2.0.0",
     "spec": "0.1.0",
-    "description": "VESTA attestation issuer: signed region/tier/KYC credentials that argus and vesta_core gate on",
+    "description": "VESTA attestation & trust layer: privacy-preserving commitments + verify interface",
     "repository": "https://github.com/ivasik-k7/vesta-core"
   },
   "instructions": [
@@ -97,6 +97,140 @@
                 "kind": "account",
                 "path": "attestation.subject",
                 "account": "Attestation"
+              },
+              {
+                "kind": "account",
+                "path": "attestation.schema_id",
+                "account": "Attestation"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "deprecate_schema",
+      "docs": [
+        "Deprecate a schema, optionally pointing at a successor (registrar only)."
+      ],
+      "discriminator": [
+        17,
+        211,
+        95,
+        93,
+        93,
+        28,
+        134,
+        203
+      ],
+      "accounts": [
+        {
+          "name": "registrar",
+          "signer": true,
+          "relations": [
+            "schema"
+          ]
+        },
+        {
+          "name": "schema",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  99,
+                  104,
+                  101,
+                  109,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "registrar"
+              },
+              {
+                "kind": "account",
+                "path": "schema.id",
+                "account": "Schema"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "successor",
+          "type": {
+            "option": "pubkey"
+          }
+        }
+      ]
+    },
+    {
+      "name": "erase_attestation",
+      "docs": [
+        "Cryptographically erase an attestation (GDPR): off-chain PII + salt",
+        "destroyed, the commitment is now unopenable. Terminal."
+      ],
+      "discriminator": [
+        106,
+        145,
+        133,
+        64,
+        197,
+        249,
+        194,
+        126
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "signer": true
+        },
+        {
+          "name": "issuer",
+          "relations": [
+            "attestation"
+          ]
+        },
+        {
+          "name": "attestation",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  116,
+                  116,
+                  101,
+                  115,
+                  116,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "issuer"
+              },
+              {
+                "kind": "account",
+                "path": "attestation.subject",
+                "account": "Attestation"
+              },
+              {
+                "kind": "account",
+                "path": "attestation.schema_id",
+                "account": "Attestation"
               }
             ]
           }
@@ -171,7 +305,8 @@
     {
       "name": "issue_attestation",
       "docs": [
-        "Issue a fresh attestation for a subject wallet (authority or operator)."
+        "Issue a fresh attestation for a subject (authority or operator). The",
+        "chain stores only a commitment + Merkle root — never plaintext claims."
       ],
       "discriminator": [
         18,
@@ -224,6 +359,10 @@
               {
                 "kind": "arg",
                 "path": "subject"
+              },
+              {
+                "kind": "arg",
+                "path": "data.schema_id"
               }
             ]
           }
@@ -244,6 +383,85 @@
             "defined": {
               "name": "AttestationData"
             }
+          }
+        }
+      ]
+    },
+    {
+      "name": "register_schema",
+      "docs": [
+        "Register a typed, versioned credential schema (a shape, no subject data)."
+      ],
+      "discriminator": [
+        177,
+        252,
+        118,
+        252,
+        113,
+        195,
+        220,
+        14
+      ],
+      "accounts": [
+        {
+          "name": "registrar",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "schema",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  99,
+                  104,
+                  101,
+                  109,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "registrar"
+              },
+              {
+                "kind": "arg",
+                "path": "id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "id",
+          "type": "u64"
+        },
+        {
+          "name": "content_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "standard_uri",
+          "type": "string"
+        },
+        {
+          "name": "sas_schema",
+          "type": {
+            "option": "pubkey"
           }
         }
       ]
@@ -302,6 +520,11 @@
               {
                 "kind": "account",
                 "path": "attestation.subject",
+                "account": "Attestation"
+              },
+              {
+                "kind": "account",
+                "path": "attestation.schema_id",
                 "account": "Attestation"
               }
             ]
@@ -478,6 +701,11 @@
                 "kind": "account",
                 "path": "attestation.subject",
                 "account": "Attestation"
+              },
+              {
+                "kind": "account",
+                "path": "attestation.schema_id",
+                "account": "Attestation"
               }
             ]
           }
@@ -489,6 +717,43 @@
           "type": {
             "defined": {
               "name": "AttestationData"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "verify",
+      "docs": [
+        "Stateless verdict primitive (spec 07): evaluate a predicate over an",
+        "attestation and return a `Verdict` via return-data. Any program CPIs",
+        "this instead of reading aegis accounts by layout."
+      ],
+      "discriminator": [
+        133,
+        161,
+        141,
+        48,
+        120,
+        198,
+        88,
+        150
+      ],
+      "accounts": [
+        {
+          "name": "attestation",
+          "docs": [
+            "yields a `NOT_FOUND` verdict, not an error. Re-derived and owner-checked",
+            "against the predicate's (issuer, subject, schema_id) below."
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "predicate",
+          "type": {
+            "defined": {
+              "name": "VerifyPredicate"
             }
           }
         }
@@ -521,6 +786,19 @@
         80,
         14
       ]
+    },
+    {
+      "name": "Schema",
+      "discriminator": [
+        197,
+        41,
+        118,
+        109,
+        215,
+        189,
+        52,
+        105
+      ]
     }
   ],
   "events": [
@@ -535,6 +813,19 @@
         201,
         11,
         78
+      ]
+    },
+    {
+      "name": "AttestationErased",
+      "discriminator": [
+        168,
+        116,
+        46,
+        165,
+        219,
+        76,
+        90,
+        166
       ]
     },
     {
@@ -640,6 +931,32 @@
         224,
         239
       ]
+    },
+    {
+      "name": "SchemaDeprecated",
+      "discriminator": [
+        214,
+        52,
+        234,
+        27,
+        147,
+        16,
+        21,
+        159
+      ]
+    },
+    {
+      "name": "SchemaRegistered",
+      "discriminator": [
+        142,
+        85,
+        205,
+        242,
+        94,
+        187,
+        233,
+        76
+      ]
     }
   ],
   "errors": [
@@ -650,73 +967,130 @@
     },
     {
       "code": 6001,
+      "name": "StringTooLong",
+      "msg": "String exceeds the maximum length"
+    },
+    {
+      "code": 6002,
       "name": "Unauthorized",
       "msg": "Not authorized for this issuer (authority or operator required)"
     },
     {
-      "code": 6002,
+      "code": 6003,
       "name": "AuthorityOnly",
       "msg": "Only the issuer authority may perform this action"
     },
     {
-      "code": 6003,
+      "code": 6004,
       "name": "PendingAuthorityMismatch",
       "msg": "Pending authority does not match the signer"
     },
     {
-      "code": 6004,
+      "code": 6005,
       "name": "IssuerPaused",
       "msg": "Issuer is paused — issuance disabled"
     },
     {
-      "code": 6005,
+      "code": 6006,
       "name": "InvalidExpiry",
       "msg": "Expiry must be zero (never) or after both now and valid_from"
     },
     {
-      "code": 6006,
+      "code": 6007,
       "name": "InvalidValidFrom",
       "msg": "valid_from must be zero or a sane (non-negative) timestamp"
     },
     {
-      "code": 6007,
+      "code": 6008,
       "name": "AlreadyRevoked",
-      "msg": "Attestation already revoked"
+      "msg": "Attestation is revoked or erased — terminal, cannot be modified"
+    },
+    {
+      "code": 6009,
+      "name": "SchemaDeprecated",
+      "msg": "Schema is deprecated"
+    },
+    {
+      "code": 6010,
+      "name": "SchemaMismatch",
+      "msg": "Schema id mismatch between the attestation and the schema account"
+    },
+    {
+      "code": 6011,
+      "name": "DisclosureTooDeep",
+      "msg": "Merkle disclosure path exceeds the maximum depth"
+    },
+    {
+      "code": 6012,
+      "name": "UnsupportedVersion",
+      "msg": "Account layout version is not supported"
+    },
+    {
+      "code": 6013,
+      "name": "UnknownPredicate",
+      "msg": "Unknown or malformed predicate"
     }
   ],
   "types": [
     {
       "name": "Attestation",
       "docs": [
-        "A signed credential binding a subject wallet to a value under a schema.",
+        "A privacy-preserving credential (spec 06): the chain holds only a hiding +",
+        "binding COMMITMENT and a per-attribute Merkle root, never plaintext claims.",
+        "The real (W3C-VC-shaped) credential lives off-chain with the holder; the",
+        "chain is the integrity / freshness / revocation anchor.",
         "",
-        "FIELD ORDER IS AN ABI. argus reads this account by fixed byte offset",
-        "(`argus::constants::attestation_offset`) rather than linking the aegis",
-        "crate. The layout below MUST stay: disc(8) · issuer(32) · subject(32) ·",
-        "schema(u16) · value(u64) · issued_at(i64) · valid_from(i64) · expires_at(i64)",
-        "· revoked(bool) · bump(u8). Reordering breaks every guard that gates on it."
+        "Multi-credential: keyed by (issuer, subject, schema_id), a subject holds",
+        "many independent credentials from one issuer. This replaces the v1 public",
+        "`value: u64` bitmask that argus read by fixed offset — consumers now go",
+        "through the `verify` interface, not raw offsets."
       ],
       "type": {
         "kind": "struct",
         "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
           {
             "name": "issuer",
             "type": "pubkey"
           },
           {
             "name": "subject",
+            "docs": [
+              "Holder-binding handle (not necessarily the payment wallet)."
+            ],
             "type": "pubkey"
           },
           {
-            "name": "schema",
-            "type": "u16"
+            "name": "schema_id",
+            "type": "u64"
           },
           {
-            "name": "value",
+            "name": "commitment",
             "docs": [
-              "Schema-defined payload — typically a bitmask (regions, tiers)."
+              "Commitment `H(claims ‖ holder_binding ‖ salt)` (sha256 in phase 1;",
+              "Poseidon is the wave-2 target for ZK-circuit field compatibility)."
             ],
-            "type": "u64"
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "attr_root",
+            "docs": [
+              "Per-attribute Merkle root, for single-attribute selective disclosure."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           },
           {
             "name": "issued_at",
@@ -725,20 +1099,23 @@
           {
             "name": "valid_from",
             "docs": [
-              "Unix \"not-before\"; 0 means valid immediately. Enables pre-issuance."
+              "Unix \"not-before\"; 0 = valid immediately."
             ],
             "type": "i64"
           },
           {
             "name": "expires_at",
             "docs": [
-              "Unix expiry; 0 means never expires."
+              "Unix expiry; 0 = never."
             ],
             "type": "i64"
           },
           {
-            "name": "revoked",
-            "type": "bool"
+            "name": "status",
+            "docs": [
+              "`attestation_status::*`."
+            ],
+            "type": "u8"
           },
           {
             "name": "bump",
@@ -759,6 +1136,10 @@
           {
             "name": "subject",
             "type": "pubkey"
+          },
+          {
+            "name": "schema_id",
+            "type": "u64"
           }
         ]
       }
@@ -766,18 +1147,34 @@
     {
       "name": "AttestationData",
       "docs": [
-        "Payload shared by issue/update — one struct, one validation path."
+        "Payload shared by issue/update — the chain receives only commitments, never",
+        "plaintext claims (spec 06). The issuer computes the commitment and the",
+        "per-attribute Merkle root off-chain from the real credential + salt."
       ],
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "schema",
-            "type": "u16"
+            "name": "schema_id",
+            "type": "u64"
           },
           {
-            "name": "value",
-            "type": "u64"
+            "name": "commitment",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "attr_root",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           },
           {
             "name": "valid_from",
@@ -797,6 +1194,26 @@
       }
     },
     {
+      "name": "AttestationErased",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "issuer",
+            "type": "pubkey"
+          },
+          {
+            "name": "subject",
+            "type": "pubkey"
+          },
+          {
+            "name": "schema_id",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "AttestationIssued",
       "type": {
         "kind": "struct",
@@ -810,11 +1227,7 @@
             "type": "pubkey"
           },
           {
-            "name": "schema",
-            "type": "u16"
-          },
-          {
-            "name": "value",
+            "name": "schema_id",
             "type": "u64"
           },
           {
@@ -842,6 +1255,10 @@
             "type": "pubkey"
           },
           {
+            "name": "schema_id",
+            "type": "u64"
+          },
+          {
             "name": "reason_code",
             "type": "u16"
           }
@@ -862,11 +1279,7 @@
             "type": "pubkey"
           },
           {
-            "name": "schema",
-            "type": "u16"
-          },
-          {
-            "name": "value",
+            "name": "schema_id",
             "type": "u64"
           },
           {
@@ -884,17 +1297,23 @@
       "name": "Issuer",
       "docs": [
         "An attestation authority. Issues credentials for subjects that downstream",
-        "programs (argus, vesta_core campaigns) gate on.",
+        "programs (argus, vesta_core campaigns) gate on via the `verify` interface.",
         "",
         "Two keys, by design (hot/cold separation): `authority` is the cold admin —",
         "it rotates authority, pauses, and sets the operator. `operator` is an",
         "optional hot signing key that may issue / update / revoke / close",
-        "attestations but can never touch admin state. High-volume issuers keep the",
-        "authority offline and rotate the operator freely."
+        "attestations but can never touch admin state."
       ],
       "type": {
         "kind": "struct",
         "fields": [
+          {
+            "name": "version",
+            "docs": [
+              "Layout version (Track B convention) — first field after the discriminator."
+            ],
+            "type": "u8"
+          },
           {
             "name": "id",
             "docs": [
@@ -1035,15 +1454,189 @@
           }
         ]
       }
+    },
+    {
+      "name": "Schema",
+      "docs": [
+        "A typed, versioned credential schema (spec 06). Schemas are shapes, not",
+        "instances — they carry NO subject data. `content_hash` anchors the off-chain",
+        "schema document (Arweave/IPFS); `sas_schema` optionally aliases a Solana",
+        "Attestation Service schema so the two namespaces reconcile."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "registrar",
+            "type": "pubkey"
+          },
+          {
+            "name": "id",
+            "type": "u64"
+          },
+          {
+            "name": "content_hash",
+            "docs": [
+              "Content hash of the off-chain schema document."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "standard_uri",
+            "type": "string"
+          },
+          {
+            "name": "sas_schema",
+            "docs": [
+              "Optional alias to a SAS schema account."
+            ],
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "deprecated",
+            "type": "bool"
+          },
+          {
+            "name": "successor",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SchemaDeprecated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "schema",
+            "type": "pubkey"
+          },
+          {
+            "name": "successor",
+            "type": {
+              "option": "pubkey"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "SchemaRegistered",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "schema",
+            "type": "pubkey"
+          },
+          {
+            "name": "registrar",
+            "type": "pubkey"
+          },
+          {
+            "name": "id",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VerifyPredicate",
+      "docs": [
+        "The predicate `verify` evaluates (spec 07 opcode set, phase-1 subset). More",
+        "opcodes (thresholds, accredited-by, ZK) are additive on this enum."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Present",
+            "fields": [
+              {
+                "name": "issuer",
+                "type": "pubkey"
+              },
+              {
+                "name": "subject",
+                "type": "pubkey"
+              },
+              {
+                "name": "schema_id",
+                "type": "u64"
+              }
+            ]
+          },
+          {
+            "name": "AttributeDisclosed",
+            "fields": [
+              {
+                "name": "issuer",
+                "type": "pubkey"
+              },
+              {
+                "name": "subject",
+                "type": "pubkey"
+              },
+              {
+                "name": "schema_id",
+                "type": "u64"
+              },
+              {
+                "name": "index",
+                "type": "u32"
+              },
+              {
+                "name": "leaf",
+                "type": {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                }
+              },
+              {
+                "name": "path",
+                "type": {
+                  "vec": {
+                    "array": [
+                      "u8",
+                      32
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
     }
   ],
   "constants": [
     {
       "name": "ATTESTATION_SEED",
       "docs": [
-        "Per-(issuer, subject) credential. Seeds [\"attestation\", issuer, subject].",
-        "The layout is read cross-program by argus at fixed offsets — do not reorder",
-        "the `Attestation` fields without updating argus::constants::attestation_offset."
+        "Per-(issuer, subject, schema) credential. Consumers read it through the",
+        "`verify` interface (never by fixed byte offset — spec 07); every account",
+        "carries a `version` header so storage can evolve without breaking readers.",
+        "Seeds [\"attestation\", issuer, subject, schema_id_le]."
       ],
       "type": "bytes",
       "value": "[97, 116, 116, 101, 115, 116, 97, 116, 105, 111, 110]"
@@ -1051,10 +1644,18 @@
     {
       "name": "ISSUER_SEED",
       "docs": [
-        "Issuer authority account (spec §13). Seeds [\"issuer\", authority]."
+        "Issuer authority account. Seeds [\"issuer\", authority, id_le]."
       ],
       "type": "bytes",
       "value": "[105, 115, 115, 117, 101, 114]"
+    },
+    {
+      "name": "SCHEMA_SEED",
+      "docs": [
+        "Typed credential schema. Seeds [\"schema\", registrar, schema_id_le]."
+      ],
+      "type": "bytes",
+      "value": "[115, 99, 104, 101, 109, 97]"
     }
   ]
 }

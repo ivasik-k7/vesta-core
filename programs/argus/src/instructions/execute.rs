@@ -6,17 +6,17 @@ use spl_token_2022_interface::extension::{
 
 use crate::{
     constants::{
-        attestation_offset, flags, reason, ATTESTATION_DISCRIMINATOR, ATTESTATION_SEED, GUARD_SEED,
-        LIST_ENTRY_SEED, SECONDS_PER_DAY, WALLET_STATE_SEED,
+        flags, reason, CAP_SEED, GUARD_SEED, LIST_ENTRY_SEED, PREDICATE_ATTESTATION_BIT,
+        SECONDS_PER_DAY, STATE_VERSION, WALLET_STATE_SEED,
     },
     error::GuardError,
     events::TransferDecision,
-    state::{GuardConfig, WalletPolicyState},
+    state::{EligibilityCapability, GuardConfig, WalletPolicyState},
 };
 
 /// Accounts arrive privilege-de-escalated (read-only, non-signer) except the
 /// hook-owned WalletPolicyState, which the meta list declares writable. State,
-/// list, and attestation accounts are Unchecked on purpose: the short-circuit
+/// list, and capability accounts are Unchecked on purpose: the short-circuit
 /// rules (issuer/treasury) must succeed for wallets that never opened state.
 #[derive(Accounts)]
 pub struct Execute<'info> {
@@ -41,12 +41,9 @@ pub struct Execute<'info> {
     pub destination_owner: UncheckedAccount<'info>,
     /// CHECK: allow/deny list entry PDA; existence == membership.
     pub list_entry: UncheckedAccount<'info>,
-    /// CHECK: aegis program id, pinned in the meta list.
-    pub aegis_program: UncheckedAccount<'info>,
-    /// CHECK: trusted aegis issuer, pinned in the meta list.
-    pub aegis_issuer: UncheckedAccount<'info>,
-    /// CHECK: aegis attestation PDA over the destination owner (spec §7).
-    pub attestation: UncheckedAccount<'info>,
+    /// CHECK: cached EligibilityCapability ["cap", mint, destination owner] under
+    /// argus; read only on the REQUIRE_ATTESTATION path (spec 09) — no aegis CPI.
+    pub capability: UncheckedAccount<'info>,
 }
 
 pub fn handle_execute(ctx: Context<Execute>, amount: u64) -> Result<()> {
@@ -151,18 +148,13 @@ pub fn handle_execute(ctx: Context<Execute>, amount: u64) -> Result<()> {
         }
     }
 
-    // Rule 8: attestation gating (spec §7).
+    // Rule 8: eligibility gating (spec 09) — read the destination owner's cached
+    // verdict. No aegis CPI on the hot path; refresh_eligibility paid for it.
     if a.guard_config.flags & flags::REQUIRE_ATTESTATION != 0
-        && !attestation_ok(&ctx, destination_owner)?
+        && !capability_ok(&ctx, destination_owner)?
     {
-        decide(
-            &ctx,
-            source_owner,
-            amount,
-            false,
-            reason::ATTESTATION_FAILED,
-        )?;
-        return err!(GuardError::AttestationFailed);
+        decide(&ctx, source_owner, amount, false, reason::ELIGIBILITY_STALE)?;
+        return err!(GuardError::EligibilityStale);
     }
 
     // Rule 9: per-transfer cap.
@@ -271,92 +263,45 @@ fn decide(
     Ok(())
 }
 
-/// Validate the aegis attestation on the destination owner against policy
-/// (spec §7). argus does not link aegis; fields are read by verified offset.
-fn attestation_ok(ctx: &Context<Execute>, destination_owner: Pubkey) -> Result<bool> {
+/// Read the destination owner's cached `EligibilityCapability` (spec 09). NO
+/// aegis CPI on the hot path — the expensive `verify` was paid off-path by
+/// `refresh_eligibility`. Fails closed on any missing / stale / mismatched /
+/// wrong-version capability; the caller must re-run `refresh_eligibility`.
+fn capability_ok(ctx: &Context<Execute>, destination_owner: Pubkey) -> Result<bool> {
     let a = &ctx.accounts;
+    let mint_key = a.mint.key();
 
-    // The meta list pins these, but assert integrity before trusting them.
-    require_keys_eq!(
-        a.aegis_program.key(),
-        crate::constants::AEGIS_ID,
-        GuardError::MetaListMismatch
-    );
-    require_keys_eq!(
-        a.aegis_issuer.key(),
-        a.guard_config.attestation_issuer,
-        GuardError::MetaListMismatch
-    );
+    // Pinned derivation: the capability MUST be the canonical PDA for
+    // (mint, destination owner). The meta list resolves it, but assert it.
     let expected = Pubkey::find_program_address(
-        &[
-            ATTESTATION_SEED,
-            a.guard_config.attestation_issuer.as_ref(),
-            destination_owner.as_ref(),
-        ],
-        &crate::constants::AEGIS_ID,
+        &[CAP_SEED, mint_key.as_ref(), destination_owner.as_ref()],
+        &crate::ID,
     )
     .0;
-    require_keys_eq!(a.attestation.key(), expected, GuardError::MetaListMismatch);
+    require_keys_eq!(a.capability.key(), expected, GuardError::MetaListMismatch);
 
-    // Missing / wrong-owner attestation → not satisfied (fail closed).
-    if *a.attestation.owner != crate::constants::AEGIS_ID || a.attestation.data_is_empty() {
+    // Missing / wrong-owner → not eligible (fail closed → EligibilityStale).
+    if *a.capability.owner != crate::ID || a.capability.data_is_empty() {
         return Ok(false);
     }
-    let data = a.attestation.try_borrow_data()?;
-    if data.len() < attestation_offset::MIN_LEN || data[..8] != ATTESTATION_DISCRIMINATOR {
+    let data = a.capability.try_borrow_data()?;
+    let cap = EligibilityCapability::try_deserialize(&mut data.as_ref())
+        .map_err(|_| GuardError::EligibilityStale)?;
+
+    // Versioned read + full binding + epoch + freshness (spec 09 §4.4).
+    if cap.version != STATE_VERSION
+        || cap.mint != mint_key
+        || cap.subject != destination_owner
+        || cap.aegis_program != a.guard_config.aegis_program
+        || cap.policy_epoch != a.guard_config.policy_epoch
+    {
         return Ok(false);
     }
-
-    let issuer = Pubkey::try_from(&data[attestation_offset::ISSUER])
-        .map_err(|_| GuardError::AttestationFailed)?;
-    let subject = Pubkey::try_from(&data[attestation_offset::SUBJECT])
-        .map_err(|_| GuardError::AttestationFailed)?;
-    if issuer != a.guard_config.attestation_issuer || subject != destination_owner {
-        return Ok(false);
-    }
-
-    let schema = u16::from_le_bytes(
-        data[attestation_offset::SCHEMA]
-            .try_into()
-            .map_err(|_| GuardError::AttestationFailed)?,
-    );
-    if schema != a.guard_config.attestation_schema {
-        return Ok(false);
-    }
-
-    let value = u64::from_le_bytes(
-        data[attestation_offset::VALUE]
-            .try_into()
-            .map_err(|_| GuardError::AttestationFailed)?,
-    );
-    if value & a.guard_config.attestation_mask == 0 {
-        return Ok(false);
-    }
-
-    let revoked = data[attestation_offset::REVOKED] != 0;
-    if revoked {
-        return Ok(false);
-    }
-
     let now = Clock::get()?.unix_timestamp;
-    let valid_from = i64::from_le_bytes(
-        data[attestation_offset::VALID_FROM]
-            .try_into()
-            .map_err(|_| GuardError::AttestationFailed)?,
-    );
-    if valid_from != 0 && now < valid_from {
+    if now >= cap.expires_at {
         return Ok(false);
     }
-    let expires_at = i64::from_le_bytes(
-        data[attestation_offset::EXPIRES_AT]
-            .try_into()
-            .map_err(|_| GuardError::AttestationFailed)?,
-    );
-    if expires_at != 0 && now >= expires_at {
-        return Ok(false);
-    }
-
-    Ok(true)
+    Ok(cap.verdicts & PREDICATE_ATTESTATION_BIT != 0)
 }
 
 /// Fail closed unless `source` is a Token-2022 account of `mint` that is
