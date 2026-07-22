@@ -95,6 +95,12 @@ pub mod argus {
         instructions::refresh_eligibility::handle_refresh_eligibility(ctx)
     }
 
+    /// Guard-authority: immediately invalidate a subject's cached capability
+    /// (e.g. on a known aegis-side revocation), without a global epoch bump.
+    pub fn invalidate_capability(ctx: Context<InvalidateCapability>) -> Result<()> {
+        instructions::refresh_eligibility::handle_invalidate_capability(ctx)
+    }
+
     /// Invoked by Token-2022 on every transfer of a hooked mint (spec §5).
     #[instruction(discriminator = ExecuteInstruction::SPL_DISCRIMINATOR_SLICE)]
     pub fn execute(ctx: Context<Execute>, amount: u64) -> Result<()> {

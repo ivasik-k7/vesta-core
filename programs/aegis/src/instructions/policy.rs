@@ -1,10 +1,10 @@
 use anchor_lang::prelude::*;
 
 use crate::{
-    constants::{POLICY_SEED, STATE_VERSION},
+    constants::{verify_reason, POLICY_SEED, STATE_VERSION},
     error::AegisError,
     events::{PolicyDecision, PolicyDeprecated, PolicyRegistered},
-    instructions::verify::{emit_verdict, evaluate, VerifyPredicate},
+    instructions::verify::{emit_verdict, evaluate, Verdict},
     state::Policy,
 };
 
@@ -99,19 +99,25 @@ pub struct VerifyPolicy<'info> {
 
 pub fn handle_verify_policy(ctx: Context<VerifyPolicy>, subject: Pubkey) -> Result<()> {
     let policy = &ctx.accounts.policy;
-    let predicate = VerifyPredicate::Present {
-        issuer: policy.issuer,
-        subject,
-        schema_id: policy.schema_id,
+
+    // A retired policy authorizes nobody — fail closed with a distinct reason so
+    // a return-data consumer can detect the withdrawal and migrate.
+    let mut verdict = if policy.deprecated {
+        Verdict {
+            reason_code: verify_reason::POLICY_DEPRECATED,
+            ..Verdict::default()
+        }
+    } else {
+        evaluate(
+            &ctx.accounts.attestation,
+            policy.issuer,
+            subject,
+            policy.schema_id,
+            policy.freshness_secs,
+        )
     };
-    let verdict = evaluate(
-        &ctx.accounts.attestation,
-        &predicate,
-        policy.issuer,
-        subject,
-        policy.schema_id,
-        policy.freshness_secs,
-    );
+    // Stamp the policy's jurisdiction so a composing verifier can enforce scope.
+    verdict.jurisdiction = policy.jurisdiction;
 
     emit!(PolicyDecision {
         policy: policy.key(),

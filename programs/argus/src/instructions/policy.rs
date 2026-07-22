@@ -21,6 +21,9 @@ pub struct InitialPolicy {
     /// aegis issuer to trust; `Pubkey::default()` when attestation is unused.
     pub attestation_issuer: Pubkey,
     pub attestation_schema: u64,
+    /// Eligibility-capability TTL, seconds (0 = protocol default). Lower =
+    /// tighter aegis-revocation latency.
+    pub capability_ttl_secs: i64,
 }
 
 /// Partial retune. Every field is optional; `None` leaves the value untouched.
@@ -34,6 +37,7 @@ pub struct PolicyUpdate {
     pub transfers_per_day_cap: Option<u16>,
     pub cooldown_secs: Option<u32>,
     pub attestation_schema: Option<u64>,
+    pub capability_ttl_secs: Option<i64>,
 }
 
 impl PolicyUpdate {
@@ -60,6 +64,10 @@ impl PolicyUpdate {
         }
         if let Some(v) = self.attestation_schema {
             config.attestation_schema = v;
+        }
+        if let Some(v) = self.capability_ttl_secs {
+            require!(v >= 0, GuardError::InvalidPolicy);
+            config.capability_ttl_secs = v;
         }
         config.policy_epoch = config.policy_epoch.saturating_add(1);
         validate_policy(

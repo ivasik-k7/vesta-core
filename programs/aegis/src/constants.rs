@@ -71,4 +71,6 @@ pub mod verify_reason {
     pub const NOT_ACCREDITED: u16 = 11;
     /// Accreditation does not permit the requested schema (spec 08).
     pub const SCHEMA_NOT_PERMITTED: u16 = 12;
+    /// The named policy has been deprecated / retired (spec 07).
+    pub const POLICY_DEPRECATED: u16 = 13;
 }

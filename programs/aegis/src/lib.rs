@@ -190,6 +190,12 @@ pub mod aegis {
         )
     }
 
+    /// Enable/disable a trust root — the atomic kill-switch that de-trusts every
+    /// issuer under it in one action (incident response / root-key compromise).
+    pub fn set_root_active(ctx: Context<SetRootActive>, active: bool) -> Result<()> {
+        instructions::accreditation::handle_set_root_active(ctx, active)
+    }
+
     /// Revoke an accreditation — de-trusts the issuer under this root instantly.
     pub fn revoke_accreditation(ctx: Context<RevokeAccreditation>) -> Result<()> {
         instructions::accreditation::handle_revoke_accreditation(ctx)

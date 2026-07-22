@@ -30,4 +30,6 @@ pub enum AegisError {
     UnsupportedVersion,
     #[msg("Unknown or malformed predicate")]
     UnknownPredicate,
+    #[msg("Accreditation must specify at least one permitted schema")]
+    PermittedSchemasRequired,
 }

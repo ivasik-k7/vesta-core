@@ -1,14 +1,14 @@
 use anchor_lang::{prelude::*, solana_program::program::set_return_data};
-use solana_sha256_hasher::hashv;
 
 use crate::{
-    constants::{verify_reason, ATTESTATION_SEED, MAX_ATTR_DEPTH, STATE_VERSION},
+    constants::{verify_reason, ATTESTATION_SEED, STATE_VERSION},
     error::AegisError,
     state::{attestation_status, Attestation},
 };
 
 /// The verdict a `verify` call returns (via `sol_set_return_data`). Read by the
-/// caller with `sol_get_return_data`; never PII. Spec 07.
+/// caller with `sol_get_return_data`; never PII. Spec 07. `jurisdiction` / `tier`
+/// let a composing verifier enforce scoped trust (0 = unset / not applicable).
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, Default)]
 pub struct Verdict {
     pub ok: bool,
@@ -16,10 +16,18 @@ pub struct Verdict {
     pub issuer: Pubkey,
     pub schema_id: u64,
     pub expires_at: i64,
+    pub jurisdiction: u16,
+    pub tier: u8,
 }
 
-/// The predicate `verify` evaluates (spec 07 opcode set, phase-1 subset). More
-/// opcodes (thresholds, accredited-by, ZK) are additive on this enum.
+/// The predicate `verify` evaluates (spec 07). Phase 1 ships `Present` only.
+///
+/// Selective disclosure (`AttributeDisclosed`) was intentionally removed: a
+/// caller-supplied Merkle leaf with no value-binding or leaf/internal domain
+/// separation is unsound (an empty path returns the leaf verbatim, and the
+/// public `attr_root` could be replayed as a leaf). It returns in wave 2 with a
+/// value-bound, domain-separated (or ZK) construction. More opcodes
+/// (thresholds, accredited-by) are additive on this enum.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub enum VerifyPredicate {
     /// Subject holds a live (active, in-window) credential of `schema_id`
@@ -28,16 +36,6 @@ pub enum VerifyPredicate {
         issuer: Pubkey,
         subject: Pubkey,
         schema_id: u64,
-    },
-    /// `Present` and a disclosed attribute leaf is a member of the credential's
-    /// per-attribute Merkle root at `index` (sha256 path) — selective disclosure.
-    AttributeDisclosed {
-        issuer: Pubkey,
-        subject: Pubkey,
-        schema_id: u64,
-        index: u32,
-        leaf: [u8; 32],
-        path: Vec<[u8; 32]>,
     },
 }
 
@@ -48,12 +46,6 @@ impl VerifyPredicate {
                 issuer,
                 subject,
                 schema_id,
-            } => (issuer, subject, schema_id),
-            VerifyPredicate::AttributeDisclosed {
-                issuer,
-                subject,
-                schema_id,
-                ..
             } => (issuer, subject, schema_id),
         }
     }
@@ -71,14 +63,7 @@ pub struct Verify<'info> {
 /// it returns `Verdict { ok: false, reason_code }` so callers compose it.
 pub fn handle_verify(ctx: Context<Verify>, predicate: VerifyPredicate) -> Result<()> {
     let (issuer, subject, schema_id) = predicate.target();
-    let verdict = evaluate(
-        &ctx.accounts.attestation,
-        &predicate,
-        issuer,
-        subject,
-        schema_id,
-        0,
-    );
+    let verdict = evaluate(&ctx.accounts.attestation, issuer, subject, schema_id, 0);
     emit_verdict(&verdict)
 }
 
@@ -106,7 +91,6 @@ fn fail(reason: u16) -> Verdict {
 /// within that window (freshness / periodic re-verification — used by policies).
 pub(crate) fn evaluate(
     account: &UncheckedAccount,
-    predicate: &VerifyPredicate,
     issuer: Pubkey,
     subject: Pubkey,
     schema_id: u64,
@@ -162,38 +146,12 @@ pub(crate) fn evaluate(
         return fail(verify_reason::TOO_OLD);
     }
 
-    if let VerifyPredicate::AttributeDisclosed {
-        index, leaf, path, ..
-    } = predicate
-    {
-        if path.len() > MAX_ATTR_DEPTH {
-            return fail(verify_reason::DISCLOSURE_MISMATCH);
-        }
-        if merkle_root(*leaf, *index, path) != att.attr_root {
-            return fail(verify_reason::DISCLOSURE_MISMATCH);
-        }
-    }
-
     Verdict {
         ok: true,
         reason_code: verify_reason::OK,
         issuer: att.issuer,
         schema_id: att.schema_id,
         expires_at: att.expires_at,
+        ..Verdict::default()
     }
-}
-
-/// Recompute a sha256 Merkle root from a leaf, its index, and the sibling path.
-fn merkle_root(leaf: [u8; 32], index: u32, path: &[[u8; 32]]) -> [u8; 32] {
-    let mut node = leaf;
-    let mut idx = index;
-    for sib in path {
-        node = if idx & 1 == 0 {
-            hashv(&[&node, sib]).to_bytes()
-        } else {
-            hashv(&[sib, &node]).to_bytes()
-        };
-        idx >>= 1;
-    }
-    node
 }

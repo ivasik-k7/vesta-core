@@ -63,6 +63,7 @@ fn base_policy() -> InitialPolicy {
         policy: Pubkey::default(),
         attestation_issuer: Pubkey::default(),
         attestation_schema: 0,
+        capability_ttl_secs: 0,
     }
 }
 
@@ -324,6 +325,31 @@ impl World {
             data: argus::instruction::RefreshEligibility {}.data(),
         };
         self.send(&[ix], &[payer], &payer.pubkey())
+    }
+
+    /// Guard-authority: force-invalidate a subject's cached capability.
+    fn invalidate_capability(
+        &mut self,
+        subject: Pubkey,
+    ) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+        let authority = self.merchant_authority.insecure_clone();
+        let ix = Instruction {
+            program_id: argus::id(),
+            accounts: argus::accounts::InvalidateCapability {
+                authority: authority.pubkey(),
+                mint: self.mint,
+                guard_config: Pubkey::find_program_address(
+                    &[b"guard", self.mint.as_ref()],
+                    &argus::id(),
+                )
+                .0,
+                subject,
+                capability: self.capability_pda(subject),
+            }
+            .to_account_metas(None),
+            data: argus::instruction::InvalidateCapability {}.data(),
+        };
+        self.send(&[ix], &[&authority], &authority.pubkey())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1140,6 +1166,149 @@ fn attestation_gating_composes_with_aegis() {
     assert!(
         w.send(&[ix], &[&alice], &alice.pubkey()).is_err(),
         "revoked credential still passed"
+    );
+}
+
+/// The guard authority can close a subject's aegis-revocation-latency window
+/// immediately via `invalidate_capability`, without a global epoch bump — and
+/// a stranger cannot (`has_one = authority`).
+#[test]
+fn argus_invalidate_capability_closes_the_gate() {
+    let issuer_authority = Keypair::new();
+    let issuer = Pubkey::find_program_address(
+        &[
+            b"issuer",
+            issuer_authority.pubkey().as_ref(),
+            &0u64.to_le_bytes(),
+        ],
+        &aegis::id(),
+    )
+    .0;
+
+    let mut policy = base_policy();
+    policy.flags |= argus::constants::flags::REQUIRE_ATTESTATION;
+    policy.aegis_program = aegis::id();
+    policy.attestation_issuer = issuer;
+    policy.attestation_schema = aegis::constants::well_known_schema::REGION;
+
+    let mut w = setup_with_policy(policy);
+    w.svm
+        .airdrop(&issuer_authority.pubkey(), 5_000_000_000)
+        .unwrap();
+
+    let alice = Keypair::new();
+    let bob = Keypair::new();
+    prime_sender(&mut w, &alice, bob.pubkey(), 5_000);
+
+    // Init the aegis issuer.
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::InitIssuer {
+                authority: issuer_authority.pubkey(),
+                issuer,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::InitIssuer {
+                id: 0,
+                name: "GeoOracle".into(),
+            }
+            .data(),
+        }],
+        &[&issuer_authority],
+        &issuer_authority.pubkey(),
+    )
+    .unwrap();
+
+    let schema_id = aegis::constants::well_known_schema::REGION;
+    let attestation = Pubkey::find_program_address(
+        &[
+            b"attestation",
+            issuer.as_ref(),
+            bob.pubkey().as_ref(),
+            &schema_id.to_le_bytes(),
+        ],
+        &aegis::id(),
+    )
+    .0;
+
+    // Issue a credential + refresh → capability bit set → gift allowed.
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::IssueAttestation {
+                signer: issuer_authority.pubkey(),
+                issuer,
+                attestation,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::IssueAttestation {
+                subject: bob.pubkey(),
+                data: aegis::instructions::attestation::AttestationData {
+                    schema_id,
+                    commitment: [7u8; 32],
+                    attr_root: [0u8; 32],
+                    valid_from: 0,
+                    expires_at: 0,
+                },
+            }
+            .data(),
+        }],
+        &[&issuer_authority],
+        &issuer_authority.pubkey(),
+    )
+    .unwrap();
+    w.refresh_eligibility(&alice, bob.pubkey(), issuer, schema_id)
+        .unwrap();
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        1_000,
+        issuer,
+        true,
+    );
+    w.send(&[ix], &[&alice], &alice.pubkey()).unwrap();
+
+    // A stranger cannot invalidate (guard authority only).
+    let stranger = Keypair::new();
+    w.svm.airdrop(&stranger.pubkey(), 5_000_000_000).unwrap();
+    let bad = Instruction {
+        program_id: argus::id(),
+        accounts: argus::accounts::InvalidateCapability {
+            authority: stranger.pubkey(),
+            mint: w.mint,
+            guard_config: Pubkey::find_program_address(&[b"guard", w.mint.as_ref()], &argus::id())
+                .0,
+            subject: bob.pubkey(),
+            capability: w.capability_pda(bob.pubkey()),
+        }
+        .to_account_metas(None),
+        data: argus::instruction::InvalidateCapability {}.data(),
+    };
+    assert!(
+        w.send(&[bad], &[&stranger], &stranger.pubkey()).is_err(),
+        "stranger invalidated a capability"
+    );
+
+    // Guard authority invalidates → capability zeroed → gate closes immediately,
+    // even though the credential is still valid in aegis. (Fresh day dodges the
+    // daily cap so only the capability gate can be responsible for the block.)
+    w.warp_days(1);
+    w.invalidate_capability(bob.pubkey()).unwrap();
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        1_000,
+        issuer,
+        true,
+    );
+    assert!(
+        w.send(&[ix], &[&alice], &alice.pubkey()).is_err(),
+        "gift passed on an invalidated capability"
     );
 }
 

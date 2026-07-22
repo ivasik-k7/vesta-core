@@ -31,6 +31,13 @@ pub struct EligibilityRefreshed {
     pub expires_at: i64,
 }
 
+/// A subject's cached capability was force-invalidated by the guard authority.
+#[event]
+pub struct CapabilityInvalidated {
+    pub mint: Pubkey,
+    pub subject: Pubkey,
+}
+
 #[event]
 pub struct GuardPausedSet {
     pub mint: Pubkey,

@@ -5,7 +5,7 @@ use crate::{
         CAPABILITY_TTL_SECS, CAP_SEED, GUARD_SEED, PREDICATE_ATTESTATION_BIT, STATE_VERSION,
     },
     error::GuardError,
-    events::EligibilityRefreshed,
+    events::{CapabilityInvalidated, EligibilityRefreshed},
     state::{EligibilityCapability, GuardConfig},
 };
 
@@ -109,10 +109,13 @@ pub fn handle_refresh_eligibility(ctx: Context<RefreshEligibility>) -> Result<()
     } else {
         0
     };
+    let ttl = if gc.capability_ttl_secs > 0 {
+        gc.capability_ttl_secs
+    } else {
+        CAPABILITY_TTL_SECS
+    };
     let now = Clock::get()?.unix_timestamp;
-    let expires_at = now
-        .checked_add(CAPABILITY_TTL_SECS)
-        .ok_or(GuardError::Overflow)?;
+    let expires_at = now.checked_add(ttl).ok_or(GuardError::Overflow)?;
 
     let mint = ctx.accounts.mint.key();
     let subject = ctx.accounts.subject.key();
@@ -136,6 +139,46 @@ pub fn handle_refresh_eligibility(ctx: Context<RefreshEligibility>) -> Result<()
         subject,
         verdicts,
         expires_at,
+    });
+    Ok(())
+}
+
+/// Guard-authority: immediately invalidate a subject's cached capability
+/// (spec 09). Closes the aegis-revocation-latency window for a *known* revoked
+/// subject without the global `configure_policy` epoch bump that would nuke
+/// every subject's cache.
+#[derive(Accounts)]
+pub struct InvalidateCapability<'info> {
+    pub authority: Signer<'info>,
+
+    /// CHECK: the hooked mint — PDA seed only.
+    pub mint: UncheckedAccount<'info>,
+
+    #[account(
+        has_one = authority @ GuardError::Unauthorized,
+        seeds = [GUARD_SEED, mint.key().as_ref()],
+        bump = guard_config.bump,
+    )]
+    pub guard_config: Account<'info, GuardConfig>,
+
+    /// CHECK: subject whose capability is being invalidated — PDA seed only.
+    pub subject: UncheckedAccount<'info>,
+
+    #[account(
+        mut,
+        seeds = [CAP_SEED, mint.key().as_ref(), subject.key().as_ref()],
+        bump = capability.bump,
+    )]
+    pub capability: Account<'info, EligibilityCapability>,
+}
+
+pub fn handle_invalidate_capability(ctx: Context<InvalidateCapability>) -> Result<()> {
+    let cap = &mut ctx.accounts.capability;
+    cap.verdicts = 0;
+    cap.expires_at = 0;
+    emit!(CapabilityInvalidated {
+        mint: ctx.accounts.mint.key(),
+        subject: ctx.accounts.subject.key(),
     });
     Ok(())
 }

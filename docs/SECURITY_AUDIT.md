@@ -6,7 +6,7 @@
 **Result:** 1 High, 3 Medium, 5 Low, 3 Informational (new). No Critical. The cross-mint swap is provably value-conserving and the Token-2022 extension authorities contain no backdoor.
 
 > [!NOTE]
-> **Remediation status (this repo):** 9 of the 10 actionable findings are **fixed** and covered by the passing test suite (54 integration tests, `cargo fmt`/`clippy -D warnings` clean). The one exception — **M-2** (merchant authority rotation) — is **deferred**: it requires a PDA-seed redesign that changes the deployed account layout, tracked with the mainnet migration. See per-finding **Status** below.
+> **Remediation status (this repo):** 9 of the 10 actionable findings are **fixed** and covered by the passing test suite (60 integration tests, `cargo fmt`/`clippy -D warnings` clean). The one exception — **M-2** (merchant authority rotation) — is **deferred**: it requires a PDA-seed redesign that changes the deployed account layout, tracked with the mainnet migration. See per-finding **Status** below.
 
 > [!IMPORTANT]
 > **This is an internal, AI-assisted adversarial review — not an independent third-party firm audit.**
@@ -191,7 +191,7 @@ Five independent reviewers were run in parallel, each scoped to a program/concer
 
 ## Remediation applied
 
-All fixes below are in-tree and covered by the test suite (54 integration tests
+All fixes below are in-tree and covered by the test suite (60 integration tests
 green; `cargo fmt --all --check` and `cargo clippy --all-targets -- -D warnings`
 clean). Regression tests were added for the two behavioural changes most at risk
 of silent reversion (H-1 real-transfer path, M-1 owner-only clawback).
@@ -212,6 +212,44 @@ of silent reversion (H-1 real-transfer path, M-1 owner-only clawback).
 
 Remaining before mainnet: **M-2**, plus the accepted-risk list (external audit,
 multisig admin, `init_config` gate, `migrate_config` removal).
+
+---
+
+## Review II — v2 privacy & capability rework (aegis 07/08, argus 09)
+
+**Commit reviewed:** the v2 slice after the base audit — aegis commitment/privacy
+model + `verify`/`verify_policy` CPIs + accreditation trust graph, and argus's
+`EligibilityCapability` cache + off-hot-path `refresh_eligibility`.
+**Method:** same adversarial fan-out (independent reviewers per program/concern),
+each returned finding re-verified line-by-line against source before inclusion.
+**Result:** 1 Critical, 2 Medium, 4 Low. **All fixed**; the suite is green
+(60 integration tests) with `cargo fmt --all --check` and `cargo clippy
+--all-targets -- -D warnings` clean.
+
+| ID | Severity | Title | Status |
+|---|---|---|---|
+| **R2-C1** | 🔴 Critical | aegis `verify` disclosed a Merkle-proven attribute (`AttributeDisclosed`) against an unauthenticated `attr_root`, defeating the commitment privacy model and letting a forged root assert any attribute | ✅ Fixed |
+| **R2-M1** | 🟠 Medium | `verify_policy` ignored `policy.deprecated` — a retired compliance rule kept issuing positive verdicts | ✅ Fixed |
+| **R2-M2** | 🟠 Medium | Subject revocation propagated to argus only on capability expiry (≤ TTL latency); no operator path to close the window sooner without a global epoch bump | ✅ Fixed |
+| **R2-L1** | 🟡 Low | `erase_attestation` was not idempotent-guarded — re-erasing an already-erased record re-emitted events / re-ran the terminal transition | ✅ Fixed |
+| **R2-L2** | 🟡 Low | `Accreditation::permits` treated an empty `permitted_schemas` set as a wildcard (allow-all) instead of least-privilege deny | ✅ Fixed |
+| **R2-L3** | 🟡 Low | Positive `Verdict` did not carry `jurisdiction` / `tier`, so a policy layer downstream could not distinguish credential provenance | ✅ Fixed |
+| **R2-L4** | 🟡 Low | A trust root had no kill-switch — a compromised/retired root could not be disabled without tearing down its accreditations | ✅ Fixed |
+
+### Remediation applied
+
+| ID | Change |
+|---|---|
+| **R2-C1** | Removed the `AttributeDisclosed` predicate, the `merkle_root` helper, and the `hashv`/`MAX_ATTR_DEPTH` machinery entirely. aegis now proves only commitment **presence/validity/freshness** on-chain; attribute-level predicates are deferred to the ZK-predicate phase (Poseidon/BN254), never asserted against an unauthenticated caller-supplied root. |
+| **R2-M1** | `handle_verify_policy` short-circuits to `Verdict { reason_code: POLICY_DEPRECATED, ..default() }` (negative, non-reverting) when `policy.deprecated`; otherwise delegates to `evaluate`. |
+| **R2-M2** | Two layers: (1) `GuardConfig.capability_ttl_secs` is now merchant-configurable (`InitialPolicy` / `configure_policy`, validated `>= 0`) so the latency ceiling is tunable per mint; (2) new guard-authority `invalidate_capability` instruction zeroes a *known* revoked subject's cached bitmap immediately (`verdicts = 0; expires_at = 0`) without the global `configure_policy` epoch bump that would nuke every subject's cache. New regression test (`argus_invalidate_capability_closes_the_gate`) asserts the gate closes and that a stranger cannot invalidate (`has_one = authority`). |
+| **R2-L1** | `handle_erase_attestation` now `require!`s `status != ERASED` (`AegisError::AlreadyRevoked`). |
+| **R2-L2** | `Accreditation::permits` now returns `count != 0 && schemas.contains(..)` — an empty permit set denies all (least privilege). `accredit_issuer` additionally rejects an empty `permitted_schemas` up front (`PermittedSchemasRequired`). |
+| **R2-L3** | `Verdict` gained `jurisdiction: u16` and `tier: u8`; positive verdicts stamp them from the `Accreditation` / `Policy`. |
+| **R2-L4** | New `set_root_active(active: bool)` on `TrustRoot` (kill-switch) emitting `TrustRootActiveSet`; evaluation treats an inactive root as untrusted. |
+
+No Review-II finding is carried forward. The base audit's **M-2** (merchant
+authority rotation) remains the only deferred item.
 
 ---
 

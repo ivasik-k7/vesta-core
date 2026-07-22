@@ -76,6 +76,12 @@ pub struct TrustRootRegistered {
 }
 
 #[event]
+pub struct TrustRootActiveSet {
+    pub root: Pubkey,
+    pub active: bool,
+}
+
+#[event]
 pub struct IssuerAccredited {
     pub root: Pubkey,
     pub subject_issuer: Pubkey,

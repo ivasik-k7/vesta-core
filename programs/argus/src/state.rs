@@ -48,6 +48,10 @@ pub struct GuardConfig {
     pub cooldown_secs: u32,
     /// Required aegis schema id (meaningful only with REQUIRE_ATTESTATION).
     pub attestation_schema: u64,
+    /// Per-guard eligibility-capability TTL, seconds (0 = protocol default). A
+    /// strict mint sets this low to shrink the aegis-revocation-latency window;
+    /// `invalidate_capability` closes it immediately for a known revocation.
+    pub capability_ttl_secs: i64,
     pub bump: u8,
 }
 

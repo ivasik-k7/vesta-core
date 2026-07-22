@@ -827,6 +827,7 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
                 policy: Pubkey::default(),
                 attestation_issuer: Pubkey::default(),
                 attestation_schema: 0,
+                capability_ttl_secs: 0,
             },
         }
         .data(),

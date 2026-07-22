@@ -6,7 +6,7 @@ use crate::{
         TRUST_ROOT_SEED,
     },
     error::AegisError,
-    events::{AccreditationRevoked, IssuerAccredited, TrustRootRegistered},
+    events::{AccreditationRevoked, IssuerAccredited, TrustRootActiveSet, TrustRootRegistered},
     instructions::verify::{emit_verdict, Verdict},
     state::{accreditation_status, Accreditation, TrustRoot},
 };
@@ -49,6 +49,32 @@ pub fn handle_register_trust_root(ctx: Context<RegisterTrustRoot>, name: String)
     Ok(())
 }
 
+/// Enable/disable a trust root — the atomic incident-response kill-switch. When
+/// inactive, `verify_accreditation` fails closed for EVERY issuer under the root
+/// in one action (vs. revoking each edge individually).
+#[derive(Accounts)]
+pub struct SetRootActive<'info> {
+    pub authority: Signer<'info>,
+
+    #[account(
+        mut,
+        has_one = authority @ AegisError::Unauthorized,
+        seeds = [TRUST_ROOT_SEED, authority.key().as_ref()],
+        bump = trust_root.bump,
+    )]
+    pub trust_root: Account<'info, TrustRoot>,
+}
+
+pub fn handle_set_root_active(ctx: Context<SetRootActive>, active: bool) -> Result<()> {
+    let root = &mut ctx.accounts.trust_root;
+    root.active = active;
+    emit!(TrustRootActiveSet {
+        root: root.key(),
+        active,
+    });
+    Ok(())
+}
+
 // ── Accreditation (root → issuer) ────────────────────────────────────────────
 
 #[derive(Accounts)]
@@ -85,6 +111,12 @@ pub fn handle_accredit_issuer(
     expires_at: i64,
 ) -> Result<()> {
     require!(ctx.accounts.trust_root.active, AegisError::Unauthorized);
+    // Least-privilege: an accreditation must name at least one schema and no
+    // more than the cap — there is no "all schemas" wildcard.
+    require!(
+        !permitted_schemas.is_empty(),
+        AegisError::PermittedSchemasRequired
+    );
     require!(
         permitted_schemas.len() <= MAX_PERMITTED_SCHEMAS,
         AegisError::StringTooLong
@@ -256,5 +288,7 @@ fn evaluate(
         issuer: subject_issuer,
         schema_id,
         expires_at: acc.expires_at,
+        jurisdiction: acc.jurisdiction,
+        tier: acc.tier,
     }
 }

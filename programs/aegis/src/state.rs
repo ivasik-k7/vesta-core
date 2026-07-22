@@ -109,11 +109,13 @@ impl Accreditation {
             && (self.expires_at == 0 || now < self.expires_at)
     }
 
-    /// Whether this accreditation covers `schema_id` (empty list = all).
+    /// Whether this accreditation covers `schema_id`. Least-privilege: an empty
+    /// list permits NOTHING (accreditation always names ≥1 schema at write time),
+    /// so a defaulted/empty scope can never silently grant all schemas.
     pub fn permits(&self, schema_id: u64) -> bool {
         let count = usize::from(self.permitted_count);
-        count == 0
-            || self.permitted_schemas[..count.min(self.permitted_schemas.len())]
+        count != 0
+            && self.permitted_schemas[..count.min(self.permitted_schemas.len())]
                 .contains(&schema_id)
     }
 }

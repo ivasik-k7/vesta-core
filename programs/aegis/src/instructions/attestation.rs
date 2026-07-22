@@ -191,6 +191,13 @@ pub fn handle_erase_attestation(ctx: Context<ManageAttestation>) -> Result<()> {
         AegisError::Unauthorized
     );
     let att = &mut ctx.accounts.attestation;
+    // Erasure is a terminal transition from ACTIVE or REVOKED (GDPR erasure must
+    // work on a revoked credential too) — but re-erasing is rejected so the
+    // status can't be churned and the audit trail stays consistent.
+    require!(
+        att.status != attestation_status::ERASED,
+        AegisError::AlreadyRevoked
+    );
     att.status = attestation_status::ERASED;
     emit!(AttestationErased {
         issuer: att.issuer,
