@@ -216,6 +216,54 @@ pub mod argus {
         instructions::trust::handle_bump_screening_epoch(ctx)
     }
 
+    // ── Multi-tenancy & licensing (spec 10, phase 5) ─────────────────────────
+
+    /// Trust-on-first-use creation of the protocol config + fee treasury.
+    pub fn initialize_protocol(
+        ctx: Context<InitializeProtocol>,
+        license_fee_lamports: u64,
+    ) -> Result<()> {
+        instructions::licensing::handle_initialize_protocol(ctx, license_fee_lamports)
+    }
+
+    /// Set the per-period license fee (protocol authority).
+    pub fn set_license_fee(ctx: Context<ProtocolAuthorityOnly>, fee: u64) -> Result<()> {
+        instructions::licensing::handle_set_license_fee(ctx, fee)
+    }
+
+    /// Propose a new protocol authority (two-step).
+    pub fn transfer_protocol_authority(
+        ctx: Context<ProtocolAuthorityOnly>,
+        new_authority: Pubkey,
+    ) -> Result<()> {
+        instructions::licensing::handle_transfer_protocol_authority(ctx, new_authority)
+    }
+
+    /// Accept a proposed protocol authority (two-step).
+    pub fn accept_protocol_authority(ctx: Context<AcceptProtocolAuthority>) -> Result<()> {
+        instructions::licensing::handle_accept_protocol_authority(ctx)
+    }
+
+    /// Withdraw accrued license fees from the treasury (protocol authority).
+    pub fn withdraw_fees(ctx: Context<WithdrawFees>, amount: u64) -> Result<()> {
+        instructions::licensing::handle_withdraw_fees(ctx, amount)
+    }
+
+    /// Grant/update a mint's premium license terms (protocol authority).
+    pub fn set_license(
+        ctx: Context<SetLicense>,
+        tier: u8,
+        entitlements: u32,
+        expires_at: i64,
+    ) -> Result<()> {
+        instructions::licensing::handle_set_license(ctx, tier, entitlements, expires_at)
+    }
+
+    /// Tenant pays the fee to extend their license by `periods` (spec 10 §4.7).
+    pub fn purchase_license(ctx: Context<PurchaseLicense>, periods: u32) -> Result<()> {
+        instructions::licensing::handle_purchase_license(ctx, periods)
+    }
+
     /// Invoked by Token-2022 on every transfer of a hooked mint (spec §5).
     #[instruction(discriminator = ExecuteInstruction::SPL_DISCRIMINATOR_SLICE)]
     pub fn execute(ctx: Context<Execute>, amount: u64) -> Result<()> {

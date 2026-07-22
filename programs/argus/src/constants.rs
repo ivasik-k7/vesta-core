@@ -46,6 +46,35 @@ pub const STATEMENT_SEED: &[u8] = b"statement";
 #[constant]
 pub const TRUST_SEED: &[u8] = b"trust";
 
+/// Protocol-wide config + fee treasury singleton (spec 10 §4.7): `["protocol"]`.
+#[constant]
+pub const PROTOCOL_SEED: &[u8] = b"protocol";
+
+/// Per-mint premium license (spec 10 §4.7): `["license", mint]`.
+#[constant]
+pub const LICENSE_SEED: &[u8] = b"license";
+
+/// Premium entitlements gated by a live `LicenseState` (spec 10 §4.7). The
+/// free tier (guard init, caps/velocity/lists, refresh, execute) needs none of
+/// these — every VESTA-style deployment onboards at zero cost.
+pub mod entitlement {
+    pub const GOVERNANCE: u32 = 1 << 0;
+    pub const STATEMENTS: u32 = 1 << 1;
+    pub const TRUST_TRIANGLE: u32 = 1 << 2;
+    pub const SCREENING: u32 = 1 << 3;
+    pub const ALL: u32 = GOVERNANCE | STATEMENTS | TRUST_TRIANGLE | SCREENING;
+}
+
+/// License tier labels (informational; entitlements are the enforced surface).
+pub mod license_tier {
+    pub const FREE: u8 = 0;
+    pub const STANDARD: u8 = 1;
+    pub const ENTERPRISE: u8 = 2;
+}
+
+/// One purchasable license period, seconds (30 days).
+pub const LICENSE_PERIOD_SECS: i64 = 30 * 86_400;
+
 /// Default trust-triangle grace window, seconds — a failing accreditation
 /// streak must persist this long before auto-degrade bites (absorbs a transient
 /// aegis outage). Configurable per mint on the `TrustAnchor`.

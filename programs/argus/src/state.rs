@@ -313,6 +313,46 @@ pub struct TrustAnchor {
     pub bump: u8,
 }
 
+/// Protocol-wide config + fee treasury (spec 10 §4.7), seeds `["protocol"]`.
+/// The PDA itself is the fee vault — lamports from `purchase_license` accrue on
+/// it and the protocol authority withdraws them. Trust-on-first-use init, then
+/// two-step authority handover (no god key retained).
+#[account]
+#[derive(InitSpace)]
+pub struct ArgusProtocol {
+    pub version: u8,
+    pub authority: Pubkey,
+    pub pending_authority: Option<Pubkey>,
+    /// Lamports charged per `purchase_license` period.
+    pub license_fee_lamports: u64,
+    pub bump: u8,
+}
+
+/// Per-mint premium license (spec 10 §4.7), seeds `["license", mint]`. Governs
+/// access to premium features (governance/statements/trust/screening) via an
+/// entitlement bitmap + expiry. Absent or expired ⇒ the mint runs at the free
+/// tier — premium ops are refused but transfers/redemption never stop, so a
+/// business-reason expiry can never strand holder assets.
+#[account]
+#[derive(InitSpace)]
+pub struct LicenseState {
+    pub version: u8,
+    pub mint: Pubkey,
+    pub tier: u8,
+    pub entitlements: u32,
+    /// Unix expiry (`0` = perpetual).
+    pub expires_at: i64,
+    pub bump: u8,
+}
+
+impl LicenseState {
+    /// True when the license is unexpired and carries `entitlement`.
+    pub fn grants(&self, entitlement: u32, now: i64) -> bool {
+        let live = self.expires_at == 0 || now < self.expires_at;
+        live && (self.entitlements & entitlement) == entitlement
+    }
+}
+
 impl RoleRegistry {
     /// The live authority for `role`.
     pub fn authority_for(&self, role: Role) -> Pubkey {

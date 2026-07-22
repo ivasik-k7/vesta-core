@@ -559,6 +559,7 @@ impl World {
                 reporter: reporter.pubkey(),
                 mint: self.mint,
                 role_registry: self.roles_pda(),
+                license: self.license_pda(),
                 statement: self.statement_pda(period),
                 system_program: system_program::ID,
             }
@@ -683,6 +684,90 @@ impl World {
             data: argus::instruction::SetDegradeMode { mode }.data(),
         };
         self.send(&[ix], &[&authority], &authority.pubkey())
+    }
+
+    // ── Multi-tenancy & licensing (spec 10 §4.7) helpers ─────────────────────
+
+    fn protocol_pda(&self) -> Pubkey {
+        Pubkey::find_program_address(&[b"protocol"], &argus::id()).0
+    }
+
+    fn license_pda(&self) -> Pubkey {
+        Pubkey::find_program_address(&[b"license", self.mint.as_ref()], &argus::id()).0
+    }
+
+    fn init_protocol(
+        &mut self,
+        protocol_authority: &Keypair,
+        fee: u64,
+    ) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+        let ix = Instruction {
+            program_id: argus::id(),
+            accounts: argus::accounts::InitializeProtocol {
+                authority: protocol_authority.pubkey(),
+                protocol: self.protocol_pda(),
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: argus::instruction::InitializeProtocol {
+                license_fee_lamports: fee,
+            }
+            .data(),
+        };
+        self.send(&[ix], &[protocol_authority], &protocol_authority.pubkey())
+    }
+
+    fn set_license(
+        &mut self,
+        protocol_authority: &Keypair,
+        tier: u8,
+        entitlements: u32,
+        expires_at: i64,
+    ) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+        let ix = Instruction {
+            program_id: argus::id(),
+            accounts: argus::accounts::SetLicense {
+                authority: protocol_authority.pubkey(),
+                protocol: self.protocol_pda(),
+                mint: self.mint,
+                license: self.license_pda(),
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: argus::instruction::SetLicense {
+                tier,
+                entitlements,
+                expires_at,
+            }
+            .data(),
+        };
+        self.send(&[ix], &[protocol_authority], &protocol_authority.pubkey())
+    }
+
+    fn purchase_license(
+        &mut self,
+        periods: u32,
+    ) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+        let authority = self.merchant_authority.insecure_clone();
+        let ix = Instruction {
+            program_id: argus::id(),
+            accounts: argus::accounts::PurchaseLicense {
+                authority: authority.pubkey(),
+                mint: self.mint,
+                guard_config: self.guard_config(),
+                protocol: self.protocol_pda(),
+                license: self.license_pda(),
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: argus::instruction::PurchaseLicense { periods }.data(),
+        };
+        self.send(&[ix], &[&authority], &authority.pubkey())
+    }
+
+    fn license_of(&self) -> argus::state::LicenseState {
+        let data = self.svm.get_account(&self.license_pda()).unwrap().data;
+        argus::state::LicenseState::try_deserialize(&mut data.as_slice()).unwrap()
     }
 }
 
@@ -2914,6 +2999,20 @@ fn argus_governance_anchor_statement() {
     let (roles, reporter, _author, _approver, _activator) = gov_roles(&mut w);
     w.init_governance(roles, 0).unwrap();
 
+    // Statements are a premium feature — grant a perpetual STATEMENTS license.
+    let protocol_authority = Keypair::new();
+    w.svm
+        .airdrop(&protocol_authority.pubkey(), 5_000_000_000)
+        .unwrap();
+    w.init_protocol(&protocol_authority, 0).unwrap();
+    w.set_license(
+        &protocol_authority,
+        argus::constants::license_tier::ENTERPRISE,
+        argus::constants::entitlement::ALL,
+        0,
+    )
+    .unwrap();
+
     let root = [9u8; 32];
     w.anchor_statement(&reporter, 20_240, root, 42).unwrap();
     let s = w.statement_of(20_240);
@@ -3284,4 +3383,161 @@ fn argus_screening_epoch_freezes_capabilities() {
         true,
     );
     w.send(&[ix], &[&alice], &alice.pubkey()).unwrap();
+}
+
+// ── Multi-tenancy & licensing (spec 10, phase 5) ─────────────────────────────
+
+#[test]
+fn argus_license_fee_flows_to_treasury_and_extends_expiry() {
+    let mut w = setup_with_policy(base_policy());
+    let protocol_authority = Keypair::new();
+    w.svm
+        .airdrop(&protocol_authority.pubkey(), 5_000_000_000)
+        .unwrap();
+
+    let fee = 1_000_000u64;
+    w.init_protocol(&protocol_authority, fee).unwrap();
+    // Grant terms (STANDARD, statements) with no time yet.
+    w.set_license(
+        &protocol_authority,
+        argus::constants::license_tier::STANDARD,
+        argus::constants::entitlement::STATEMENTS,
+        0,
+    )
+    .unwrap();
+    assert_eq!(w.license_of().expires_at, 0);
+
+    let treasury_before = w.svm.get_account(&w.protocol_pda()).unwrap().lamports;
+    w.purchase_license(2).unwrap();
+    let treasury_after = w.svm.get_account(&w.protocol_pda()).unwrap().lamports;
+    assert_eq!(
+        treasury_after - treasury_before,
+        fee * 2,
+        "fee not routed to treasury"
+    );
+    assert!(w.license_of().expires_at > 0, "expiry not extended");
+
+    // Protocol authority withdraws accrued fees.
+    let sink = Keypair::new();
+    let ix = Instruction {
+        program_id: argus::id(),
+        accounts: argus::accounts::WithdrawFees {
+            authority: protocol_authority.pubkey(),
+            protocol: w.protocol_pda(),
+            recipient: sink.pubkey(),
+        }
+        .to_account_metas(None),
+        data: argus::instruction::WithdrawFees { amount: fee }.data(),
+    };
+    w.send(&[ix], &[&protocol_authority], &protocol_authority.pubkey())
+        .unwrap();
+    assert_eq!(
+        w.svm
+            .get_account(&sink.pubkey())
+            .map(|a| a.lamports)
+            .unwrap_or(0),
+        fee
+    );
+}
+
+#[test]
+fn argus_expired_license_blocks_premium_but_not_transfers() {
+    let mut w = setup_with_policy(base_policy());
+    let (roles, reporter, _author, _approver, _activator) = gov_roles(&mut w);
+    w.init_governance(roles, 0).unwrap();
+
+    let protocol_authority = Keypair::new();
+    w.svm
+        .airdrop(&protocol_authority.pubkey(), 5_000_000_000)
+        .unwrap();
+    w.init_protocol(&protocol_authority, 0).unwrap();
+
+    // Grant a license that expires shortly.
+    let now = w.svm.get_sysvar::<Clock>().unix_timestamp;
+    w.set_license(
+        &protocol_authority,
+        argus::constants::license_tier::STANDARD,
+        argus::constants::entitlement::STATEMENTS,
+        now + 100,
+    )
+    .unwrap();
+
+    // While live, statements anchor.
+    w.anchor_statement(&reporter, 1, [1u8; 32], 1).unwrap();
+
+    // After expiry, the premium op is refused (safe degrade)...
+    w.warp_secs(200);
+    assert!(
+        w.anchor_statement(&reporter, 2, [2u8; 32], 1).is_err(),
+        "anchored a statement on an expired license"
+    );
+
+    // ...but a normal peer transfer (free tier) still flows — no asset stranding.
+    let alice = Keypair::new();
+    let bob = Keypair::new();
+    prime_sender(&mut w, &alice, bob.pubkey(), 5_000);
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        1_000,
+        Pubkey::default(),
+        true,
+    );
+    w.send(&[ix], &[&alice], &alice.pubkey()).unwrap();
+}
+
+#[test]
+fn argus_missing_entitlement_rejected() {
+    let mut w = setup_with_policy(base_policy());
+    let (roles, reporter, _author, _approver, _activator) = gov_roles(&mut w);
+    w.init_governance(roles, 0).unwrap();
+
+    let protocol_authority = Keypair::new();
+    w.svm
+        .airdrop(&protocol_authority.pubkey(), 5_000_000_000)
+        .unwrap();
+    w.init_protocol(&protocol_authority, 0).unwrap();
+    // Grant a live license WITHOUT the STATEMENTS entitlement.
+    w.set_license(
+        &protocol_authority,
+        argus::constants::license_tier::STANDARD,
+        argus::constants::entitlement::GOVERNANCE,
+        0,
+    )
+    .unwrap();
+    assert!(
+        w.anchor_statement(&reporter, 1, [1u8; 32], 1).is_err(),
+        "anchored without the STATEMENTS entitlement"
+    );
+}
+
+#[test]
+fn argus_tenants_are_isolated() {
+    // Two independent mints (tenants) under the one argus program: a license on
+    // one grants nothing on the other; their PDAs never collide.
+    let mut w1 = setup_with_policy(base_policy());
+    let protocol_authority = Keypair::new();
+    w1.svm
+        .airdrop(&protocol_authority.pubkey(), 5_000_000_000)
+        .unwrap();
+    w1.init_protocol(&protocol_authority, 0).unwrap();
+    w1.set_license(
+        &protocol_authority,
+        argus::constants::license_tier::ENTERPRISE,
+        argus::constants::entitlement::ALL,
+        0,
+    )
+    .unwrap();
+
+    // A different mint has no license account at all.
+    let w2 = setup_with_policy(base_policy());
+    assert_ne!(w1.mint, w2.mint);
+    assert_ne!(w1.license_pda(), w2.license_pda());
+    assert!(
+        w2.svm.get_account(&w2.license_pda()).is_none(),
+        "second tenant unexpectedly has a license"
+    );
+    // The first tenant's license is intact and scoped to its own mint.
+    assert_eq!(w1.license_of().mint, w1.mint);
 }

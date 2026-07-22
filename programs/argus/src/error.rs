@@ -79,4 +79,10 @@ pub enum GuardError {
     InvalidDegradeTarget,
     #[msg("Trust anchor is not configured for this mint")]
     TrustAnchorMissing,
+    #[msg("License does not grant the required entitlement or has expired")]
+    LicenseNotEntitled,
+    #[msg("Entitlement bits are out of the permitted range")]
+    InvalidEntitlement,
+    #[msg("Insufficient funds to cover the license fee")]
+    InsufficientFee,
 }

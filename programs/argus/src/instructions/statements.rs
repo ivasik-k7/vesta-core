@@ -10,9 +10,10 @@
 use anchor_lang::prelude::*;
 
 use crate::{
-    constants::{ROLES_SEED, STATEMENT_SEED, STATE_VERSION},
+    constants::{entitlement, LICENSE_SEED, ROLES_SEED, STATEMENT_SEED, STATE_VERSION},
+    error::GuardError,
     events::StatementAnchored,
-    state::{Role, RoleRegistry, StatementCommitment},
+    state::{LicenseState, Role, RoleRegistry, StatementCommitment},
 };
 
 #[derive(Accounts)]
@@ -29,6 +30,14 @@ pub struct AnchorStatement<'info> {
         bump = role_registry.bump,
     )]
     pub role_registry: Account<'info, RoleRegistry>,
+
+    /// Statements are a premium feature — a live license with the STATEMENTS
+    /// entitlement is required (spec 10 §4.7, the revenue wedge).
+    #[account(
+        seeds = [LICENSE_SEED, mint.key().as_ref()],
+        bump = license.bump,
+    )]
+    pub license: Account<'info, LicenseState>,
 
     #[account(
         init,
@@ -53,6 +62,10 @@ pub fn handle_anchor_statement(
         .require(Role::Reporter, ctx.accounts.reporter.key())?;
 
     let now = Clock::get()?.unix_timestamp;
+    require!(
+        ctx.accounts.license.grants(entitlement::STATEMENTS, now),
+        GuardError::LicenseNotEntitled
+    );
     let mint = ctx.accounts.mint.key();
 
     let statement = &mut ctx.accounts.statement;

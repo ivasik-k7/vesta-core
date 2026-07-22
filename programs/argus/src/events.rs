@@ -165,6 +165,36 @@ pub struct ScreeningEpochBumped {
     pub screening_epoch: u64,
 }
 
+// ── Multi-tenancy & licensing (spec 10 §4.7) ─────────────────────────────────
+
+#[event]
+pub struct ProtocolInitialized {
+    pub authority: Pubkey,
+    pub license_fee_lamports: u64,
+}
+
+#[event]
+pub struct LicenseSet {
+    pub mint: Pubkey,
+    pub tier: u8,
+    pub entitlements: u32,
+    pub expires_at: i64,
+}
+
+#[event]
+pub struct LicensePurchased {
+    pub mint: Pubkey,
+    pub payer: Pubkey,
+    pub fee_paid: u64,
+    pub expires_at: i64,
+}
+
+#[event]
+pub struct FeesWithdrawn {
+    pub recipient: Pubkey,
+    pub amount: u64,
+}
+
 // ── Per-transfer decision (spec §10) ─────────────────────────────────────────
 
 /// One event per `execute` call, carrying a stable canonical reason code
