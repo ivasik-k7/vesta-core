@@ -9,6 +9,9 @@ protocol, organized into two tracks:
 - **Track B — Identity & Trust / aegis** (specs 06–08): turning the attestation
   program from a public-PII shell into a **privacy-preserving verification & trust
   layer** for Solana.
+- **Track C — Transfer Policy / argus** (specs 09–10): turning the transfer hook
+  from a fixed loyalty ruleset into a **reusable, aegis-consuming policy VM** and
+  a governed, enterprise-grade transfer-control plane.
 
 Each track was derived from three independent design studies; the directions
 below are the points where all three lenses converged.
@@ -82,6 +85,44 @@ not specified here.
 issuers publish only commitments + accreditation, holders keep their data, and any
 program gates via a `verify` verdict over revocable credentials (aegis-native and
 SAS), learning that a rule holds and nothing about the person.*
+
+## Track C — Transfer Policy (argus), at a glance
+
+Turns argus from a hardcoded loyalty pipeline that reads aegis by fragile byte
+offsets into a **reusable Token-2022 enforcement VM** that consumes aegis via a
+**verify-once verdict capability**. Directly unblocks the aegis rework (Track B
+removes the field argus currently offset-reads).
+
+```mermaid
+flowchart LR
+    subgraph decide["aegis (WHO is eligible)"]
+        VF["verify / policy / trust graph"]
+    end
+    subgraph cache["Verdict Capability (paid once, off hot path)"]
+        RF["refresh_eligibility → EligibilityCapability<br/>versioned bitmap + TTL + epochs"]
+    end
+    subgraph enforce["argus (ENFORCE, hot path <3k CU, no CPI)"]
+        EX["execute: rule tape over cached bitmap<br/>+ mechanical caps/velocity"]
+    end
+    VF --> RF --> EX
+    style decide fill:#14532d,stroke:#4ade80,color:#fff
+    style cache fill:#1e3a8a,stroke:#60a5fa,color:#fff
+    style enforce fill:#7c2d12,stroke:#fb923c,color:#fff
+```
+
+| # | Spec | Layer | Depends on |
+|---|---|---|---|
+| 09 | [Policy VM + Verdict Capability (aegis-compatible core)](09-argus-policy-vm.md) | Core / the implementable slice | 06, 07 |
+| 10 | [Enterprise Governance & Multi-Tenancy](10-argus-enterprise-governance.md) | Governance / moat / monetization | 09, 08 |
+
+**Recommended delivery order:** 06 + 07 + **09 together** (they are one coherent
+migration — aegis stops publishing the field, argus stops reading it, both move to
+`verify`/capability), then 08, then 10.
+
+**Thesis (Track C):** *argus is a shared, data-driven Token-2022 enforcement VM
+that owns only mechanical checks and delegates all semantic eligibility to aegis
+predicates, consumed through a verify-once verdict cache — so a new compliance rule
+anywhere is a data change, never a redeploy, and the hot path stays cheap.*
 
 ---
 
