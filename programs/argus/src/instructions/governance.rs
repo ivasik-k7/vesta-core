@@ -154,6 +154,7 @@ pub fn handle_initialize_governance(
     pointer.bump = ctx.bumps.policy_pointer;
 
     config.governed = true;
+    config.active_policy_hash = genesis_hash;
 
     emit!(GovernanceInitialized {
         mint,
@@ -421,6 +422,7 @@ fn apply_and_repoint(
     pointer.active_hash = new_hash;
     pointer.pending_hash = [0u8; 32];
     pointer.pending_approved_at = 0;
+    config.active_policy_hash = new_hash;
 
     emit!(PolicyActivated {
         mint: config.mint,

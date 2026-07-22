@@ -537,6 +537,50 @@ impl World {
         };
         self.send(&[ix], &[activator], &activator.pubkey())
     }
+
+    fn statement_pda(&self, period: u64) -> Pubkey {
+        Pubkey::find_program_address(
+            &[b"statement", self.mint.as_ref(), &period.to_le_bytes()],
+            &argus::id(),
+        )
+        .0
+    }
+
+    fn anchor_statement(
+        &mut self,
+        reporter: &Keypair,
+        period: u64,
+        root: [u8; 32],
+        count: u64,
+    ) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+        let ix = Instruction {
+            program_id: argus::id(),
+            accounts: argus::accounts::AnchorStatement {
+                reporter: reporter.pubkey(),
+                mint: self.mint,
+                role_registry: self.roles_pda(),
+                statement: self.statement_pda(period),
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: argus::instruction::AnchorStatement {
+                period,
+                merkle_root: root,
+                decision_count: count,
+            }
+            .data(),
+        };
+        self.send(&[ix], &[reporter], &reporter.pubkey())
+    }
+
+    fn statement_of(&self, period: u64) -> argus::state::StatementCommitment {
+        let data = self
+            .svm
+            .get_account(&self.statement_pda(period))
+            .unwrap()
+            .data;
+        argus::state::StatementCommitment::try_deserialize(&mut data.as_slice()).unwrap()
+    }
 }
 
 fn setup() -> World {
@@ -2757,5 +2801,35 @@ fn argus_governance_role_change_is_timelocked() {
     assert!(
         w.send(&[bad], &[&stranger], &stranger.pubkey()).is_err(),
         "non-admin drove a role change"
+    );
+}
+
+#[test]
+fn argus_governance_anchor_statement() {
+    let mut w = setup_with_policy(base_policy());
+    // gov_roles sets reporter = role_admin.
+    let (roles, reporter, _author, _approver, _activator) = gov_roles(&mut w);
+    w.init_governance(roles, 0).unwrap();
+
+    let root = [9u8; 32];
+    w.anchor_statement(&reporter, 20_240, root, 42).unwrap();
+    let s = w.statement_of(20_240);
+    assert_eq!(s.merkle_root, root);
+    assert_eq!(s.decision_count, 42);
+    assert_eq!(s.period, 20_240);
+    assert_eq!(s.reporter, reporter.pubkey());
+
+    // A period is anchored once (immutable, append-only).
+    assert!(
+        w.anchor_statement(&reporter, 20_240, [1u8; 32], 1).is_err(),
+        "re-anchored an existing period"
+    );
+
+    // Only the Reporter role may anchor.
+    let stranger = Keypair::new();
+    w.svm.airdrop(&stranger.pubkey(), 5_000_000_000).unwrap();
+    assert!(
+        w.anchor_statement(&stranger, 20_241, root, 1).is_err(),
+        "non-reporter anchored a statement"
     );
 }

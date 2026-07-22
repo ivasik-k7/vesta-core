@@ -259,6 +259,8 @@ fn decide(
         amount,
         allowed,
         reason,
+        policy_epoch: ctx.accounts.guard_config.policy_epoch,
+        active_policy_hash: ctx.accounts.guard_config.active_policy_hash,
     });
     Ok(())
 }

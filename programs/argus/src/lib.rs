@@ -165,6 +165,17 @@ pub mod argus {
         instructions::governance::handle_apply_role_change(ctx)
     }
 
+    /// Anchor a period's decision-statement Merkle root on-chain (Reporter role,
+    /// spec 10 phase 2) — tamper-evident and provably complete.
+    pub fn anchor_statement(
+        ctx: Context<AnchorStatement>,
+        period: u64,
+        merkle_root: [u8; 32],
+        decision_count: u64,
+    ) -> Result<()> {
+        instructions::statements::handle_anchor_statement(ctx, period, merkle_root, decision_count)
+    }
+
     /// Invoked by Token-2022 on every transfer of a hooked mint (spec §5).
     #[instruction(discriminator = ExecuteInstruction::SPL_DISCRIMINATOR_SLICE)]
     pub fn execute(ctx: Context<Execute>, amount: u64) -> Result<()> {

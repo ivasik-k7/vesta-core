@@ -38,6 +38,10 @@ pub const POLICY_POINTER_SEED: &[u8] = b"active";
 #[constant]
 pub const ROLES_SEED: &[u8] = b"roles";
 
+/// Per-(mint, period) decision-statement anchor (spec 10 §5): `["statement", mint, period]`.
+#[constant]
+pub const STATEMENT_SEED: &[u8] = b"statement";
+
 /// Default governance timelock, seconds, seeded when a mint adopts governance.
 /// A change is `propose → approve → wait(timelock) → activate`; a compromised
 /// approver alone still cannot rush a rule change past the delay.

@@ -56,6 +56,10 @@ pub struct GuardConfig {
     /// While set, `configure_policy` (free-tier live mutation) is rejected — all
     /// policy changes must go through propose → approve → timelock → activate.
     pub governed: bool,
+    /// Hash of the currently-active governed `PolicyVersion` (`[0;32]` for a
+    /// free-tier mint). Denormalized here so `execute` can stamp every decision
+    /// record with the exact deciding policy at zero hot-path cost (spec 10 §4.5).
+    pub active_policy_hash: [u8; 32],
     pub bump: u8,
 }
 
@@ -237,6 +241,26 @@ pub struct RoleRegistry {
     pub pending_role: u8,
     pub pending_authority: Pubkey,
     pub pending_after: i64,
+    pub bump: u8,
+}
+
+/// Tamper-evident anchor for a period's decision records (spec 10 §4.5), seeds
+/// `["statement", mint, period_le]`. An off-chain indexer materializes the
+/// canonical, reason-coded decisions for the period into a Merkle tree; the
+/// Reporter role anchors its root here. `decision_count` makes the statement
+/// **provably complete** — an omission changes the count and the root.
+#[account]
+#[derive(InitSpace)]
+pub struct StatementCommitment {
+    pub version: u8,
+    pub mint: Pubkey,
+    /// Period identifier (e.g. a UTC-day index) — also the PDA seed component.
+    pub period: u64,
+    pub merkle_root: [u8; 32],
+    /// Number of decisions covered — completeness witness.
+    pub decision_count: u64,
+    pub reporter: Pubkey,
+    pub anchored_at: i64,
     pub bump: u8,
 }
 

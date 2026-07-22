@@ -130,8 +130,10 @@ pub struct RoleChanged {
 
 // ── Per-transfer decision (spec §10) ─────────────────────────────────────────
 
-/// One event per `execute` call, carrying a stable reason code
-/// (`crate::constants::reason`). The complete allow/deny audit trail.
+/// One event per `execute` call, carrying a stable canonical reason code
+/// (`crate::constants::reason`) plus the exact deciding policy (`policy_epoch` +
+/// `active_policy_hash`, spec 10 §4.5). The complete allow/deny audit trail —
+/// an indexer folds these into period `StatementCommitment` roots.
 #[event]
 pub struct TransferDecision {
     pub mint: Pubkey,
@@ -140,4 +142,18 @@ pub struct TransferDecision {
     pub amount: u64,
     pub allowed: bool,
     pub reason: u16,
+    /// Monotonic policy epoch in force at decision time.
+    pub policy_epoch: u64,
+    /// Hash of the active governed policy (`[0;32]` for a free-tier mint).
+    pub active_policy_hash: [u8; 32],
+}
+
+/// A period's decision statement was anchored on-chain (spec 10 §4.5).
+#[event]
+pub struct StatementAnchored {
+    pub mint: Pubkey,
+    pub period: u64,
+    pub merkle_root: [u8; 32],
+    pub decision_count: u64,
+    pub reporter: Pubkey,
 }
