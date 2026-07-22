@@ -824,6 +824,7 @@ fn clawback_is_hooked_audited_and_treasury_bound() {
                 transfers_per_day_cap: 0,
                 cooldown_secs: 0,
                 aegis_program: Pubkey::default(),
+                policy: Pubkey::default(),
                 attestation_issuer: Pubkey::default(),
                 attestation_schema: 0,
             },

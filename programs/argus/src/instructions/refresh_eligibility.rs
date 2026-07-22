@@ -40,9 +40,13 @@ pub struct RefreshEligibility<'info> {
     pub capability: Account<'info, EligibilityCapability>,
 
     /// CHECK: the aegis attestation PDA for (issuer, subject, schema). Passed
-    /// through to aegis `verify`, which re-derives and owner-checks it; a wrong
-    /// or missing account yields a negative verdict (fail safe), not an error.
+    /// through to aegis `verify`/`verify_policy`, which re-derive and owner-check
+    /// it; a wrong or missing account yields a negative verdict (fail safe).
     pub attestation: UncheckedAccount<'info>,
+
+    /// CHECK: the aegis `Policy` account to enforce, when the guard configures
+    /// one (`guard_config.policy`). Ignored on the legacy `Present` path.
+    pub policy: UncheckedAccount<'info>,
 
     /// CHECK: the aegis program — must equal the guard's configured deployment.
     pub aegis_program: UncheckedAccount<'info>,
@@ -58,21 +62,41 @@ pub fn handle_refresh_eligibility(ctx: Context<RefreshEligibility>) -> Result<()
         GuardError::AegisProgramMismatch
     );
 
-    // Ask aegis whether the subject holds a valid credential of the configured
-    // schema from the trusted issuer (spec 07 `Present`). The verdict returns
-    // via return-data; `verify` never reverts on a negative result.
-    let predicate = aegis::VerifyPredicate::Present {
-        issuer: gc.attestation_issuer,
-        subject: ctx.accounts.subject.key(),
-        schema_id: gc.attestation_schema,
-    };
-    let cpi = CpiContext::new(
-        ctx.accounts.aegis_program.key(),
-        aegis::cpi::accounts::Verify {
-            attestation: ctx.accounts.attestation.to_account_info(),
-        },
-    );
-    aegis::cpi::verify(cpi, predicate)?;
+    // Ask aegis for a verdict on the subject. If the guard enforces an aegis
+    // `Policy`, delegate the whole decision (jurisdiction / schema / freshness)
+    // to `verify_policy` — so the compliance rule is editable in aegis as data,
+    // no argus redeploy. Otherwise use the legacy single-credential `Present`
+    // check. Either way the verdict returns via return-data and never reverts on
+    // a negative result.
+    let subject_key = ctx.accounts.subject.key();
+    if gc.policy != Pubkey::default() {
+        require_keys_eq!(
+            ctx.accounts.policy.key(),
+            gc.policy,
+            GuardError::MetaListMismatch
+        );
+        let cpi = CpiContext::new(
+            ctx.accounts.aegis_program.key(),
+            aegis::cpi::accounts::VerifyPolicy {
+                policy: ctx.accounts.policy.to_account_info(),
+                attestation: ctx.accounts.attestation.to_account_info(),
+            },
+        );
+        aegis::cpi::verify_policy(cpi, subject_key)?;
+    } else {
+        let predicate = aegis::VerifyPredicate::Present {
+            issuer: gc.attestation_issuer,
+            subject: subject_key,
+            schema_id: gc.attestation_schema,
+        };
+        let cpi = CpiContext::new(
+            ctx.accounts.aegis_program.key(),
+            aegis::cpi::accounts::Verify {
+                attestation: ctx.accounts.attestation.to_account_info(),
+            },
+        );
+        aegis::cpi::verify(cpi, predicate)?;
+    }
 
     let (returner, ret) = get_return_data().ok_or(GuardError::EligibilityStale)?;
     require_keys_eq!(returner, gc.aegis_program, GuardError::AegisProgramMismatch);

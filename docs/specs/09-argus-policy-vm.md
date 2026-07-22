@@ -1,6 +1,6 @@
 # 09 · argus — Policy VM + Verdict Capability (aegis-compatible core)
 
-> **Status:** ◒ Phase 1 implemented (v2.0.0 — capability + aegis migration; full rule-tape VM wave 2) · **Track:** C (Transfer Policy) · **Layer:** Core · **Depends on:** 06, 07
+> **Status:** ◒ Phase 1–2a implemented (v2.0.0 — capability + aegis migration; guard now enforces aegis `verify_policy` so rules are data with no redeploy. Full data-driven mechanical-rule interpreter + dynamic EAML deferred: low value / high risk) · **Track:** C (Transfer Policy) · **Layer:** Core · **Depends on:** 06, 07
 > **Unlocks:** 10 (enterprise governance); is the migration that lets Track B ship
 > Inherits all [shared conventions](README.md#shared-conventions-normative-for-all-specs), incl. [Track B conventions](README.md#track-b-conventions-aegis--sas--crypto--normative-for-specs-0608).
 

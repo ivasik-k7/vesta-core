@@ -549,8 +549,14 @@
         {
           "name": "attestation",
           "docs": [
-            "through to aegis `verify`, which re-derives and owner-checks it; a wrong",
-            "or missing account yields a negative verdict (fail safe), not an error."
+            "through to aegis `verify`/`verify_policy`, which re-derive and owner-check",
+            "it; a wrong or missing account yields a negative verdict (fail safe)."
+          ]
+        },
+        {
+          "name": "policy",
+          "docs": [
+            "one (`guard_config.policy`). Ignored on the legacy `Present` path."
           ]
         },
         {
@@ -1240,6 +1246,16 @@
             "type": "pubkey"
           },
           {
+            "name": "policy",
+            "docs": [
+              "aegis `Policy` this guard enforces (spec 07). When set, `refresh_eligibility`",
+              "consumes `verify_policy` — so the compliance rule (jurisdiction, schema,",
+              "freshness) lives in aegis as data, editable with NO argus redeploy. When",
+              "`default()`, the legacy single-credential `Present` check is used instead."
+            ],
+            "type": "pubkey"
+          },
+          {
             "name": "policy_epoch",
             "docs": [
               "Bumped on any policy change; stamped into capabilities so a config change",
@@ -1364,6 +1380,14 @@
             "name": "aegis_program",
             "docs": [
               "aegis deployment to consult (`verify`); default to the canonical AEGIS_ID."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "policy",
+            "docs": [
+              "aegis `Policy` to enforce (jurisdiction/schema/freshness as data). When",
+              "`default()`, the legacy `Present` check over (issuer, schema) is used."
             ],
             "type": "pubkey"
           },

@@ -24,6 +24,11 @@ pub struct GuardConfig {
     pub aegis_program: Pubkey,
     /// aegis issuer whose credentials this guard trusts (spec §7).
     pub attestation_issuer: Pubkey,
+    /// aegis `Policy` this guard enforces (spec 07). When set, `refresh_eligibility`
+    /// consumes `verify_policy` — so the compliance rule (jurisdiction, schema,
+    /// freshness) lives in aegis as data, editable with NO argus redeploy. When
+    /// `default()`, the legacy single-credential `Present` check is used instead.
+    pub policy: Pubkey,
     /// Bumped on any policy change; stamped into capabilities so a config change
     /// invalidates stale eligibility regardless of TTL (spec 09 §4.4).
     pub policy_epoch: u64,

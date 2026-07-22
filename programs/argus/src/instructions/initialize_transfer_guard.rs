@@ -115,6 +115,7 @@ pub fn handle_initialize_transfer_guard(
         policy.daily_gift_cap,
         policy.per_tx_cap,
         policy.aegis_program,
+        policy.policy,
         policy.attestation_issuer,
     )?;
 
@@ -129,6 +130,7 @@ pub fn handle_initialize_transfer_guard(
     config.treasury = merchant_treasury;
     config.aegis_program = policy.aegis_program;
     config.attestation_issuer = policy.attestation_issuer;
+    config.policy = policy.policy;
     config.policy_epoch = 0;
     config.paused = false;
     config.flags = policy.flags;

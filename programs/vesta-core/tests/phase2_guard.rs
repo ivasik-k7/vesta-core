@@ -60,6 +60,7 @@ fn base_policy() -> InitialPolicy {
         transfers_per_day_cap: 0,
         cooldown_secs: 0,
         aegis_program: Pubkey::default(),
+        policy: Pubkey::default(),
         attestation_issuer: Pubkey::default(),
         attestation_schema: 0,
     }
@@ -313,6 +314,9 @@ impl World {
                 subject,
                 capability: self.capability_pda(subject),
                 attestation,
+                // Present-path helper: the guard configures no aegis Policy, so
+                // this account is ignored — pass the program id as a placeholder.
+                policy: aegis::id(),
                 aegis_program: aegis::id(),
                 system_program: system_program::ID,
             }
@@ -1907,4 +1911,180 @@ fn aegis_policy_engine_returns_named_verdicts() {
         !verdict(&mut w, 0).ok,
         "revoked credential passed the policy"
     );
+}
+
+/// Track B x C: argus enforces an aegis *Policy* (spec 07/09). The compliance
+/// rule (jurisdiction / schema / freshness) lives in aegis as data — argus just
+/// caches the policy verdict. Changing the rule needs NO argus redeploy.
+#[test]
+fn argus_gates_on_an_aegis_policy() {
+    let issuer_authority = Keypair::new();
+    let policy_authority = Keypair::new();
+    let issuer = Pubkey::find_program_address(
+        &[
+            b"issuer",
+            issuer_authority.pubkey().as_ref(),
+            &0u64.to_le_bytes(),
+        ],
+        &aegis::id(),
+    )
+    .0;
+    let aegis_policy = Pubkey::find_program_address(
+        &[
+            b"policy",
+            policy_authority.pubkey().as_ref(),
+            &0u64.to_le_bytes(),
+        ],
+        &aegis::id(),
+    )
+    .0;
+    let schema_id = aegis::constants::well_known_schema::KYC_TIER;
+
+    let mut policy = base_policy();
+    policy.flags |= argus::constants::flags::REQUIRE_ATTESTATION;
+    policy.aegis_program = aegis::id();
+    policy.policy = aegis_policy; // enforce the aegis Policy, not a raw Present
+    let mut w = setup_with_policy(policy);
+    w.svm
+        .airdrop(&issuer_authority.pubkey(), 5_000_000_000)
+        .unwrap();
+    w.svm
+        .airdrop(&policy_authority.pubkey(), 5_000_000_000)
+        .unwrap();
+
+    let alice = Keypair::new();
+    let bob = Keypair::new();
+    prime_sender(&mut w, &alice, bob.pubkey(), 5_000);
+
+    // aegis: issuer, a jurisdiction-tagged KYC policy, and bob's credential.
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::InitIssuer {
+                authority: issuer_authority.pubkey(),
+                issuer,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::InitIssuer {
+                id: 0,
+                name: "KYC".into(),
+            }
+            .data(),
+        }],
+        &[&issuer_authority],
+        &issuer_authority.pubkey(),
+    )
+    .unwrap();
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::RegisterPolicy {
+                authority: policy_authority.pubkey(),
+                policy: aegis_policy,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::RegisterPolicy {
+                id: 0,
+                jurisdiction: 42,
+                issuer,
+                schema_id,
+                freshness_secs: 0,
+            }
+            .data(),
+        }],
+        &[&policy_authority],
+        &policy_authority.pubkey(),
+    )
+    .unwrap();
+
+    let attestation = Pubkey::find_program_address(
+        &[
+            b"attestation",
+            issuer.as_ref(),
+            bob.pubkey().as_ref(),
+            &schema_id.to_le_bytes(),
+        ],
+        &aegis::id(),
+    )
+    .0;
+
+    // Refresh against the aegis Policy (argus CPIs verify_policy).
+    let refresh = |w: &World| Instruction {
+        program_id: argus::id(),
+        accounts: argus::accounts::RefreshEligibility {
+            payer: alice.pubkey(),
+            mint: w.mint,
+            guard_config: w.guard_config(),
+            subject: bob.pubkey(),
+            capability: Pubkey::find_program_address(
+                &[b"cap", w.mint.as_ref(), bob.pubkey().as_ref()],
+                &argus::id(),
+            )
+            .0,
+            attestation,
+            policy: aegis_policy,
+            aegis_program: aegis::id(),
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+        data: argus::instruction::RefreshEligibility {}.data(),
+    };
+
+    // No credential yet → policy verdict negative → transfer rejected.
+    let r = refresh(&w);
+    w.send(&[r], &[&alice], &alice.pubkey()).unwrap();
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        1_000,
+        issuer,
+        true,
+    );
+    assert!(
+        w.send(&[ix], &[&alice], &alice.pubkey()).is_err(),
+        "policy-gated transfer passed without a credential"
+    );
+
+    // Issue bob the KYC credential + refresh → policy passes → transfer allowed.
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::IssueAttestation {
+                signer: issuer_authority.pubkey(),
+                issuer,
+                attestation,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::IssueAttestation {
+                subject: bob.pubkey(),
+                data: aegis::instructions::attestation::AttestationData {
+                    schema_id,
+                    commitment: [5u8; 32],
+                    attr_root: [0u8; 32],
+                    valid_from: 0,
+                    expires_at: 0,
+                },
+            }
+            .data(),
+        }],
+        &[&issuer_authority],
+        &issuer_authority.pubkey(),
+    )
+    .unwrap();
+    let r = refresh(&w);
+    w.send(&[r], &[&alice], &alice.pubkey()).unwrap();
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        1_000,
+        issuer,
+        true,
+    );
+    w.send(&[ix], &[&alice], &alice.pubkey()).unwrap();
+    assert_eq!(w.state_of(alice.pubkey()).sent_today, 1_000);
 }

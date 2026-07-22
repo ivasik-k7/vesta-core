@@ -7,6 +7,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Crates bumped to **2.0.0** (breaking on-chain layout changes; devnet redeploy).
 
+### Added — argus enforces aegis Policies ([spec 09](docs/specs/09-argus-policy-vm.md) phase 2)
+- `GuardConfig.policy`: when set, `refresh_eligibility` CPIs aegis
+  **`verify_policy`** instead of a raw `Present` check — so the compliance rule
+  (jurisdiction / schema / freshness) lives in an aegis `Policy` as **data,
+  editable with no argus redeploy**. `default()` keeps the legacy `Present` path.
+- Rationale: this delivers the spec-09 "rule as data" thesis via the policy
+  layer. The full data-driven mechanical-rule interpreter + dynamic
+  ExtraAccountMetaList are **deferred** (low marginal value — caps/velocity are
+  stable — and the highest breakage risk in the system).
+
 ### Added — aegis policy engine ([spec 07](docs/specs/07-aegis-verify-and-policy.md) phase 2)
 - Named, versioned, **jurisdiction-tagged** `Policy` accounts (`register_policy`/
   `deprecate_policy`) with a **freshness** (max-credential-age) requirement.

@@ -15,6 +15,9 @@ pub struct InitialPolicy {
     pub cooldown_secs: u32,
     /// aegis deployment to consult (`verify`); default to the canonical AEGIS_ID.
     pub aegis_program: Pubkey,
+    /// aegis `Policy` to enforce (jurisdiction/schema/freshness as data). When
+    /// `default()`, the legacy `Present` check over (issuer, schema) is used.
+    pub policy: Pubkey,
     /// aegis issuer to trust; `Pubkey::default()` when attestation is unused.
     pub attestation_issuer: Pubkey,
     pub attestation_schema: u64,
@@ -64,6 +67,7 @@ impl PolicyUpdate {
             config.daily_gift_cap,
             config.per_tx_cap,
             config.aegis_program,
+            config.policy,
             config.attestation_issuer,
         )
     }
@@ -83,6 +87,7 @@ pub fn validate_policy(
     daily_gift_cap: u64,
     per_tx_cap: u64,
     aegis_program: Pubkey,
+    policy: Pubkey,
     attestation_issuer: Pubkey,
 ) -> Result<()> {
     require!(flags & !flags::KNOWN == 0, GuardError::UnknownFlag);
@@ -90,11 +95,16 @@ pub fn validate_policy(
     if daily_gift_cap != 0 && per_tx_cap != 0 {
         require!(per_tx_cap <= daily_gift_cap, GuardError::InvalidPolicy);
     }
-    // Requiring attestation without a trusted aegis program + issuer can never
-    // pass — fail loud at configure time.
+    // Requiring attestation needs a trusted aegis program plus EITHER an aegis
+    // Policy to enforce OR a legacy (issuer, schema) `Present` target — else it
+    // can never pass. Fail loud at configure time.
     if flags & flags::REQUIRE_ATTESTATION != 0 {
         require!(
-            aegis_program != Pubkey::default() && attestation_issuer != Pubkey::default(),
+            aegis_program != Pubkey::default(),
+            GuardError::InvalidPolicy
+        );
+        require!(
+            policy != Pubkey::default() || attestation_issuer != Pubkey::default(),
             GuardError::InvalidPolicy
         );
     }
