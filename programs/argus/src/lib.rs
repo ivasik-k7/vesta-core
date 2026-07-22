@@ -176,6 +176,40 @@ pub mod argus {
         instructions::statements::handle_anchor_statement(ctx, period, merkle_root, decision_count)
     }
 
+    // ── Trust triangle (spec 10, phase 3) ────────────────────────────────────
+
+    /// Bind the mint's governing issuer to an aegis accreditation root (guard
+    /// authority). Configures the fall-to posture and grace window.
+    pub fn set_trust_anchor(
+        ctx: Context<SetTrustAnchor>,
+        accreditation_root: Pubkey,
+        subject_issuer: Pubkey,
+        required_schema: u64,
+        degrade_target: u8,
+        grace_secs: i64,
+    ) -> Result<()> {
+        instructions::trust::handle_set_trust_anchor(
+            ctx,
+            accreditation_root,
+            subject_issuer,
+            required_schema,
+            degrade_target,
+            grace_secs,
+        )
+    }
+
+    /// Permissionless crank: re-check the governing issuer's aegis accreditation
+    /// and auto-degrade (after grace) or auto-restore the transfer posture.
+    pub fn reverify_accreditation(ctx: Context<ReverifyAccreditation>) -> Result<()> {
+        instructions::trust::handle_reverify_accreditation(ctx)
+    }
+
+    /// Guard-authority manual posture override — emergency degrade, or restore
+    /// to NORMAL after resolving a dispute (challenge path).
+    pub fn set_degrade_mode(ctx: Context<SetDegradeMode>, mode: u8) -> Result<()> {
+        instructions::trust::handle_set_degrade_mode(ctx, mode)
+    }
+
     /// Invoked by Token-2022 on every transfer of a hooked mint (spec §5).
     #[instruction(discriminator = ExecuteInstruction::SPL_DISCRIMINATOR_SLICE)]
     pub fn execute(ctx: Context<Execute>, amount: u64) -> Result<()> {

@@ -73,4 +73,10 @@ pub enum GuardError {
     NoPendingChange,
     #[msg("Timelock value is out of the permitted range")]
     InvalidTimelock,
+    #[msg("Peer transfers are blocked by the trust-triangle degrade posture")]
+    TrustDegraded,
+    #[msg("Degrade target must be a real degraded posture")]
+    InvalidDegradeTarget,
+    #[msg("Trust anchor is not configured for this mint")]
+    TrustAnchorMissing,
 }

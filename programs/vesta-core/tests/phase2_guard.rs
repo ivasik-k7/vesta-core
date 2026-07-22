@@ -581,6 +581,92 @@ impl World {
             .data;
         argus::state::StatementCommitment::try_deserialize(&mut data.as_slice()).unwrap()
     }
+
+    // ── Trust triangle (spec 10 §4.3) helpers ────────────────────────────────
+
+    fn trust_anchor_pda(&self) -> Pubkey {
+        Pubkey::find_program_address(&[b"trust", self.mint.as_ref()], &argus::id()).0
+    }
+
+    fn set_trust_anchor(
+        &mut self,
+        root: Pubkey,
+        subject_issuer: Pubkey,
+        schema: u64,
+        target: u8,
+        grace: i64,
+    ) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+        let authority = self.merchant_authority.insecure_clone();
+        let ix = Instruction {
+            program_id: argus::id(),
+            accounts: argus::accounts::SetTrustAnchor {
+                authority: authority.pubkey(),
+                mint: self.mint,
+                guard_config: self.guard_config(),
+                trust_anchor: self.trust_anchor_pda(),
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: argus::instruction::SetTrustAnchor {
+                accreditation_root: root,
+                subject_issuer,
+                required_schema: schema,
+                degrade_target: target,
+                grace_secs: grace,
+            }
+            .data(),
+        };
+        self.send(&[ix], &[&authority], &authority.pubkey())
+    }
+
+    fn reverify(
+        &mut self,
+        cranker: &Keypair,
+        root: Pubkey,
+        subject_issuer: Pubkey,
+    ) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+        let aegis_trust_root =
+            Pubkey::find_program_address(&[b"troot", root.as_ref()], &aegis::id()).0;
+        let aegis_accreditation = Pubkey::find_program_address(
+            &[b"accred", root.as_ref(), subject_issuer.as_ref()],
+            &aegis::id(),
+        )
+        .0;
+        let ix = Instruction {
+            program_id: argus::id(),
+            accounts: argus::accounts::ReverifyAccreditation {
+                cranker: cranker.pubkey(),
+                mint: self.mint,
+                guard_config: self.guard_config(),
+                trust_anchor: self.trust_anchor_pda(),
+                aegis_trust_root,
+                aegis_accreditation,
+                aegis_program: aegis::id(),
+            }
+            .to_account_metas(None),
+            data: argus::instruction::ReverifyAccreditation {}.data(),
+        };
+        self.send(&[ix], &[cranker], &cranker.pubkey())
+    }
+
+    fn set_degrade(
+        &mut self,
+        mode: u8,
+    ) -> Result<(), Box<litesvm::types::FailedTransactionMetadata>> {
+        let authority = self.merchant_authority.insecure_clone();
+        let ix = Instruction {
+            program_id: argus::id(),
+            accounts: argus::accounts::SetDegradeMode {
+                authority: authority.pubkey(),
+                mint: self.mint,
+                guard_config: self.guard_config(),
+                trust_anchor: self.trust_anchor_pda(),
+            }
+            .to_account_metas(None),
+            data: argus::instruction::SetDegradeMode { mode }.data(),
+        };
+        self.send(&[ix], &[&authority], &authority.pubkey())
+    }
 }
 
 fn setup() -> World {
@@ -2831,5 +2917,221 @@ fn argus_governance_anchor_statement() {
     assert!(
         w.anchor_statement(&stranger, 20_241, root, 1).is_err(),
         "non-reporter anchored a statement"
+    );
+}
+
+// ── Trust triangle (spec 10, phase 3) ────────────────────────────────────────
+
+/// Register an aegis trust root and accredit `subject_issuer` for `schema`.
+fn aegis_setup_accreditation(
+    w: &mut World,
+    root_authority: &Keypair,
+    subject_issuer: Pubkey,
+    schema: u64,
+) {
+    w.svm
+        .airdrop(&root_authority.pubkey(), 5_000_000_000)
+        .unwrap();
+    let trust_root =
+        Pubkey::find_program_address(&[b"troot", root_authority.pubkey().as_ref()], &aegis::id()).0;
+    let accred = Pubkey::find_program_address(
+        &[
+            b"accred",
+            root_authority.pubkey().as_ref(),
+            subject_issuer.as_ref(),
+        ],
+        &aegis::id(),
+    )
+    .0;
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::RegisterTrustRoot {
+                authority: root_authority.pubkey(),
+                trust_root,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::RegisterTrustRoot { name: "Reg".into() }.data(),
+        }],
+        &[root_authority],
+        &root_authority.pubkey(),
+    )
+    .unwrap();
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::AccreditIssuer {
+                authority: root_authority.pubkey(),
+                trust_root,
+                accreditation: accred,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::AccreditIssuer {
+                subject_issuer,
+                tier: 2,
+                permitted_schemas: vec![schema],
+                jurisdiction: 42,
+                expires_at: 0,
+            }
+            .data(),
+        }],
+        &[root_authority],
+        &root_authority.pubkey(),
+    )
+    .unwrap();
+}
+
+fn aegis_revoke_accreditation(w: &mut World, root_authority: &Keypair, subject_issuer: Pubkey) {
+    let trust_root =
+        Pubkey::find_program_address(&[b"troot", root_authority.pubkey().as_ref()], &aegis::id()).0;
+    let accred = Pubkey::find_program_address(
+        &[
+            b"accred",
+            root_authority.pubkey().as_ref(),
+            subject_issuer.as_ref(),
+        ],
+        &aegis::id(),
+    )
+    .0;
+    w.send(
+        &[Instruction {
+            program_id: aegis::id(),
+            accounts: aegis::accounts::RevokeAccreditation {
+                authority: root_authority.pubkey(),
+                trust_root,
+                accreditation: accred,
+            }
+            .to_account_metas(None),
+            data: aegis::instruction::RevokeAccreditation {}.data(),
+        }],
+        &[root_authority],
+        &root_authority.pubkey(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn argus_trust_triangle_auto_degrade_and_restore() {
+    let mut policy = base_policy();
+    policy.aegis_program = aegis::id();
+    let mut w = setup_with_policy(policy);
+    let root_authority = Keypair::new();
+    let subject_issuer = Keypair::new().pubkey();
+    let schema = aegis::constants::well_known_schema::KYC_TIER;
+    aegis_setup_accreditation(&mut w, &root_authority, subject_issuer, schema);
+
+    w.set_trust_anchor(
+        root_authority.pubkey(),
+        subject_issuer,
+        schema,
+        argus::constants::degrade::FROZEN,
+        0,
+    )
+    .unwrap();
+
+    let cranker = Keypair::new();
+    w.svm.airdrop(&cranker.pubkey(), 5_000_000_000).unwrap();
+
+    // Healthy accreditation → posture NORMAL.
+    w.reverify(&cranker, root_authority.pubkey(), subject_issuer)
+        .unwrap();
+    assert_eq!(
+        w.config_of().degrade_mode,
+        argus::constants::degrade::NORMAL
+    );
+
+    // A peer gift flows.
+    let alice = Keypair::new();
+    let bob = Keypair::new();
+    prime_sender(&mut w, &alice, bob.pubkey(), 5_000);
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        1_000,
+        Pubkey::default(),
+        true,
+    );
+    w.send(&[ix], &[&alice], &alice.pubkey()).unwrap();
+
+    // Revoke accreditation → crank trips the posture (grace = 0).
+    aegis_revoke_accreditation(&mut w, &root_authority, subject_issuer);
+    w.reverify(&cranker, root_authority.pubkey(), subject_issuer)
+        .unwrap();
+    assert_eq!(
+        w.config_of().degrade_mode,
+        argus::constants::degrade::FROZEN
+    );
+
+    // Peer gift now blocked.
+    w.warp_days(1);
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        1_000,
+        Pubkey::default(),
+        true,
+    );
+    assert!(
+        w.send(&[ix], &[&alice], &alice.pubkey()).is_err(),
+        "peer gift passed under a degraded posture"
+    );
+
+    // Manual restore (challenge path) reopens peer transfers.
+    w.set_degrade(argus::constants::degrade::NORMAL).unwrap();
+    let ix = w.hooked_transfer_ix(
+        alice.pubkey(),
+        alice.pubkey(),
+        bob.pubkey(),
+        1_000,
+        Pubkey::default(),
+        true,
+    );
+    w.send(&[ix], &[&alice], &alice.pubkey()).unwrap();
+}
+
+#[test]
+fn argus_trust_grace_window_absorbs_transient_failure() {
+    let mut policy = base_policy();
+    policy.aegis_program = aegis::id();
+    let mut w = setup_with_policy(policy);
+    let root_authority = Keypair::new();
+    let subject_issuer = Keypair::new().pubkey();
+    let schema = aegis::constants::well_known_schema::KYC_TIER;
+    aegis_setup_accreditation(&mut w, &root_authority, subject_issuer, schema);
+
+    w.set_trust_anchor(
+        root_authority.pubkey(),
+        subject_issuer,
+        schema,
+        argus::constants::degrade::REDEMPTION_ONLY,
+        3_600,
+    )
+    .unwrap();
+    let cranker = Keypair::new();
+    w.svm.airdrop(&cranker.pubkey(), 5_000_000_000).unwrap();
+    w.reverify(&cranker, root_authority.pubkey(), subject_issuer)
+        .unwrap();
+
+    // Revoke, then crank inside the grace window → still NORMAL.
+    aegis_revoke_accreditation(&mut w, &root_authority, subject_issuer);
+    w.reverify(&cranker, root_authority.pubkey(), subject_issuer)
+        .unwrap();
+    assert_eq!(
+        w.config_of().degrade_mode,
+        argus::constants::degrade::NORMAL,
+        "degraded before the grace window elapsed"
+    );
+
+    // Past the grace window → degrade bites.
+    w.warp_secs(3_601);
+    w.reverify(&cranker, root_authority.pubkey(), subject_issuer)
+        .unwrap();
+    assert_eq!(
+        w.config_of().degrade_mode,
+        argus::constants::degrade::REDEMPTION_ONLY
     );
 }

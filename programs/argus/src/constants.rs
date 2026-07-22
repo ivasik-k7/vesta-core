@@ -42,6 +42,30 @@ pub const ROLES_SEED: &[u8] = b"roles";
 #[constant]
 pub const STATEMENT_SEED: &[u8] = b"statement";
 
+/// Per-mint trust-triangle anchor (spec 10 §5): `["trust", mint]`.
+#[constant]
+pub const TRUST_SEED: &[u8] = b"trust";
+
+/// Default trust-triangle grace window, seconds — a failing accreditation
+/// streak must persist this long before auto-degrade bites (absorbs a transient
+/// aegis outage). Configurable per mint on the `TrustAnchor`.
+pub const DEFAULT_TRUST_GRACE_SECS: i64 = 3_600;
+
+/// Trust-triangle degrade postures stored in `GuardConfig.degrade_mode` /
+/// `TrustAnchor.degrade_target` (spec 10 §4.3). Any non-`NORMAL` mode blocks
+/// peer gifts while leaving redemption (treasury) and clawback (delegate) open,
+/// so degradation never strands holder assets.
+pub mod degrade {
+    pub const NORMAL: u8 = 0;
+    pub const REDEMPTION_ONLY: u8 = 1;
+    pub const FROZEN: u8 = 2;
+
+    /// Modes accepted as a `degrade_target` (must be an actual degraded state).
+    pub fn is_valid_target(mode: u8) -> bool {
+        mode == REDEMPTION_ONLY || mode == FROZEN
+    }
+}
+
 /// Default governance timelock, seconds, seeded when a mint adopts governance.
 /// A change is `propose → approve → wait(timelock) → activate`; a compromised
 /// approver alone still cannot rush a rule change past the delay.
@@ -122,4 +146,6 @@ pub mod reason {
     pub const STATE_MISSING: u16 = 22;
     /// Destination has no fresh eligibility capability (client must refresh).
     pub const ELIGIBILITY_STALE: u16 = 23;
+    /// Peer transfers blocked by the trust-triangle degrade posture (spec 10 §4.3).
+    pub const TRUST_DEGRADED: u16 = 24;
 }

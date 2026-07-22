@@ -128,6 +128,35 @@ pub struct RoleChanged {
     pub new: Pubkey,
 }
 
+// ── Trust triangle (spec 10 §4.3) ────────────────────────────────────────────
+
+#[event]
+pub struct TrustAnchorSet {
+    pub mint: Pubkey,
+    pub accreditation_root: Pubkey,
+    pub subject_issuer: Pubkey,
+    pub required_schema: u64,
+    pub degrade_target: u8,
+}
+
+#[event]
+pub struct AccreditationReverified {
+    pub mint: Pubkey,
+    pub healthy: bool,
+    /// Live posture after this crank.
+    pub degrade_mode: u8,
+    pub reason_code: u16,
+}
+
+#[event]
+pub struct DegradeModeSet {
+    pub mint: Pubkey,
+    pub old: u8,
+    pub new: u8,
+    /// True when set by the permissionless crank; false for a manual override.
+    pub automatic: bool,
+}
+
 // ── Per-transfer decision (spec §10) ─────────────────────────────────────────
 
 /// One event per `execute` call, carrying a stable canonical reason code

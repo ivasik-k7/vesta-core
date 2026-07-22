@@ -6,6 +6,7 @@ pub mod open_wallet_state;
 pub mod policy;
 pub mod refresh_eligibility;
 pub mod statements;
+pub mod trust;
 
 pub use admin::*;
 pub use execute::*;
@@ -15,3 +16,4 @@ pub use open_wallet_state::*;
 pub use policy::*;
 pub use refresh_eligibility::*;
 pub use statements::*;
+pub use trust::*;

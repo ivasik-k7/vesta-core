@@ -87,6 +87,14 @@ pub fn handle_execute(ctx: Context<Execute>, amount: u64) -> Result<()> {
         return err!(GuardError::MintPaused);
     }
 
+    // Rule 3b: trust-triangle degrade (spec 10 §4.3). A degraded posture blocks
+    // peer gifts only — redemption (treasury, rule 2) and clawback (delegate,
+    // rule 1) already short-circuited above, so assets are never stranded.
+    if a.guard_config.degrade_mode != crate::constants::degrade::NORMAL {
+        decide(&ctx, source_owner, amount, false, reason::TRUST_DEGRADED)?;
+        return err!(GuardError::TrustDegraded);
+    }
+
     // Rule 4: a zero-amount transfer changes nothing.
     if amount == 0 {
         return decide(&ctx, source_owner, amount, true, reason::NOOP);

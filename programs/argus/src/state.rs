@@ -60,6 +60,11 @@ pub struct GuardConfig {
     /// free-tier mint). Denormalized here so `execute` can stamp every decision
     /// record with the exact deciding policy at zero hot-path cost (spec 10 §4.5).
     pub active_policy_hash: [u8; 32],
+    /// Live trust-triangle posture (spec 10 §4.3), driven by the off-path
+    /// `reverify_accreditation` crank. `NORMAL` = flow per policy; any degraded
+    /// mode blocks peer gifts while keeping redemption/clawback open (never
+    /// strands assets). Denormalized so `execute` enforces it with no extra load.
+    pub degrade_mode: u8,
     pub bump: u8,
 }
 
@@ -261,6 +266,37 @@ pub struct StatementCommitment {
     pub decision_count: u64,
     pub reporter: Pubkey,
     pub anchored_at: i64,
+    pub bump: u8,
+}
+
+/// The trust triangle (spec 10 §4.3), seeds `["trust", mint]`. Binds the mint's
+/// governing issuer to an aegis accreditation root: the permissionless
+/// `reverify_accreditation` crank re-checks the chain and, after a grace window,
+/// trips `GuardConfig.degrade_mode` to `degrade_target` — so a revoked issuer's
+/// authority evaporates without any human key. Recovery auto-restores on the
+/// next healthy crank.
+#[account]
+#[derive(InitSpace)]
+pub struct TrustAnchor {
+    pub version: u8,
+    pub mint: Pubkey,
+    /// aegis accreditation root the governing issuer must chain to.
+    pub accreditation_root: Pubkey,
+    /// The aegis issuer identity being continuously verified.
+    pub subject_issuer: Pubkey,
+    /// Required accreditation schema ("accreditation type").
+    pub required_schema: u64,
+    /// aegis deployment (must equal `GuardConfig.aegis_program`).
+    pub aegis_program: Pubkey,
+    /// Posture to fall to on sustained failure (`REDEMPTION_ONLY` / `FROZEN`).
+    pub degrade_target: u8,
+    /// Seconds a failing streak must persist before auto-degrade bites — the
+    /// tolerance for an aegis outage / transient false-negative (spec 10 §7).
+    pub grace_secs: i64,
+    /// Unix ts the current failing streak began (`0` = healthy).
+    pub failing_since: i64,
+    /// Unix ts of the last successful reverify.
+    pub last_verified_at: i64,
     pub bump: u8,
 }
 
