@@ -139,6 +139,37 @@ pub fn handle_reverify_accreditation(ctx: Context<ReverifyAccreditation>) -> Res
         GuardError::AegisProgramMismatch
     );
 
+    // Pin the aegis accounts to their canonical PDAs (shared-conventions
+    // invariant #3). The crank is permissionless, so if we merely passed
+    // caller-supplied accounts through, a griefer could force a NOT_ACCREDITED
+    // verdict — and, after grace, an auto-degrade — by cranking with the wrong
+    // accounts. Deriving them from the anchor's own root/subject makes the crank
+    // deterministic: honest or not, it can only reflect the real on-chain state.
+    let expected_root = Pubkey::find_program_address(
+        &[b"troot", anchor.accreditation_root.as_ref()],
+        &anchor.aegis_program,
+    )
+    .0;
+    require_keys_eq!(
+        ctx.accounts.aegis_trust_root.key(),
+        expected_root,
+        GuardError::MetaListMismatch
+    );
+    let expected_accreditation = Pubkey::find_program_address(
+        &[
+            b"accred",
+            anchor.accreditation_root.as_ref(),
+            anchor.subject_issuer.as_ref(),
+        ],
+        &anchor.aegis_program,
+    )
+    .0;
+    require_keys_eq!(
+        ctx.accounts.aegis_accreditation.key(),
+        expected_accreditation,
+        GuardError::MetaListMismatch
+    );
+
     // Ask aegis whether the governing issuer is still accredited. Never reverts
     // on a negative — aegis returns the verdict via return-data.
     let cpi = CpiContext::new(
