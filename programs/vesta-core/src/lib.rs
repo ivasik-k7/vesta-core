@@ -216,6 +216,26 @@ pub mod vesta_core {
         instructions::merchant_reserve::handle_attest_reserve(ctx)
     }
 
+    // ── Verified customer segmentation (spec 12, phase 1) ────────────────────
+
+    /// Define the merchant's verified segments (owner-only). Each segment is an
+    /// aegis `(issuer, schema)` predicate occupying one verdict-bitmap slot.
+    pub fn set_merchant_segments(
+        ctx: Context<SetMerchantSegments>,
+        segments: Vec<Segment>,
+    ) -> Result<()> {
+        instructions::segmentation::handle_set_merchant_segments(ctx, segments)
+    }
+
+    /// Permissionless: refresh a customer's cached verdict for one segment by
+    /// CPI-ing aegis `verify` off the hot path (spec 12 §4.1).
+    pub fn refresh_customer_eligibility(
+        ctx: Context<RefreshCustomerEligibility>,
+        segment_index: u8,
+    ) -> Result<()> {
+        instructions::segmentation::handle_refresh_customer_eligibility(ctx, segment_index)
+    }
+
     /// Set the merchant's daily clawback cap (raw units; 0 = unlimited).
     pub fn set_clawback_cap(ctx: Context<MerchantOwnerOnly>, daily_cap_raw: u64) -> Result<()> {
         instructions::merchant_admin::handle_set_clawback_cap(ctx, daily_cap_raw)

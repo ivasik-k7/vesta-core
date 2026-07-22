@@ -42,6 +42,20 @@ pub const MERCHANT_RESERVE_SEED: &[u8] = b"mreserve";
 /// Basis-points denominator for reserve ratios.
 pub const BPS_DENOMINATOR: u64 = 10_000;
 
+/// Per-merchant verified-segment definitions (spec 12 §4.1): `["segments", merchant]`.
+#[constant]
+pub const SEGMENTS_SEED: &[u8] = b"segments";
+
+/// Per-(merchant, customer) cached eligibility verdict (spec 12 §4.1): `["celig", merchant, customer]`.
+#[constant]
+pub const CUSTOMER_ELIGIBILITY_SEED: &[u8] = b"celig";
+
+/// Max verified segments a merchant may define (one verdict bitmap slot each).
+pub const MAX_SEGMENTS: usize = 8;
+
+/// Default eligibility-cache TTL, seconds, when a segment declares none.
+pub const DEFAULT_ELIGIBILITY_TTL_SECS: i64 = 86_400;
+
 /// Default merchant accreditation grace window, seconds — a failing streak must
 /// persist this long before issuance auto-degrades (absorbs a transient aegis
 /// outage). Configurable per merchant on the `MerchantTrust`.

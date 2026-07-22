@@ -202,6 +202,24 @@ pub struct MerchantGovernanceSet {
     pub campaign_manager: Pubkey,
 }
 
+// ── Verified segmentation (spec 12) ──────────────────────────────────────────
+
+#[event]
+pub struct MerchantSegmentsSet {
+    pub merchant: Pubkey,
+    pub policy_epoch: u64,
+}
+
+#[event]
+pub struct CustomerEligibilityRefreshed {
+    pub merchant: Pubkey,
+    pub customer: Pubkey,
+    pub segment_index: u8,
+    pub satisfied: bool,
+    pub verdicts: u32,
+    pub expires_at: i64,
+}
+
 #[event]
 pub struct ReserveOpened {
     pub merchant: Pubkey,

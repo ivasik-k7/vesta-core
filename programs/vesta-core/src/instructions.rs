@@ -12,6 +12,7 @@ pub mod merchant_trust;
 pub mod migrate_config;
 pub mod offers;
 pub mod register_merchant;
+pub mod segmentation;
 pub mod set_token_attribute;
 
 pub use achievements::*;
@@ -28,4 +29,5 @@ pub use merchant_trust::*;
 pub use migrate_config::*;
 pub use offers::*;
 pub use register_merchant::*;
+pub use segmentation::*;
 pub use set_token_attribute::*;

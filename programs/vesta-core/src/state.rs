@@ -146,6 +146,72 @@ pub struct MerchantTrust {
     pub bump: u8,
 }
 
+/// One verified-customer segment (spec 12 §4.1). A segment is satisfied when the
+/// customer holds a valid aegis credential of `(issuer, schema_id)` — the merchant
+/// learns only that the predicate holds, never the underlying PII. (A follow-on
+/// upgrades `issuer/schema_id` to a named aegis `Policy` consumed via
+/// `verify_policy`; the cache shape is unchanged.)
+#[derive(
+    AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, Default, InitSpace, PartialEq, Eq,
+)]
+pub struct Segment {
+    pub issuer: Pubkey,
+    pub schema_id: u64,
+    /// Cache TTL for this segment's verdict (0 = protocol default).
+    pub ttl_secs: i64,
+    pub active: bool,
+}
+
+/// Per-merchant verified-segment definitions (spec 12 §4.1), seeds
+/// `["segments", merchant]`. Bounded, versioned; `policy_epoch` bumps on any
+/// change so stale eligibility caches are rejected.
+#[account]
+#[derive(InitSpace)]
+pub struct MerchantSegments {
+    pub version: u8,
+    pub merchant: Pubkey,
+    pub policy_epoch: u64,
+    pub segments: [Segment; crate::constants::MAX_SEGMENTS],
+    pub bump: u8,
+}
+
+/// Cached per-customer segment verdicts (spec 12 §4.1) — the merchant-side twin
+/// of argus's `EligibilityCapability`. `refresh_customer_eligibility` pays aegis's
+/// `verify` CPI off the hot path and folds the result into `verdicts`; earn /
+/// offers / campaigns then read the bitmap with no CPI. Fails closed on any
+/// stale / epoch-mismatched / spoofed cache.
+#[account]
+#[derive(InitSpace)]
+pub struct CustomerEligibility {
+    pub version: u8,
+    pub merchant: Pubkey,
+    pub customer: Pubkey,
+    /// Bit `i` set = segment `i` predicate satisfied.
+    pub verdicts: u32,
+    /// Provenance captured from the last verdict (spec 12 §4.1 CORRIDOR).
+    pub kyc_tier: u8,
+    pub jurisdiction: u16,
+    pub issued_at: i64,
+    pub expires_at: i64,
+    /// `MerchantSegments.policy_epoch` at mint time; must still match to be valid.
+    pub policy_epoch: u64,
+    /// aegis deployment consulted.
+    pub aegis_program: Pubkey,
+    pub bump: u8,
+}
+
+impl CustomerEligibility {
+    /// Fresh (unexpired) and minted under the current segment epoch.
+    pub fn is_fresh(&self, policy_epoch: u64, now: i64) -> bool {
+        self.policy_epoch == policy_epoch && now < self.expires_at
+    }
+
+    /// Segment `index`'s bit is set in a fresh cache.
+    pub fn satisfies(&self, index: u8, policy_epoch: u64, now: i64) -> bool {
+        self.is_fresh(policy_epoch, now) && (self.verdicts & (1u32 << index)) != 0
+    }
+}
+
 /// Point-liability reserve (spec 11 §4.2), seeds `["mreserve", merchant]`. Escrows
 /// a caller-chosen stablecoin against outstanding point liability so issuance can
 /// be shown solvent. Liability is measured on the point mint's **raw supply** —

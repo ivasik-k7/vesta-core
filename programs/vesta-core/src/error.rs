@@ -105,4 +105,8 @@ pub enum VestaError {
     ReserveMintMismatch,
     #[msg("Daily issuance cap exceeded")]
     DailyIssuanceCapExceeded,
+    #[msg("Too many segments defined")]
+    TooManySegments,
+    #[msg("Segment index is invalid or inactive")]
+    InvalidSegment,
 }
